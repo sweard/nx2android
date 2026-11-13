@@ -1,7 +1,8 @@
 # The Legend of Zelda: Tears of the Kingdom (0100F2C0115B6000): the rewriter's patches of this game's own builds. dm/tools/patch_nso.py loads every profile's patches.py and applies those of a module's NSO build ID;
 # CUTS, OBS and FRAME_STEP as described there ("Registered patches"). Patches of Nintendo SDK module builds are in dm/tools/sdk_patches.py
 import struct
-from nso_asm import ADRP, B, NOP, STP_PRE
+from os import environ
+from nso_asm import ADRP, B, BEQ, NOP, STP_PRE
 
 # Tears of the Kingdom picks a present interval each frame (main+0x2db174: 2 = 30 fps, 3 under load) and steps its game time by 60 / fps (int fps at timing +0x50, read at main+0x2daa54
 # and main+0x3e562c). The stub replaces that logic: int fps = 60 / step, and the float fps (timing +0x24, unused, per masagrator's FPSLocker config for this build, which found the
@@ -110,9 +111,11 @@ def frame_step(ctx):
     fs_put(0x2b36100, [B(0x2b36100, start) | 0x80000000], 'movie starts: 30 fps cap')
     start = here(); emit(ADRP(16, here(), FS_STATE_OFF)); emit(0xb900061f); emit(B(here(), 0x2bb9890))                     # str wzr,[x16,#4]; tail call
     fs_put(0x2b33918, [B(0x2b33918, start)], 'movie ends')
-    # Render scale (state +0x10, float written by the loader: DM_RENDER_SCALE, 1.0 by default). main+0xd5c24 sizes each view: screen size x the view's scale (5/6 for the scene: 1600x896
-    # docked) x the dynamic-resolution multiplier, clamped to 8..16384 and floored to the view's alignment. The stub multiplies both extents by the factor (s6, w8 and the flags are dead
-    # at main+0xd5cc0: s6 is set to 8.0 right after); any factor but 1.0 also replaces the dynamic multiplier (main+0xd5d80) with 1, so the size is fixed. 1.0 = bit-exact original
+    if environ.get('DM_TARGET') == 'android':
+        docked_scene(ctx)
+    # Render scale (state +0x10, float written by the loader: DM_RENDER_SCALE, 1.0 by default). main+0xd5c24 sizes each view from its screen extent, view scale and dynamic
+    # multiplier. The stub multiplies both extents by the host factor (s6, w8 and the flags are dead here) before the game clamps and aligns them. A host factor other than
+    # 1.0 also replaces the dynamic multiplier (main+0xd5d80) with 1. The default host factor preserves the size selected by the view.
     fs_site(0xd5cc0, '08d0a8524008251e6108241e0401271e'); fs_site(0xd5d80, '062940bd')
     start = here(); emit(ADRP(8, here(), FS_STATE_OFF))
     for w in (0xbd401106,   # ldr s6,[x8,#0x10]   render scale
@@ -138,5 +141,31 @@ def frame_step(ctx):
         emit(w)
     emit(B(here(), 0xd5d84))
     fs_put(0xd5d80, [B(0xd5d80, start)], 'dynamic resolution only at render scale 1.0')
+
+def docked_scene(ctx):
+    # Match the full docked view with the scene's 5/6 factors before dynamic resolution. Give it the full 1920x1080 extent and skip
+    # the dynamic multiplier for this view. The existing render-scale stub can still reduce it. x8, s6, s16 and NZCV are scratch here.
+    here, emit = ctx.here, ctx.emit
+    site = 0xd5ca0
+    ctx.site(site, '05317cbdc70500b5')   # ldr s5,[x8,#0x3c30]; cbnz x7,dynamic
+    words = (
+        0xbd7c3105,   # ldr s5,[x8,#0x3c30] (original)
+        0x528aaaa8, 0x72a7eaa8, 0x1e270110,  # s16 = 5/6 (0x3f555555)
+        0x1e3020a0, None,  # fcmp s5,s16; b.ne stock
+        0x1e302080, None,  # fcmp s4,s16; b.ne stock
+        0x1e220806,   # fmul s6,s0,s2 (unscaled width)
+        0x52a89e08, 0x1e270110, 0x1e3020c0, None,  # compare to 1920.0; b.ne stock
+        0x1e210866,   # fmul s6,s3,s1 (unscaled height)
+        0x52a890e8, 0x1e270110, 0x1e3020c0, None,  # compare to 1080.0; b.ne stock
+        0x1e2e1004, 0x1e2e1005,  # fmov s4,#1.0; fmov s5,#1.0
+    )
+    start = here()
+    stock = start + 4 * (len(words) + 1)
+    for word in words:
+        emit(BEQ(here(), stock) | 1 if word is None else word)
+    emit(B(here(), site + 8))   # past the branch to the dynamic multiplier
+    emit(B(here(), site + 4))   # stock: keep the original branch
+    ctx.put(site, [B(site, start)], 'Android docked scene at 1920x1080 before the host render scale')
+
 
 FRAME_STEP = {'277178b7dba1b6d4949a84778d4abc58': frame_step}

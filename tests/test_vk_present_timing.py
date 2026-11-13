@@ -10,6 +10,59 @@ SOURCE = Path(__file__).resolve().parents[1] / 'nxnative/dm/android/gfx_vk_prese
 
 
 class PresentTiming(unittest.TestCase):
+    def test_framegen_tracks_render_cadence(self):
+        cc = shutil.which('cc') or shutil.which('clang')
+        if not cc:
+            self.skipTest('a C compiler is needed for the frame cadence check')
+        src = SOURCE.read_text(encoding='utf-8')
+        start = src.index('typedef struct {\n    uint64_t last_ns;')
+        cadence = src[start:src.index('static framegen_cadence g_fg_cadence;', start)]
+        harness = r'''
+#include <assert.h>
+#include <math.h>
+#include <stdint.h>
+''' + cadence + r'''
+int main(void) {
+    const uint64_t refresh = 16666667;
+    framegen_cadence cadence = {0};
+    uint64_t now = 1000000000;
+    for (int i = 0; i < 4; ++i, now += 50000000)
+        assert(framegen_step(&cadence, now, refresh) == 0);
+    assert(fabs(framegen_step(&cadence, now, refresh) - 0.025) < 1e-9);
+    now += 54000000;
+    assert(fabs(framegen_step(&cadence, now, refresh) - 0.0255) < 1e-9);
+
+    now += 101000000;
+    assert(framegen_step(&cadence, now, refresh) == 0);
+    for (int i = 0; i < 3; ++i) {
+        now += 50000000;
+        assert(framegen_step(&cadence, now, refresh) == 0);
+    }
+    now += 50000000;
+    assert(framegen_step(&cadence, now, refresh) > 0);
+    assert(framegen_step(&cadence, now + 10000000, refresh) == 0);  // bunched input
+    assert(framegen_step(&cadence, 0, refresh) == 0);  // pause or backlog
+    assert(framegen_step(&cadence, now + 50000000, refresh) == 0);
+
+    cadence = (framegen_cadence){0};
+    for (int i = 0; i < 12; ++i, now += 25000000)
+        assert(framegen_step(&cadence, now, refresh) == 0);  // 80 fps will not fit
+    cadence = (framegen_cadence){0};
+    for (int i = 0; i < 4; ++i, now += 33333333)
+        assert(framegen_step(&cadence, now, refresh) == 0);
+    assert(fabs(framegen_step(&cadence, now, refresh) - refresh / 1e9) < 1e-9);
+    assert(framegen_step(&cadence, now + 33333333, 0) == 0);
+    return 0;
+}
+'''
+        with tempfile.TemporaryDirectory(prefix='nx2a_framegen_cadence_') as tmp:
+            c, exe = Path(tmp) / 'check.c', Path(tmp) / 'check'
+            c.write_text(harness, encoding='utf-8')
+            result = subprocess.run([cc, '-std=c11', '-Wall', '-Wextra', '-Werror', str(c), '-lm', '-o', str(exe)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            result = subprocess.run([str(exe)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_swapchain_recreated_on_window_resize(self):
         cc = shutil.which('cc') or shutil.which('clang')
         if not cc:
@@ -70,28 +123,34 @@ int main(void) {
     assert(present_time_get(1) == 0);
     present_time_begin(1, 0);
     assert(present_time_get(1) == 0);  // queued is not displayed
-    present_time_map(42, 1);
+    present_time_map(42, 1, 0);
     present_time_begin(2, 0);
-    present_time_map(43, 2);
+    present_time_map(43, 2, 0);
     present_time_record(43, 2000000000ull);  // results need not be in ticket order
     present_time_record(42, 1000000000ull);
     assert(present_time_get(1) == 1);
     assert(present_time_get(2) == 2);
     present_time_record(43, 0);
     assert(present_time_get(2) == 2);
-    present_time_map(44, 0);  // a menu redraw has a Vulkan ID but no game ticket
+    present_time_map(44, 0, 0);  // a menu redraw has a Vulkan ID but no game ticket
     present_time_record(44, 3000000000ull);
     assert(present_time_get(2) == 2);
     assert(present_time_get(0) == 0);
+    assert(g_real_displayed == 2 && g_generated_displayed == 0);
+    present_time_map(45, 0, 1);
+    present_time_record(45, 3500000000ull);
+    present_time_record(45, 3500000000ull);  // driver feedback may be repeated
+    assert(g_real_displayed == 2 && g_generated_displayed == 1);
+    assert(present_time_get(2) == 2 && present_time_get(0) == 0);
 
     present_time_begin(3, 0);
-    present_time_map(42 + PRES_TIMES, 3);
+    present_time_map(42 + PRES_TIMES, 3, 0);
     present_time_record(42, 9000000000ull);  // overwritten Vulkan ID mapping
     assert(present_time_get(3) == 0);
     present_time_record(42 + PRES_TIMES, 3000000000ull);
     assert(present_time_get(3) == 3);
     present_time_begin(1 + PRES_TIMES, 0);
-    present_time_map(200, 1);  // a delayed result must not overwrite a newer ticket
+    present_time_map(200, 1, 0);  // a delayed result must not overwrite a newer ticket
     present_time_record(200, 9000000000ull);
     assert(present_time_get(1) == 0);
     assert(present_time_get(1 + PRES_TIMES) == 0);
@@ -103,11 +162,11 @@ int main(void) {
     present_time_begin(3, 0);
     present_time_record(42 + PRES_TIMES, 9000000000ull);  // old swapchain feedback
     assert(present_time_get(3) == 0);
-    present_time_map(UINT32_MAX, 3);
+    present_time_map(UINT32_MAX, 3, 0);
     present_time_record(UINT32_MAX, 3000000000ull);
     assert(present_time_get(3) == 3);
     present_time_begin(4, 0);
-    present_time_map(0, 4);  // Vulkan's 32-bit present ID may wrap
+    present_time_map(0, 4, 0);  // Vulkan's 32-bit present ID may wrap
     present_time_record(0, 4000000000ull);
     assert(present_time_get(4) == 4);
     present_time_begin(5, 0);  // failed, headless or unsupported presents get no result

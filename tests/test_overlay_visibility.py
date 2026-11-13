@@ -31,7 +31,8 @@ class OverlayVisibility(unittest.TestCase):
 #include "front.h"
 #include "overlay_layout.h"
 static _Atomic int g_set_overlay, g_overlay, g_pads, g_edit;
-static _Atomic int g_set_rumble, g_set_fps, g_set_labels, g_menu_tab, g_sv_st;
+static _Atomic int g_set_rumble, g_set_fps, g_set_framegen, g_set_labels, g_menu_tab, g_sv_st;
+static int dm_framegen_enabled(void) { return atomic_load(&g_set_framegen); }
 static int layout, saves;
 int dm_overlay_layout(void) { return layout; }
 float dm_overlay_scale(void) { return 1; }
@@ -65,7 +66,8 @@ enum { AMOTION_EVENT_AXIS_X, AMOTION_EVENT_AXIS_Y, AMOTION_EVENT_AXIS_Z, AMOTION
 typedef struct { int source, type, action, key, device; float x, y, axis[10]; } AInputEvent;
 typedef int ANativeWindow;
 static int width, height, window, vibration = -1, touches, menu_opens, pad_publications, g_pad_used;
-static uint64_t g_btn, g_touch_btn, touch_buttons;
+static uint64_t g_btn, touch_buttons;
+static _Atomic uint64_t g_touch_btn;
 static float g_ax[8];
 static int32_t pad_sticks[4];
 static uint64_t pad_buttons;
