@@ -1,0 +1,63 @@
+tests/test_overlay_layout.py
+  s_926c68cc5bacfb::t_374f6dca480d6e 84
+nxnative/dm/games/0100F2C0115B6000/patches.py
+  s_926c68cc5bacfb::t_c5cc3b0db8e3f6 4-5,114-115,145-169
+  s_926c68cc5bacfb::t_9d72908217cb84 116-118
+  s_926c68cc5bacfb::t_c2e2f2c410d239 170
+nxnative/dm/android/front_android.c
+  s_926c68cc5bacfb::t_0b9cf5fde31f42 76,91,114,128-129,466-467,503
+nxnative/dm/android/overlay_layout.h
+  s_926c68cc5bacfb::t_0b9cf5fde31f42 110,115-118,130
+nxnative/dm/android/shaders/frame_midpoint.comp
+  s_926c68cc5bacfb::t_c89dba97ef6020 1-41
+nxnative/dm/android/shaders/frame_motion.comp
+  s_926c68cc5bacfb::t_c89dba97ef6020 1-86
+nxnative/dm/android/gfx_vk_framegen.c
+  s_926c68cc5bacfb::t_d58bf4abfcc4a8 1-6,8-23,25-27,29-72,75-121,123-126,128-158,162-186,188,192-213,220,222-231,233-285,287-289,291-313
+  s_926c68cc5bacfb::t_4a1dac0720e432 7,24,28,73-74,122,127,159-161,187,189-191,214-219,221,232,286,290
+tests/test_vk_present_timing.py
+  s_926c68cc5bacfb::t_bfc415d1a7e58b 13-65
+  s_926c68cc5bacfb::t_374f6dca480d6e 126,128,135,139-144,147,153,165,169
+tests/test_overlay_visibility.py
+  s_926c68cc5bacfb::t_374f6dca480d6e 34-35,69-70
+nxnative/dm/android/gfx_vk_framegen.h
+  s_926c68cc5bacfb::t_d58bf4abfcc4a8 1-4,6-8,10
+  s_926c68cc5bacfb::t_4a1dac0720e432 5,9
+nxnative/dm/android/shaders/frame_luma.comp
+  s_926c68cc5bacfb::t_c89dba97ef6020 1-20
+README.md
+  s_926c68cc5bacfb::t_f629155e9cce13 62
+  s_926c68cc5bacfb::t_c1161cb7b51225 63
+docs/ARCHITECTURE.md
+  s_926c68cc5bacfb::t_c1161cb7b51225 70
+nxnative/dm/android/gfx_vk_present.c
+  s_926c68cc5bacfb::t_b7219a6ef513ab 901,928-937,943-944,955,978-982,1029,1044,1157,1184
+  s_926c68cc5bacfb::t_0b0dfa112adc26 25,28,34-35,39-45,47-48,265,605-606,608,610,613,616,618,622,977,1033,1035,1079-1080,1095,1098,1101-1103,1183
+  s_926c68cc5bacfb::t_826fde44c40222 266,588,1036,1038,1090-1094,1096-1097,1099-1100,1127-1128
+  s_926c68cc5bacfb::t_1a375b5cc10a8a 1023,1078,1081-1089,1104-1113,1122,1124,1129-1130,1135,1150-1151,1158-1159,1163,1165-1170,1176,1180-1182,1185-1187,1194,1199,1207,1231-1232,1240,1270
+  s_926c68cc5bacfb::t_4fb5ee5699bb2d 1037
+  s_926c68cc5bacfb::t_101738ba1c0a3f 234,593-594,596-602,630,636,639-640,812-814
+  s_926c68cc5bacfb::t_56eddedaf88c5d 861-890,892-895,1114-1120,1123,1125-1126
+  s_926c68cc5bacfb::t_0b9cf5fde31f42 393-396,449-451
+  s_926c68cc5bacfb::t_9966b498ff6300 6,22,81-82,91-92,112-114,203-204,206-207,212,607,611-612,614-615,617,619-621,623-625
+  s_926c68cc5bacfb::t_13033f6ceebf40 941-942,948,950-954,956,963-974,983-984,1024,1026-1028
+  s_926c68cc5bacfb::t_1b1b5813b46c75 1121,1152-1156
+nxnative/dm/android/gfx_vk.h
+  s_926c68cc5bacfb::t_2792d824529444 32,38-40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "18f3ac91c640d406de8ca42855851b0de667f5c5",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
