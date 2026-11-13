@@ -1,0 +1,19 @@
+nxnative/dm/host/hle_sdk16.c
+  s_926c68cc5bacfb::t_8b4f18e165c1d0 288-292,296-297,303
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1fa4527fb60321c4510e6d422cc2f6f5a2a91f8d",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
