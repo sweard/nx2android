@@ -285,15 +285,20 @@ HLE_FORCE("_ZN2nn8settings12LanguageCode4MakeENS0_8LanguageE", "language enum �
     if ((unsigned)lang < sizeof k_lang_code / sizeof *k_lang_code) strncpy(code, k_lang_code[lang], sizeof code);
     uint64_t v; memcpy(&v, code, 8); return v;
 }
+// SDK 3 uses the original set: IPC commands 1 and 3, whose list holds 15 codes.
+static int available_language_code_count(void) {
+    int sdk = dm_sdk_major();
+    return sdk > 0 && sdk < 4 ? 15 : (int)(sizeof k_lang_code / sizeof *k_lang_code);
+}
 // Every language code the system offers, in nn::settings::Language order, as the settings service lists them; returns how many were written (Paper Mario: The Thousand-Year Door, SDK 15:
 // nnMain asks for 32 and takes the index of GetDesiredLanguage's code in the list as its language, main+0x327888; the SDK's own version aborted in sm::Initialize)
 HLE_FORCE("_ZN2nn8settings25GetAvailableLanguageCodesEPNS0_12LanguageCodeEi", "available language codes (the fixed system table)", int, h_set_AvailLang, char *out, int count) {
-    int n = 0;
-    for (; n < count && n < (int)(sizeof k_lang_code / sizeof *k_lang_code); n++) { memset(out + 8 * n, 0, 8); strncpy(out + 8 * n, k_lang_code[n], 8); }
+    int n = 0, limit = available_language_code_count();
+    for (; n < count && n < limit; n++) { memset(out + 8 * n, 0, 8); strncpy(out + 8 * n, k_lang_code[n], 8); }
     return n;
 }
 // How many codes that list holds (Catherine: Full Body, SDK 8.2.1: nnMain compares LanguageCode::Make(0 … count − 1) with GetDesiredLanguage's code and keeps the matching index,
 // main+0x117590; the SDK's own version aborted in sm::Initialize)
 HLE_FORCE("_ZN2nn8settings29GetAvailableLanguageCodeCountEv", "number of available language codes (the fixed system table)", int, h_set_AvailLangN, void) {
-    return (int)(sizeof k_lang_code / sizeof *k_lang_code);
+    return available_language_code_count();
 }
