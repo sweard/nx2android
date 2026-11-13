@@ -1,0 +1,22 @@
+.claude/skills/switch-android-port/references/switches.md
+  s_926c68cc5bacfb::t_926f1b15952190 96
+nxnative/dm/android/gfx_vk_exec.c
+  s_926c68cc5bacfb::t_1e51ea7a62b628 1576-1579
+  s_926c68cc5bacfb::t_73b76ba1b5ac21 100-101,207-218,220,222,1562-1575,1580-1585,1660,2521-2529
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9bd18f25d629490bc370da59b9f34d17d7ec9d6c",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
