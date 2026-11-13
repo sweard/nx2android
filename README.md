@@ -61,6 +61,8 @@ A game slowed by its draw calls in busy scenes: tick **Multithread replay** on t
 
 For experimental 2× frame generation, open the pause menu's **Game** tab and turn on **Frame generation**. A compatible display and Vulkan driver can show a generated frame between each pair of game frames. The timing follows the measured render cadence and skips long stalls or periods when the display cannot fit both frames. **Show FPS** then reports the game's render rate and the rate measured on the display. The option is off by default.
 
+The **FG engine** row selects the built-in engine or Lossless Scaling. To enable **Lossless**, put your own `Lossless.dll` next to `settings.txt` in the game's `Android/data/<package>/files/` folder. Use a DLL with the LSFG 3.1 Performance Vulkan shaders, such as Lossless Scaling 3.2.2. The app uses the built-in engine whenever the DLL is missing, unreadable, or incompatible with the Vulkan driver. The DLL stays in the game's files folder. The APK carries the [lsfg-vk MIT license](nxnative/dm/android/apk/lsfg-vk-LICENSE.txt) for its integration code.
+
 When **Show gamepad** is enabled, using a controller hides the on-screen controls. Touch the screen to bring them back. The draggable menu button stays available even with **Show gamepad** off.
 
 To arrange the on-screen controls, open the pause menu's **Gamepad** tab and choose **Edit layout**: drag a control to move it, pinch or use **− / +** to resize it. **Save** keeps the layout for the next launch and **Cancel** discards your edits. **Snap to grid** (off at first, and remembered) shows a square grid and snaps each control's center to it as you drag.

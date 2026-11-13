@@ -4,8 +4,10 @@
 // DM_VK_SHOT_DIR (default DM_ROOT), which is how a run without a screen is checked.
 #include "gfx_vk.h"
 #include "gfx_vk_framegen.h"
+#include "gfx_vk_lsfg.h"
 #include <android/native_window.h>
 #include <jni.h>
+#include <errno.h>
 #include <string.h>
 #include <math.h>
 #include <time.h>
@@ -79,6 +81,7 @@ __attribute__((weak)) int64_t dm_overlay_pressed(int ctl, uint64_t bit) { (void)
 __attribute__((weak)) int dm_menu_state(void) { return -1; }
 __attribute__((weak)) int dm_overlay_fps(void) { return 0; }   // front_android.c: the pause menu's Show FPS
 __attribute__((weak)) int dm_framegen_enabled(void) { return 0; }
+__attribute__((weak)) int dm_framegen_prefers_lossless(void) { return 0; }
 __attribute__((weak)) int dm_game_held(void) { return 0; }
 __attribute__((weak)) int dm_save_note(char *out, int cap) { if (cap > 0) out[0] = 0; return OVX_IDLE; }   // front_android.c: the save manager's rows
 __attribute__((weak)) int dm_save_rows(ov_srow rows[OVM_ROWS]) { (void)rows; return 0; }
@@ -392,11 +395,20 @@ static void cv_button(const ov_canvas *cv, const float b[4], const char *l, int 
 // its height, about 2.7 mm on a 6.7" phone and 3.6 mm on the 8.8" tablet) and smaller only when the widest row would not fit beside its control
 static const char *const OVM_LABELS[OVM_N] = {
     "Show gamepad", "Opacity", "Edit layout", "Rumble", "Show FPS", "Mode",
-    "Export save", "Import save", "Face buttons", "Frame generation", "Resume", "",
+    "Export save", "Import save", "Face buttons", "Frame generation", "FG engine", "Resume", "",
 };
 static const char *const OVM_BUTTONS[OVM_N] = {[OVM_EDIT] = "Edit", [OVM_EXPORT] = "Export", [OVM_IMPORT] = "Import"};   // the rows that are a button: its word
 static const char *const OVM_MODES[2] = {"Handheld", "Docked"};
 static const char *const OVM_PADS[2] = {"Position", "Label"};   // a controller's face buttons (front_android.c pad_labels)
+static const char *const *menu_segments(int item) {
+    if (item == OVM_MODE) return OVM_MODES;
+    if (item == OVM_PAD) return OVM_PADS;
+    return item == OVM_FG_ENGINE ? OVM_ENGINES : NULL;
+}
+
+static float menu_segment_width(const char *const *segments, int scale, float pad) {
+    return fmaxf(cv_text_w(segments[0], scale), cv_text_w(segments[1], scale)) + pad;
+}
 static void ov_menu_panel(const ov_canvas *cv, int st) {
     float p[4] = {0, 0, (float)cv->w, (float)cv->h}, r[4]; ov_menu_rowrect(p, 0, r);
     float rh = r[3], rw = r[2], gap = rh * 0.35f, sh = rh * 0.40f, sw = sh * 1.85f;
@@ -405,7 +417,13 @@ static void ov_menu_panel(const ov_canvas *cv, int st) {
     for (; is > 1; is--) {   // the widest row: its label, a gap and its control
         float need = 0;
         for (int i = 0; i < OVM_RESUME; i++) {
-            float lw = cv_text_w(OVM_LABELS[i], is), cw = i == OVM_MODE ? 2 * (cv_text_w(OVM_MODES[0], is) + sh) : i == OVM_PAD ? 2 * (cv_text_w(OVM_PADS[0], is) + sh) : OVM_BUTTONS[i] ? cv_text_w(OVM_BUTTONS[i], is) + 2 * sh : sw + gap + cv_text_w("OFF", is);
+            const char *const *seg = menu_segments(i);
+            float lw = cv_text_w(OVM_LABELS[i], is);
+            float cw = seg ? 2 * menu_segment_width(seg, is, sh) : OVM_BUTTONS[i] ? cv_text_w(OVM_BUTTONS[i], is) + 2 * sh : sw + gap + cv_text_w("OFF", is);
+            if (i == OVM_FG_ENGINE) {
+                if (menu_segment_width(seg, is, sh) > ov_menu_engine_width(r)) { need = rw + 1; break; }
+                cw = 2 * ov_menu_engine_width(r);
+            }
             need = fmaxf(need, i == OVM_OPACITY ? fmaxf(lw / 0.38f, cv_text_w("80%", is) / 0.14f) : lw + gap + cw + rh * 0.3f);
         }
         if (need <= rw && cv_text_w(OVM_TAB_NAMES[0], is) < rw / 2 - sh) break;
@@ -439,12 +457,18 @@ static void ov_menu_panel(const ov_canvas *cv, int st) {
             cv_text(cv, x1 - cv_text_w(v, vs), cy, v, vs, x == OVX_FAILED ? C_ACCENT : C_WHITE);
         } else if (OVM_BUTTONS[it]) {   // a button
             float bw = cv_text_w(OVM_BUTTONS[it], is) + 2 * sh, b[4] = {x1 - bw, cy - rh * 0.30f, bw, rh * 0.60f}; cv_button(cv, b, OVM_BUTTONS[it], 0, 0);
-        } else if (it == OVM_MODE || it == OVM_PAD) {   // two segments, the current one filled: handheld (performance) | docked (resolution); by position | by label
-            const char *const *seg = it == OVM_MODE ? OVM_MODES : OVM_PADS; int cur = it == OVM_MODE ? st >> 2 & 1 : st >> 28 & 1;
-            float hh = rh * 0.46f, segw = fmaxf(cv_text_w(seg[0], is), cv_text_w(seg[1], is)) + sh, x0 = x1 - 2 * segw;
+        } else if (menu_segments(it)) {
+            const char *const *seg = menu_segments(it);
+            int bit = it == OVM_MODE ? 2 : it == OVM_PAD ? 28 : OVM_FG_LOSSLESS_BIT, cur = st >> bit & 1;
+            int disabled = it == OVM_FG_ENGINE && !(st >> OVM_FG_AVAILABLE_BIT & 1);
+            static const uint8_t disabled_text[4] = {126, 126, 140, 255};
+            float hh = rh * 0.46f;
+            float segw = it == OVM_FG_ENGINE ? ov_menu_engine_width(r) : menu_segment_width(seg, is, sh);
+            float x0 = x1 - 2 * segw;
             cv_rrect(cv, x0, cy - hh / 2, x1, cy + hh / 2, hh / 2, C_OFF);
             cv_rrect(cv, x0 + cur * segw, cy - hh / 2, x0 + (cur + 1) * segw, cy + hh / 2, hh / 2, C_ACCENT);
-            for (int k = 0; k < 2; k++) cv_text(cv, x0 + k * segw + (segw - cv_text_w(seg[k], is)) / 2, cy, seg[k], is, k == cur ? C_WHITE : C_DIM);
+            for (int k = 0; k < 2; k++) cv_text(cv, x0 + k * segw + (segw - cv_text_w(seg[k], is)) / 2, cy, seg[k], is,
+                                               k == cur ? C_WHITE : disabled ? disabled_text : C_DIM);
         } else {   // a switch
             int bit = it == OVM_OVERLAY ? 0 : it == OVM_RUMBLE ? 1 : it == OVM_FRAMEGEN ? OVM_FRAMEGEN_BIT : 3;
             int on = st >> bit & 1;
@@ -952,7 +976,7 @@ static int present_window(vkimg_t *im, const int crop[4], double period, uint64_
     int cx = crop ? crop[0] : 0, cy = crop ? crop[1] : 0, cw = crop && crop[2] ? crop[2] : (int)im->w, ch = crop && crop[3] ? crop[3] : (int)im->h;
     VkOffset3D offsets[2] = {{cx, cy, 0}, {cx + cw, cy + ch, 1}};
     if (vk_window_bottom_up()) { offsets[0].y = cy + ch; offsets[1].y = cy; }   // the window image is stored bottom-up (gfx_vk_exec.c)
-    int capture = mode == PRESENT_CAPTURE && vk_framegen_prepare((VkExtent2D){(uint32_t)cw, (uint32_t)ch}, want, offsets);
+    int capture = mode == PRESENT_CAPTURE && vk_framegen_prepare((VkExtent2D){(uint32_t)cw, (uint32_t)ch}, want, offsets, dm_framegen_prefers_lossless());
     int generated = capture && vk_framegen_has_history();
     vkResetFences(V.dev, 1, &g_pfence[k]);
     int turned = g_pre != VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;   // composed into g_rot.img, then copied turned into the swapchain image
@@ -1095,8 +1119,9 @@ static void log_framegen_rate(uint64_t now) {
         uint64_t real = g_real_displayed - g_fg_sample_real, generated = g_generated_displayed - g_fg_sample_generated;
         if (g_fg_sample_ns && generated) {
             double seconds = (now - g_fg_sample_ns) / 1e9;
-            VKLOG("frame generation: %.1f real and %.1f total fps on display (%llu generated in %.1fs)",
-                  real / seconds, (real + generated) / seconds, (unsigned long long)generated, seconds);
+            VKLOG("frame generation: %.1f real and %.1f total fps on display (%llu generated in %.1fs, %s)",
+                  real / seconds, (real + generated) / seconds, (unsigned long long)generated, seconds,
+                  vk_framegen_using_lossless() ? "Lossless Scaling" : "built-in");
         }
         g_fg_sample_ns = now;
         g_fg_sample_real = g_real_displayed;
@@ -1110,6 +1135,7 @@ static void present_game_frame(vkimg_t *im, const int crop[4], double period, ui
     int dm_opmode(void);
     int docked = dm_opmode();
     int movie = dm_fps_state && __atomic_load_n((uint32_t *)(dm_fps_state + 4), __ATOMIC_RELAXED);
+    if (vk_lsfg_poll(mono_ns())) g_fg_sample_ns = 0;
     int eligible = ready_ns && V.has_dtiming && g_pace_on && dm_framegen_enabled() &&
                    !movie && !dm_game_held() && dm_menu_state() < 0;
     if (ready_ns) {
@@ -1143,18 +1169,25 @@ static void *present_thread(void *arg) {
     typeof(g_pq[0]) last = {0};
     for (;;) {
         pthread_mutex_lock(&g_pq_mu);
-        while (g_pq_tail == g_pq_head && !atomic_load(&g_redraw)) pthread_cond_wait(&g_pq_cv, &g_pq_mu);
-        atomic_store(&g_redraw, 0);
+        while (g_pq_tail == g_pq_head && !atomic_load(&g_redraw)) {
+            if (dm_menu_state() < 0) { pthread_cond_wait(&g_pq_cv, &g_pq_mu); continue; }
+            struct timespec deadline;
+            clock_gettime(CLOCK_REALTIME, &deadline);
+            ++deadline.tv_sec;
+            if (pthread_cond_timedwait(&g_pq_cv, &g_pq_mu, &deadline) == ETIMEDOUT) break;
+        }
+        int redraw = atomic_exchange(&g_redraw, 0);
         if (g_pq_tail == g_pq_head) {   // a redraw, no new frame
             pthread_mutex_unlock(&g_pq_mu);
             if (last.im) {
                 pthread_mutex_lock(&g_present_mu);
+                redraw |= vk_lsfg_poll(mono_ns());
                 if (dm_game_held() || !dm_framegen_enabled()) {
                     g_fg_cadence = (framegen_cadence){0};
                     g_fg_sample_ns = 0;
                     vk_framegen_forget();
                 }
-                if (swap_make()) present_window(last.im, last.has_crop ? last.crop : NULL, -1, 0, PRESENT_REAL);
+                if (redraw && swap_make()) present_window(last.im, last.has_crop ? last.crop : NULL, -1, 0, PRESENT_REAL);
                 pthread_mutex_unlock(&g_present_mu);
             }
             continue;

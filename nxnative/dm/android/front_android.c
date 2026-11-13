@@ -73,7 +73,7 @@ void dm_focus_set(int st); void dm_audio_suspend(int on); void guest_clock_freez
 // ---- settings (the pause menu's), kept in the files folder as KEY=VALUE lines ----
 static char g_root[512];
 static _Atomic int g_set_overlay = 1, g_set_rumble = 1, g_set_fps;   // the gamepad shown; rumble and tap vibration; the frame rate counter (top left)
-static _Atomic int g_set_framegen;
+static _Atomic int g_set_framegen, g_set_lossless;
 static _Atomic int g_set_opacity = 60;   // the gamepad's opacity, percent (OV_OPACITY_MIN..MAX: the menu's Opacity slider)
 static _Atomic int g_set_grid;   // the layout editor's Snap to grid
 static _Atomic int g_set_labels = -1;   // a controller's face buttons by their label (1) or their position (0); -1: as env.txt says (pad_labels)
@@ -89,6 +89,7 @@ static void settings_load(void) {
     while (fgets(line, sizeof line, f)) { int v; if (sscanf(line, "overlay=%d", &v) == 1) atomic_store(&g_set_overlay, v != 0); else if (sscanf(line, "rumble=%d", &v) == 1) atomic_store(&g_set_rumble, v != 0);
         else if (sscanf(line, "fps=%d", &v) == 1) atomic_store(&g_set_fps, v != 0);
         else if (sscanf(line, "framegen=%d", &v) == 1) atomic_store(&g_set_framegen, v != 0);
+        else if (sscanf(line, "framegen_engine=%d", &v) == 1) atomic_store(&g_set_lossless, v == 1);
         else if (sscanf(line, "docked=%d", &v) == 1) setenv("DM_OPMODE", v ? "1" : "0", 1);   // over env.txt's: the host reads it once, at its first query
         else if (sscanf(line, "opacity=%d", &v) == 1) atomic_store(&g_set_opacity, v < OV_OPACITY_MIN ? OV_OPACITY_MIN : v > OV_OPACITY_MAX ? OV_OPACITY_MAX : v);
         else if (sscanf(line, "grid=%d", &v) == 1) atomic_store(&g_set_grid, v != 0);
@@ -111,7 +112,7 @@ static void settings_save(void) {
     fprintf(f, "overlay=%d\nrumble=%d\ndocked=%d\nfps=%d\nopacity=%d\ngrid=%d\n", atomic_load(&g_set_overlay), atomic_load(&g_set_rumble), dm_opmode() != 0, atomic_load(&g_set_fps),
             atomic_load(&g_set_opacity), atomic_load(&g_set_grid));
     if (atomic_load(&g_set_labels) >= 0) fprintf(f, "labels=%d\n", atomic_load(&g_set_labels));   // (only once the player chose: until then env.txt decides)
-    fprintf(f, "framegen=%d\n", atomic_load(&g_set_framegen));
+    fprintf(f, "framegen=%d\nframegen_engine=%d\n", atomic_load(&g_set_framegen), atomic_load(&g_set_lossless));
     for (int l = 0; l < 2; l++) for (int i = 0; i < OV_N; i++) {
         _Atomic int *c = g_cust[0][l][i]; int x = atomic_load(&c[0]), y = atomic_load(&c[1]), z = atomic_load(&c[2]);
         if ((x && y) || z) fprintf(f, "ui=%s,%s,%d,%d,%d\n", LAYOUT_NAMES[l], OV_LAYOUTS[0][i].name, x && y ? x - 1 : -1, x && y ? y - 1 : -1, z ? z : 1000);
@@ -126,6 +127,8 @@ __attribute__((weak)) void dm_overlay_redraw(void) {}   // the backend presents 
 // ---- holding the game: in the background and while the pause menu is open. Its clock reads wait (reason 1) and its audio goes to the silent sink ----
 static _Atomic int g_running, g_bg, g_menu;
 int dm_framegen_enabled(void) { return atomic_load(&g_set_framegen); }
+int dm_framegen_prefers_lossless(void) { return atomic_load(&g_set_lossless); }
+__attribute__((weak)) int vk_lsfg_available(void) { return 0; }   // the null renderer has no LSFG
 int dm_game_held(void) { return atomic_load(&g_bg) || atomic_load(&g_menu); }
 static pthread_mutex_t g_hold_mu = PTHREAD_MUTEX_INITIALIZER; static int g_held;
 static _Atomic int g_ime_on;
@@ -452,7 +455,7 @@ static void *temp_watch(void *a) {
 // settings (shown, opacity, the layout editor, rumble, a controller's face buttons) and the game's (the frame rate counter, the mode, exporting and importing the save);
 // Resume under them ----
 static _Atomic int g_menu_hi = -1, g_menu_tab;   // the highlighted row (a controller's selection, or the row a finger is on), -1 none; the open tab
-static int g_menu_ptr = -1, g_menu_row = -2;   // the pointer pressing in the menu, and the row it went down on (-3 the menu button)
+static int g_menu_ptr = -1, g_menu_row = -2, g_menu_engine = -1;
 static _Atomic int g_tx_ver;   // the text entry's edit count: the panel is drawn again when it changes
 static _Atomic int g_ed_st;    // the layout editor's state for dm_menu_state (overlay_layout.h OVE_ST)
 static _Atomic int g_sp_on, g_sp_hi = -1, g_sp_ver;   // the save picker (below): open, its highlighted row, its edit count
@@ -462,9 +465,11 @@ int dm_menu_state(void) {
     if (!atomic_load(&g_menu)) return -1;
     if (atomic_load(&g_edit)) return OVE_ST | atomic_load(&g_ed_st);
     if (atomic_load(&g_sp_on)) return OVS_ST | (atomic_load(&g_sp_hi) + 1) << 4 | (atomic_load(&g_sp_ver) & 255) << 20;
+    int lossless = vk_lsfg_available();
     return atomic_load(&g_set_overlay) | atomic_load(&g_set_rumble) << 1 | (dm_opmode() != 0) << 2 | atomic_load(&g_set_fps) << 3 | (atomic_load(&g_menu_hi) + 1) << 4 |
            atomic_load(&g_menu_tab) << 8 | atomic_load(&g_set_opacity) << 9 | atomic_load(&g_sv_st) << 20 | (atomic_load(&g_sv_n) & 15) << 24 | pad_labels() << 28 |
-           dm_framegen_enabled() << OVM_FRAMEGEN_BIT;
+           dm_framegen_enabled() << OVM_FRAMEGEN_BIT | lossless << OVM_FG_AVAILABLE_BIT |
+           (lossless && dm_framegen_prefers_lossless()) << OVM_FG_LOSSLESS_BIT;
 }
 int dm_overlay_fps(void) { return atomic_load(&g_set_fps) && !atomic_load(&g_menu); }   // gfx_vk_present.c draws the counter (not while the menu holds the game)
 static void menu_open(int hi) {
@@ -495,12 +500,21 @@ static void menu_opacity(int v) {   // the slider: a new value is drawn at once 
     if (atomic_exchange(&g_set_opacity, v) != v) { dm_haptics_android_tap(); dm_overlay_redraw(); }
 }
 static void menu_tab(int t) { t = (t % OVM_TABS + OVM_TABS) % OVM_TABS; if (atomic_exchange(&g_menu_tab, t) != t) dm_haptics_android_tap(); dm_overlay_redraw(); }
+static void menu_set_engine(int lossless) {
+    if (lossless < 0 || (lossless && !vk_lsfg_available())) return;
+    if (atomic_exchange(&g_set_lossless, lossless) != lossless) {
+        settings_save();
+        dm_haptics_android_tap();
+    }
+    dm_overlay_redraw();
+}
 static void ed_open(void); static void sp_open(void); static void save_export(void);
 static void menu_do(int item) {
     if (item == OVM_OVERLAY) { atomic_store(&g_set_overlay, !atomic_load(&g_set_overlay)); atomic_store(&g_overlay, 1); settings_save(); }
     else if (item == OVM_RUMBLE) { int on = !atomic_load(&g_set_rumble); atomic_store(&g_set_rumble, on); dm_haptics_android_set(on); settings_save(); }
     else if (item == OVM_FPS) { atomic_store(&g_set_fps, !atomic_load(&g_set_fps)); settings_save(); }
     else if (item == OVM_FRAMEGEN) { atomic_store(&g_set_framegen, !dm_framegen_enabled()); settings_save(); }
+    else if (item == OVM_FG_ENGINE) { menu_set_engine(!dm_framegen_prefers_lossless()); return; }
     else if (item == OVM_MODE) { dm_set_opmode(dm_opmode() ? 0 : 1); settings_save(); }   // the game takes it when it goes on
     else if (item == OVM_PAD) { atomic_store(&g_set_labels, !pad_labels()); settings_save(); }   // at once (pad_labels)
     else if (item == OVM_TAB) { menu_tab(atomic_load(&g_menu_tab) + 1); return; }
@@ -520,6 +534,7 @@ static void menu_touch(AInputEvent *e, float W, float H) {   // a press on a row
     if (act == AMOTION_EVENT_ACTION_DOWN || act == AMOTION_EVENT_ACTION_POINTER_DOWN) {
         if (g_menu_ptr >= 0) return;
         g_menu_ptr = id; g_menu_row = row;
+        g_menu_engine = item == OVM_FG_ENGINE ? ov_menu_engine_at(x, p, row) : -1;
         if (item == OVM_TAB) menu_tab(ov_menu_tab_at(x, p));   // a tab opens as the finger touches it
         else if (item == OVM_OPACITY) menu_opacity(ov_menu_track_value(x, p, row));
         if (row >= 0) { atomic_store(&g_menu_hi, item >= 0 ? row : -1); dm_overlay_redraw(); }
@@ -533,6 +548,11 @@ static void menu_touch(AInputEvent *e, float W, float H) {   // a press on a row
     } else if ((act == AMOTION_EVENT_ACTION_UP || act == AMOTION_EVENT_ACTION_POINTER_UP) && id == g_menu_ptr) {
         int down = g_menu_row; g_menu_ptr = -1; atomic_store(&g_menu_hi, -1);
         if (down >= 0 && ov_menu_item(tab, down) == OVM_OPACITY) { settings_save(); dm_overlay_redraw(); }
+        else if (row == down && item == OVM_FG_ENGINE) {
+            int engine = ov_menu_engine_at(x, p, row);
+            if (engine == g_menu_engine) menu_set_engine(engine);
+            dm_overlay_redraw();
+        }
         else if (row == down && item >= 0 && item != OVM_TAB) menu_do(item);
         else if (row == down && (row == -2 || row == -3)) { dm_haptics_android_tap(); menu_close(); }
         else dm_overlay_redraw();
@@ -547,6 +567,7 @@ static void menu_key(uint64_t bit) {   // a controller key pressed while the men
         for (int k = 0; k < OVM_ROWS; k++) { hi = hi < 0 ? (bit == DM_BTN_UP ? OVM_ROWS - 1 : 1) : (hi + (bit == DM_BTN_UP ? OVM_ROWS - 1 : 1)) % OVM_ROWS; if (ov_menu_item(tab, hi) >= 0) break; }
         atomic_store(&g_menu_hi, hi); dm_overlay_redraw();
     } else if ((bit == DM_BTN_LEFT || bit == DM_BTN_RIGHT) && item == OVM_OPACITY) { menu_opacity(atomic_load(&g_set_opacity) + (bit == DM_BTN_LEFT ? -5 : 5)); settings_save(); }
+    else if ((bit == DM_BTN_LEFT || bit == DM_BTN_RIGHT) && item == OVM_FG_ENGINE) menu_set_engine(bit == DM_BTN_RIGHT);
     else if ((bit == DM_BTN_LEFT || bit == DM_BTN_RIGHT) && item == OVM_TAB) menu_tab(tab + (bit == DM_BTN_LEFT ? -1 : 1));
     else if (bit == DM_BTN_L || bit == DM_BTN_ZL || bit == DM_BTN_R || bit == DM_BTN_ZR) {
         menu_tab(tab + (bit == DM_BTN_L || bit == DM_BTN_ZL ? -1 : 1));
@@ -558,10 +579,10 @@ static void menu_key(uint64_t bit) {   // a controller key pressed while the men
 
 // ---- the save manager (saves_android.c): Export save copies the game's committed save to the files folder's saves/ on a thread of its own (the row shows it
 // copying, then the export's name); Import save opens the picker, in the menu's panel (overlay_layout.h OVS_*): the saves there newest first, a page of
-// OVM_ROWS - 2 (left and right, L and R page), Back. A save chosen asks first; the import then waits for the next start (the save is not touched while the
+// up to five saves (left and right, L and R page), Back. A save chosen asks first; the import then waits for the next start (the save is not touched while the
 // game runs) and the app ends, as the panel says. A controller: up and down choose, A does, B goes back; a finger taps a row, or outside the panel to go back ----
 #define SP_MAX 64
-#define SP_PER (OVM_ROWS - 2)
+#define SP_PER 5
 static pthread_mutex_t g_sp_mu = PTHREAD_MUTEX_INITIALIZER;   // the picker's list and the export's note
 static struct { int n, page, confirm, closing, ptr, row; dm_save_entry e[SP_MAX], pick; } g_sp = {.ptr = -1};
 static char g_sv_note[96];

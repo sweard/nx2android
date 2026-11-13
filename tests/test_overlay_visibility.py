@@ -21,7 +21,7 @@ class OverlayVisibility(unittest.TestCase):
         pad = front[front.index('static int32_t axis('):front.index('// ---- the on-screen gamepad')]
         visible = front[front.index('int dm_overlay_visible(void)'):front.index('int dm_overlay_layout(void)')]
         hit = front[front.index('static int ctl_at('):front.index('// dragging the menu button:')]
-        menu = front[front.index('static void menu_do('):front.index('static void menu_touch(')]
+        menu = front[front.index('static void menu_set_engine('):front.index('static void menu_touch(')]
         events = front[front.index('static void touch_event(AInputEvent *e) {'):front.index('static int on_input(')]
         harness = r'''
 #include <assert.h>
@@ -31,9 +31,11 @@ class OverlayVisibility(unittest.TestCase):
 #include "front.h"
 #include "overlay_layout.h"
 static _Atomic int g_set_overlay, g_overlay, g_pads, g_edit;
-static _Atomic int g_set_rumble, g_set_fps, g_set_framegen, g_set_labels, g_menu_tab, g_sv_st;
+static _Atomic int g_set_rumble, g_set_fps, g_set_framegen, g_set_lossless, g_set_labels, g_menu_tab, g_sv_st;
 static int dm_framegen_enabled(void) { return atomic_load(&g_set_framegen); }
-static int layout, saves;
+static int dm_framegen_prefers_lossless(void) { return atomic_load(&g_set_lossless); }
+static int layout, saves, lossless_available;
+static int vk_lsfg_available(void) { return lossless_available; }
 int dm_overlay_layout(void) { return layout; }
 float dm_overlay_scale(void) { return 1; }
 int dm_overlay_custom(int l, int c, float *x, float *y, float *s) {
@@ -247,6 +249,14 @@ int main(int argc, char **argv) {
             assert(saves == 1 && dm_overlay_visible() == 1); controls(1);
             menu_do(OVM_OVERLAY);
             assert(saves == 2 && dm_overlay_visible() == 2); controls(0);
+            menu_set_engine(1);
+            assert(!dm_framegen_prefers_lossless() && saves == 2);
+            lossless_available = 1;
+            menu_set_engine(1);
+            assert(dm_framegen_prefers_lossless() && saves == 3);
+            lossless_available = 0;
+            menu_set_engine(0);
+            assert(!dm_framegen_prefers_lossless() && saves == 4);
         }
     }
     return 0;

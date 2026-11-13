@@ -81,7 +81,9 @@ int main(void) {
     assert(ov_drag_pos(1100, 600, 1013, 50) == 506.5f);
     assert(ov_drag_pos(1100, 505, 1013, 50) == 508);
 
-    assert(ov_menu_item(0, OVM_ROWS - 2) == OVM_PAD && ov_menu_item(1, OVM_ROWS - 2) == OVM_FRAMEGEN && ov_menu_item(1, OVM_ROWS - 1) == OVM_RESUME);
+    assert(ov_menu_item(0, OVM_ROWS - 3) == OVM_PAD && ov_menu_item(0, OVM_ROWS - 2) < 0);
+    assert(ov_menu_item(1, OVM_ROWS - 3) == OVM_FRAMEGEN && ov_menu_item(1, OVM_ROWS - 2) == OVM_FG_ENGINE);
+    assert(ov_menu_item(1, OVM_ROWS - 1) == OVM_RESUME);
     const float screens[][2] = {{915, 412}, {1216, 760}, {2400, 1080}, {1080, 2400}};
     for (unsigned s = 0; s < sizeof screens / sizeof screens[0]; s++) {
         float W = screens[s][0], H = screens[s][1], step = H / OVE_GRID_ROWS, p[4];
@@ -89,6 +91,12 @@ int main(void) {
         for (int row = 0; row < OVM_ROWS; row++) {
             float r[4]; ov_menu_rowrect(p, row, r);
             assert(ov_menu_row_at(r[0] + r[2] / 2, r[1] + r[3] / 2, W, H) == row);
+            if (ov_menu_item(1, row) == OVM_FG_ENGINE) {
+                float end = r[0] + r[2] - r[3] * 0.15f, width = ov_menu_engine_width(r);
+                assert(ov_menu_engine_at(end - 1.5f * width, p, row) == 0);
+                assert(ov_menu_engine_at(end - 0.5f * width, p, row) == 1);
+                assert(ov_menu_engine_at(r[0], p, row) == -1);
+            }
         }
         for (int axis = 0; axis < 2; axis++) for (int i = -10; i <= 110; i++) {
             float extent = screens[s][axis], half = H * 0.12f;

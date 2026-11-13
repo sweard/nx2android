@@ -1,18 +1,13 @@
 // Android presentation: estimate motion from two real frames at quarter width and height,
 // then use it to synthesize one frame midway between them. All images belong to this backend.
 #include "gfx_vk_framegen.h"
+#include "gfx_vk_lsfg.h"
 #include "frame_luma_comp.spv.h"
 #include "frame_motion_comp.spv.h"
 #include "frame_midpoint_comp.spv.h"
 #include <string.h>
 
 enum { LUMA, MOTION, MIDPOINT, PASSES };
-typedef struct {
-    VkImage image;
-    VkDeviceMemory memory;
-    VkImageView view;
-} frame_image;
-
 typedef struct {
     VkDescriptorSetLayout bindings;
     VkPipelineLayout layout;
@@ -35,7 +30,7 @@ static struct {
 static const VkImageSubresourceRange color_range = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
 static const VkImageSubresourceLayers color_layers = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
 
-static VkResult create_image(frame_image *image, VkExtent2D size, VkFormat format, VkImageUsageFlags usage) {
+VkResult vk_fg_image_create(frame_image *image, VkExtent2D size, VkFormat format, VkImageUsageFlags usage) {
     VkImageCreateInfo ci = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D,
         .format = format, .extent = {size.width, size.height, 1}, .mipLevels = 1, .arrayLayers = 1,
@@ -62,13 +57,13 @@ static VkResult create_image(frame_image *image, VkExtent2D size, VkFormat forma
     return vkCreateImageView(V.dev, &vi, NULL, &image->view);
 }
 
-static void destroy_image(frame_image *image) {
+void vk_fg_image_destroy(frame_image *image) {
     if (image->view) vkDestroyImageView(V.dev, image->view, NULL);
     if (image->image) vkDestroyImage(V.dev, image->image, NULL);
     if (image->memory) vkFreeMemory(V.dev, image->memory, NULL);
 }
 
-void vk_framegen_destroy(void) {
+static void destroy_builtin(void) {
     if (fg.pool) vkDestroyDescriptorPool(V.dev, fg.pool, NULL);
     if (fg.linear) vkDestroySampler(V.dev, fg.linear, NULL);
     if (fg.nearest) vkDestroySampler(V.dev, fg.nearest, NULL);
@@ -79,11 +74,11 @@ void vk_framegen_destroy(void) {
         if (pass->bindings) vkDestroyDescriptorSetLayout(V.dev, pass->bindings, NULL);
     }
     for (unsigned i = 0; i < 2; ++i) {
-        destroy_image(&fg.color[i]);
-        destroy_image(&fg.luma[i]);
+        vk_fg_image_destroy(&fg.color[i]);
+        vk_fg_image_destroy(&fg.luma[i]);
     }
-    destroy_image(&fg.motion);
-    destroy_image(&fg.midpoint);
+    vk_fg_image_destroy(&fg.motion);
+    vk_fg_image_destroy(&fg.midpoint);
     fg = (typeof(fg)){0};
 }
 
@@ -163,7 +158,7 @@ static VkResult create_sets(void) {
     return VK_SUCCESS;
 }
 
-static int format_supports(VkFormat format, VkFormatFeatureFlags features) {
+int vk_fg_format_supports(VkFormat format, VkFormatFeatureFlags features) {
     VkFormatProperties properties;
     vkGetPhysicalDeviceFormatProperties(V.pd, format, &properties);
     return (properties.optimalTilingFeatures & features) == features;
@@ -173,9 +168,9 @@ static VkResult create_resources(void) {
     const VkFormatFeatureFlags sampled = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
     const VkFormatFeatureFlags linear = VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
     const VkFormatFeatureFlags storage = VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
-    if (!format_supports(fg.format, sampled | linear | VK_FORMAT_FEATURE_BLIT_DST_BIT) ||
-        !format_supports(VK_FORMAT_R32_SFLOAT, sampled | storage) ||
-        !format_supports(VK_FORMAT_R16G16B16A16_SFLOAT, sampled | linear | storage | VK_FORMAT_FEATURE_BLIT_SRC_BIT)) {
+    if (!vk_fg_format_supports(fg.format, sampled | linear | VK_FORMAT_FEATURE_BLIT_DST_BIT) ||
+        !vk_fg_format_supports(VK_FORMAT_R32_SFLOAT, sampled | storage) ||
+        !vk_fg_format_supports(VK_FORMAT_R16G16B16A16_SFLOAT, sampled | linear | storage | VK_FORMAT_FEATURE_BLIT_SRC_BIT)) {
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
     }
 
@@ -190,16 +185,16 @@ static VkResult create_resources(void) {
     result = vkCreateSampler(V.dev, &si, NULL, &fg.nearest);
     if (result) return result;
     for (unsigned i = 0; i < 2; ++i) {
-        result = create_image(&fg.color[i], fg.size, fg.format, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+        result = vk_fg_image_create(&fg.color[i], fg.size, fg.format, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
         if (result) return result;
-        result = create_image(&fg.luma[i], fg.luma_size, VK_FORMAT_R32_SFLOAT,
+        result = vk_fg_image_create(&fg.luma[i], fg.luma_size, VK_FORMAT_R32_SFLOAT,
                               VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
         if (result) return result;
     }
-    result = create_image(&fg.motion, fg.motion_size, VK_FORMAT_R16G16B16A16_SFLOAT,
+    result = vk_fg_image_create(&fg.motion, fg.motion_size, VK_FORMAT_R16G16B16A16_SFLOAT,
                           VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
     if (result) return result;
-    result = create_image(&fg.midpoint, fg.size, VK_FORMAT_R16G16B16A16_SFLOAT,
+    result = vk_fg_image_create(&fg.midpoint, fg.size, VK_FORMAT_R16G16B16A16_SFLOAT,
                           VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
     if (result) return result;
     result = create_pass(&fg.pass[LUMA], 1, frame_luma_comp_spv, sizeof frame_luma_comp_spv);
@@ -211,11 +206,11 @@ static VkResult create_resources(void) {
     return create_sets();
 }
 
-int vk_framegen_prepare(VkExtent2D size, VkFormat format, const VkOffset3D offsets[2]) {
+static int prepare_builtin(VkExtent2D size, VkFormat format, const VkOffset3D offsets[2]) {
     if (size.width == fg.size.width && size.height == fg.size.height && format == fg.format) {
         if (memcmp(fg.offsets, offsets, sizeof fg.offsets)) {
             memcpy(fg.offsets, offsets, sizeof fg.offsets);
-            vk_framegen_forget();
+            fg.has_history = 0;
         }
         return fg.ready;
     }
@@ -225,7 +220,7 @@ int vk_framegen_prepare(VkExtent2D size, VkFormat format, const VkOffset3D offse
         VkResult result = vkQueueWaitIdle(V.q);
         pthread_mutex_unlock(&g_vk_queue_mu);
         if (result) return 0;
-        vk_framegen_destroy();
+        destroy_builtin();
     }
     fg.size = size;
     fg.format = format;
@@ -234,7 +229,7 @@ int vk_framegen_prepare(VkExtent2D size, VkFormat format, const VkOffset3D offse
     fg.motion_size = (VkExtent2D){(fg.luma_size.width + 7) / 8, (fg.luma_size.height + 7) / 8};
     VkResult result = create_resources();
     if (result) {
-        vk_framegen_destroy();
+        destroy_builtin();
         fg.size = size;
         fg.format = format;
         VKLOG("[RED] frame generation unavailable at %ux%u (Vulkan result %d)", size.width, size.height, result);
@@ -245,8 +240,25 @@ int vk_framegen_prepare(VkExtent2D size, VkFormat format, const VkOffset3D offse
     return 1;
 }
 
-int vk_framegen_has_history(void) { return fg.has_history; }
-void vk_framegen_forget(void) { fg.has_history = 0; }
+static int using_lossless;
+
+int vk_framegen_prepare(VkExtent2D size, VkFormat format, const VkOffset3D offsets[2], int prefer_lossless) {
+    int use_lossless = prefer_lossless && vk_lsfg_prepare(size, offsets);
+    if (use_lossless != using_lossless) {
+        vk_framegen_forget();
+        using_lossless = use_lossless;
+    }
+    return using_lossless || prepare_builtin(size, format, offsets);
+}
+
+int vk_framegen_using_lossless(void) { return using_lossless; }
+int vk_framegen_has_history(void) { return using_lossless ? vk_lsfg_has_history() : fg.has_history; }
+void vk_framegen_forget(void) { fg.has_history = 0; vk_lsfg_forget(); }
+void vk_framegen_destroy(void) {
+    vk_lsfg_destroy();
+    destroy_builtin();
+    using_lossless = 0;
+}
 
 static void initialize_images(VkCommandBuffer cb) {
     VkImage images[] = {
@@ -284,6 +296,7 @@ static void dispatch(VkCommandBuffer cb, unsigned pass, uint32_t x, uint32_t y) 
 }
 
 VkImage vk_framegen_record(VkCommandBuffer cb, VkImage source, int interpolate) {
+    if (using_lossless) return vk_lsfg_record(cb, source, interpolate);
     if (!fg.initialized) initialize_images(cb);
     VkImage color = fg.color[fg.next].image, luma = fg.luma[fg.next].image;
     VkImageBlit blit = {
@@ -308,6 +321,7 @@ VkImage vk_framegen_record(VkCommandBuffer cb, VkImage source, int interpolate) 
 }
 
 void vk_framegen_submitted(void) {
+    if (using_lossless) { vk_lsfg_submitted(); return; }
     fg.initialized = fg.has_history = 1;
     fg.next ^= 1;
 }
