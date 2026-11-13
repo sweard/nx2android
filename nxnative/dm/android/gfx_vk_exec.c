@@ -97,6 +97,8 @@ static uint64_t g_x_flat[8]; static int g_x_flat_mode[8], g_x_nflat;   // DM_VK_
 // Additional diagnostic bits: 8 no alpha coverage, 16 no depth bias, 32 no depth test/write, 64 no stencil. The mode is part of the pipeline key so live changes take effect.
 static uint64_t g_x_logfs;   // DM_VK_LOG_FS=<fragment shader key> (live): one line per draw with it, with its samplers as the draw sees them
 static int g_rd_touch = 1, g_x_rdkeep, g_x_nskipvs; static uint64_t g_x_skipvs[8];   // DM_VK_RD_TOUCH, DM_VK_X_RDKEEP, DM_VK_X_SKIPVS (see prepare_draw)
+static uint64_t g_rd_sync_vs[8], g_rd_sync_writes[16];
+static int g_rd_sync_nvs, g_rd_sync_nwrites;
 static char g_x_tracesize[40], g_x_traceframe[40]; static int g_x_traceframe_on;
 // DM_VK_WATCH=<pool offset, hex>[#n] (live): log the next n (20) uses of images at that offset of their pool (attachment, sampled, copy), with the pass and present
 // numbers, to find what fills a texture a pass reads
@@ -202,9 +204,22 @@ static void render_cond(const p_render_cond *rc) {
     g_rc_skip = known && (rc->mode ? x == y : x != y);
 }
 
+static void rd_sync_init(void) {
+    const char *keys = getenv("DM_VK_RD_SYNC_VS");
+    while (keys && *keys && g_rd_sync_nvs < 8) {
+        char *end;
+        uint64_t key = strtoull(keys, &end, 16);
+        if (end == keys || (*end && *end != ',')) break;
+        if (key) g_rd_sync_vs[g_rd_sync_nvs++] = key;
+        keys = *end ? end + 1 : end;
+    }
+    if (g_rd_sync_nvs) VKLOG("raster-discard storage synchronization enabled for %d vertex shaders", g_rd_sync_nvs);
+}
+
 void vk_exec_reset(void) {   // a new submission: NVN state does not carry over between command buffers, the replay starts from the defaults
-    static int inited; if (!inited) { inited = 1; state_reset(); crash_add_note_hook(build_dump); prewarm_start(); compute_warm_start(); }
+    static int inited; if (!inited) { inited = 1; state_reset(); rd_sync_init(); crash_add_note_hook(build_dump); prewarm_start(); compute_warm_start(); }
     g_rc_npend = 0; g_rc_skip = 0;
+    g_rd_sync_nwrites = 0;
     { void vk_tex_release_drain(void); vk_tex_release_drain(); }   // Finalized textures' CPU-written marks that no queued job needs any more (gfx_vk_tex.c)
     S.pass_open = 0; S.bound_pipe = VK_NULL_HANDLE; g_cb_draws = 0; g_ord_parts = 0; g_psplit_now = 0; g_set_epoch++; x_read();
     if (g_prof_on) { extern uint64_t g_pkg_ns, g_pkg_n; memset(g_prof_ns, 0, sizeof g_prof_ns); g_prof_t0 = tick(); g_prof_pkg0 = g_pkg_ns; g_prof_npkg0 = g_pkg_n; g_prof_pipes0 = g_vkst.pipes_built; }
@@ -1544,6 +1559,30 @@ static void rd_read(const uint64_t *a, int n) {
         int dup = 0; for (int j = 0; j < ns; j++) dup |= seen[j] == b; if (dup) continue; seen[ns++] = b;
         vk_scratch(4, 4, &db, &dof); VkBufferCopy r = {o, dof, 4}; vk_img_barrier_all(cb); vkCmdCopyBuffer(cb, b, db, 1, &r); vk_img_barrier_all(cb); }
 }
+
+// Some Adreno draws read the next character's bone matrices even across an NVN ordering barrier.
+// In Xenoblade Chronicles 2, transfer reads before the raster-discard writer and after its barrier
+// stop the shared storage from being reused early. The profile selects the affected vertex shaders.
+static void rd_sync_before_draw(void) {
+    const vkshader_t *vs = S.sh[0];
+    int selected = 0;
+    for (int i = 0; i < g_rd_sync_nvs; i++) selected |= g_rd_sync_vs[i] == vs->key;
+    if (!selected) return;
+
+    for (int i = 0; i < vs->nbind && g_rd_sync_nwrites < 16; i++) {
+        const dmsv_bind *binding = &vs->b[i];
+        if (binding->kind != RK_SBUF || !(binding->flags & 4) || binding->reg < 0 || binding->reg >= 16) continue;
+        const p_bind_buf *buf = &S.ssbo[0][binding->reg];
+        if (!buf->addr || (buf->addr & 3) || (buf->size && buf->size < 4)) continue;
+        int j = 0;
+        while (j < g_rd_sync_nwrites && g_rd_sync_writes[j] != buf->addr) j++;
+        if (j == g_rd_sync_nwrites) g_rd_sync_writes[g_rd_sync_nwrites++] = buf->addr;
+    }
+    if (g_rd_sync_nwrites) {
+        vk_end_pass();
+        rd_read(g_rd_sync_writes, g_rd_sync_nwrites);
+    }
+}
 // everything a draw needs bound; 0 when the draw cannot be done (logged once per reason)
 // A shader that writes memory: a store through a pointer into a storage buffer, a uniform block (only BufferBlock storage can be written) or an image, an image write, an
 // atomic other than a load, a memory copy into such a pointer (SPIR-V scanned once). Without its SPIR-V: assumed to write
@@ -1618,6 +1657,7 @@ static int prepare_draw(int prim, int indexed) {
         int vk_cmd_parts_left(void); if (vk_cmd_parts_left() > 0) { { static int n; if (n++ < 3) VKLOG("pass split: pass %d (%ux%u) after %llu draws, depth %d", g_sub_pass - 1, S.pass_w, S.pass_h, (unsigned long long)g_pass_draws, S.dfmt); }
             vk_end_pass(); g_psplit_now = 1; } }
     else if (g_psplit > 0 && S.pass_open == 1 && g_pass_draws == (uint64_t)g_psplit && S.daspect && !g_psplit_depth) { static int n; if (n++ < 3) VKLOG("pass split: pass %d (%ux%u) has depth (format %d): not split", g_sub_pass - 1, S.pass_w, S.pass_h, S.dfmt); }
+    if (g_rd_sync_nvs && S.rast_discard) rd_sync_before_draw();
     if (g_order_pending) { g_order_pending = 0; g_order_check = S.pass_open == 1; }   // an order-only barrier kept the pass open: decided below, once the draw's images are known
     if (!begin_pass() || !pass_commit()) { g_vkst.skip_rt++; return 0; }
     if (g_x_tracepass >= 0 && g_sub_pass - 1 == g_x_tracepass) g_tracing = 1;
@@ -2478,9 +2518,15 @@ static void exec_ops(const uint8_t *p) {
         case OP_DISPATCH: dispatch((const p_dispatch *)a); break;
         case OP_BARRIER: {   // the pass ends at every barrier: kept across XC3's fragment- and primitive-order barriers (0x1 0x2 0x4) its characters drew torn in some frames
             int32_t bits = *(const int32_t *)a;
-            if (g_x_listpasses) VKLOG("    barrier %#x%s", bits, g_order_keep && S.pass_open == 1 && !(bits & ~0x7) ? " (order only: decided at the next draw)" : "");
-            if (g_order_keep && S.pass_open == 1 && !(bits & ~0x7)) { g_order_pending = 1; break; }   // (g_order_keep)
-            vk_end_pass(); vk_img_barrier_all(vk_cmd()); g_order_pending = 0; break; }
+            int keep = g_order_keep && S.pass_open == 1 && !(bits & ~0x7) && !g_rd_sync_nwrites;
+            if (g_x_listpasses) VKLOG("    barrier %#x%s", bits, keep ? " (order only: decided at the next draw)" : "");
+            if (keep) { g_order_pending = 1; break; }   // (g_order_keep)
+            vk_end_pass(); vk_img_barrier_all(vk_cmd());
+            if (g_rd_sync_nwrites) {
+                rd_read(g_rd_sync_writes, g_rd_sync_nwrites);
+                g_rd_sync_nwrites = 0;
+            }
+            g_order_pending = 0; break; }
         case OP_SET_TEX_POOL: case OP_SET_SAMP_POOL: {   // bound handles were rebased when recorded (hle_nvn.c bind_handles); handles read from memory are rebased by these (mem_handle)
             const p_set_pool *sp = (const p_set_pool *)a; int base = sp->pool ? nvn_dpool_base(sp->pool, h.op == OP_SET_TEX_POOL) : 0;
             if (h.op == OP_SET_TEX_POOL) g_pool_tex_base = base; else g_pool_samp_base = base;
