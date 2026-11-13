@@ -1,0 +1,39 @@
+nxnative/scripts/build_ipa_from_nsp.py
+  s_926c68cc5bacfb::t_5b49cce8836036 1517
+nxnative/dm/games/README.md
+  s_926c68cc5bacfb::t_f7d19a5a929ac5 40
+  s_926c68cc5bacfb::t_5b49cce8836036 42
+docs/ARCHITECTURE.md
+  s_926c68cc5bacfb::t_f7d19a5a929ac5 75
+tests/test_porter.py
+  s_926c68cc5bacfb::t_5b49cce8836036 154
+nxnative/dm/host/hle_sdk16.c
+  s_926c68cc5bacfb::t_f7d19a5a929ac5 15-16,18-22,24
+  s_926c68cc5bacfb::t_5b49cce8836036 23
+nxnative/dm/ios/Sources/main.m
+  s_926c68cc5bacfb::t_5b49cce8836036 57-58
+nxnative/dm/games/010074F013262000/android.tsv
+  s_926c68cc5bacfb::t_f9120f940c6ec1 16-20,22
+porter/datapack.py
+  s_926c68cc5bacfb::t_5b49cce8836036 61
+nxnative/dm/games/010074F013262000/game.tsv
+  s_926c68cc5bacfb::t_f9120f940c6ec1 15-18
+nxnative/dm/games/010074F013262000/patches.py
+  s_926c68cc5bacfb::t_f9120f940c6ec1 1-39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e27bdee58e5e496eaebb9f388e2dfe40e42927f1",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
