@@ -1,0 +1,67 @@
+tests/test_overlay_visibility.py
+  s_926c68cc5bacfb::t_9eb775bc7b492f 24,34,36-38,252-259
+nxnative/dm/android/apk/lsfg-vk-LICENSE.txt
+  s_926c68cc5bacfb::t_fdc40d556cc63e 1-21
+nxnative/dm/android/gfx_vk_lsfg.c
+  s_926c68cc5bacfb::t_a077c1ce333a8d 224-225,229,623-627
+  s_926c68cc5bacfb::t_601c8e353e1b22 14-18,59-60,361-567,570-622,628-679
+  s_926c68cc5bacfb::t_ef186f58ff8087 3,85,87-88,142-144,160-164,174
+  s_926c68cc5bacfb::t_a7ad4d183df08f 1-2,4-13,19-58,61-68,71-84,86,89-141,145-159,165-173,175-217,222-223,226-228,230-295,305-306,308-360,568-569,680
+  s_926c68cc5bacfb::t_d1760d91238cfa 69-70,218-221
+  s_926c68cc5bacfb::t_0e1f5734920e1f 296-304,307
+nxnative/dm/android/gfx_vk_framegen.c
+  s_926c68cc5bacfb::t_0d2c0ad812a572 4,33,60,66,77-78,80-81,161,171-173,188,190,194,197,209,213,223,232,243-261,299,324
+nxnative/dm/android/overlay_layout.h
+  s_926c68cc5bacfb::t_09295c58de809b 122,154-160
+  s_926c68cc5bacfb::t_0e1f5734920e1f 195
+  s_926c68cc5bacfb::t_d048f471acb618 110,114,116-117,132-133
+nxnative/dm/android/gfx_vk_framegen.h
+  s_926c68cc5bacfb::t_f5d89d690ba025 4-13,15-16
+nxnative/dm/android/lossless_dll.h
+  s_926c68cc5bacfb::t_e1ef923ac79b0f 1-16
+nxnative/dm/android/front_android.c
+  s_926c68cc5bacfb::t_09295c58de809b 458,503-510,517,537,551-555,570
+  s_926c68cc5bacfb::t_0e1f5734920e1f 582
+  s_926c68cc5bacfb::t_d048f471acb618 76,92,115,130-131,468,471-472,585
+nxnative/dm/android/gfx_vk_core.c
+  s_926c68cc5bacfb::t_f5d89d690ba025 283-285
+nxnative/dm/android/gfx_vk_present.c
+  s_926c68cc5bacfb::t_75970b0a9a8928 10
+  s_926c68cc5bacfb::t_09295c58de809b 423-426,465-467
+  s_926c68cc5bacfb::t_fb097ed023c6b5 7,84,398,403-411,420-422,460-464,470-471,979,1122-1124,1138,1172-1179,1184,1190
+nxnative/dm/android/apk/mkapk.py
+  s_926c68cc5bacfb::t_fdc40d556cc63e 153-156
+nxnative/dm/android/lossless_dll.c
+  s_926c68cc5bacfb::t_e1ef923ac79b0f 1-10,12-96
+  s_926c68cc5bacfb::t_0e1f5734920e1f 11
+README.md
+  s_926c68cc5bacfb::t_fdc40d556cc63e 64-65
+nxnative/dm/android/gfx_vk.h
+  s_926c68cc5bacfb::t_f5d89d690ba025 30,55
+nxnative/dm/android/apk/apkdriver.py
+  s_926c68cc5bacfb::t_fdc40d556cc63e 45-49
+tests/test_overlay_layout.py
+  s_926c68cc5bacfb::t_75970b0a9a8928 84-86
+  s_926c68cc5bacfb::t_0e1f5734920e1f 94-99
+docs/ARCHITECTURE.md
+  s_926c68cc5bacfb::t_fdc40d556cc63e 70
+nxnative/dm/android/gfx_vk_lsfg.h
+  s_926c68cc5bacfb::t_f5d89d690ba025 1-9,11-12
+  s_926c68cc5bacfb::t_a077c1ce333a8d 10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c1742e6f1bc7a36994b4708c93217878184d978a",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
