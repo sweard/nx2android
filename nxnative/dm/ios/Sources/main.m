@@ -54,6 +54,8 @@ static int boot_env(void) {
     // (or the launcher, which replaces this default before the game starts)
     NSString *lang = [NSBundle.mainBundle objectForInfoDictionaryKey:@"DMLanguage"];
     if (!getenv("DM_LANG") && [lang isKindOfClass:NSString.class] && lang.length) setenv("DM_LANG", lang.UTF8String, 0);
+    NSString *version = [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
+    if ([version isKindOfClass:NSString.class] && version.length) setenv("DM_DISPLAY_VERSION", version.UTF8String, 0);
     fprintf(stderr, "boot: game language %s\n", getenv("DM_LANG") ?: "en-US");
     NSString *romfs = romfs_locate();
     if (!romfs) { fprintf(stderr, "boot: game files not found (<App>/romfs or Documents/romfs)\n"); return 0; }

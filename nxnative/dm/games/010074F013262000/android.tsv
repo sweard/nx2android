@@ -13,8 +13,13 @@
 # despite barriers; fixed in the core (gfx_vk_exec.c prepare_draw, rd_read): blades left black 900-2,300 a frame -> 0, on-screen flicker 4-8 -> 0.0-0.5, 30 fps held.
 # Hundreds of its effect and model shaders are in no game file: the app captures each one a draw misses, and the next port with --install translates them
 # (260 so far, 2026-10-27, from the opening, the first field and its battles); until then such draws are skipped, so the status is wip until the shaders are ported.
+# OPPO PMA110 (Adreno 840, 2026-11-13), 2.2.1: simplified Chinese, all four DLC mounted, and Continue loaded an imported save in Colony Iota.
+# At 1280x720 in the same view, 12 s per setting, render/display fps: off 29.1/29.2, built-in 24.8/49.2, Lossless 25.2/50.5.
+# The FPS overlay showed SoC 66/63/62 C at the three sample endpoints. These are snapshots, not steady-state temperatures.
+# Switching live to docked selected a 1920x1080 crop. Scene, characters and HUD looked correct in a 5 s camera pan, with SoC 72-74 C during the recording.
+# The Vulkan log reported stale texture aliases after the switch. The same patch bytes apply to 2.2.0, whose main NSO is identical to 2.2.1.
 status	wip
-tested	v655360 Lenovo Legion Y700 TB322FC (Snapdragon 8 Elite, Adreno 830, Android 16)
+tested	v720896 OPPO PMA110 (Adreno 840)
 package	org.nx2a.xc3
 orientation	landscape
 env	DM_NVN_ASYNC=1

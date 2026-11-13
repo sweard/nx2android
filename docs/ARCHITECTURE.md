@@ -72,6 +72,7 @@ A profile is offered for Android when it has an `android.tsv`; the profiles with
 | `overlay` | `<tablet\|phone> <control> <x> <y>`: moves one on-screen control of that layout (`dm/android/overlay_default.tsv`) to x, y as fractions of the window, compiled into `android_profile.h` |
 
 Per-build knowledge stays where upstream keeps it: the rewriter's cuts in `patches.py` / `dm/tools/sdk_patches.py`, keyed by build ID.
+The data pack writes the selected update's display version from its control data to `DM_DISPLAY_VERSION` in `env.txt`. `GetDisplayVersion` uses it to choose the profile row when updates share a main build ID.
 
 ## The port
 

@@ -12,8 +12,10 @@ app_category	public.app-category.games
 
 # ---- Versions ----
 build	v655360	2.2.0	main=82d187fe9ef9be921b8e1b1cddf7bd28	subsdk0=be1ee79a9968a35a6b63fc8f1036a6d4	sdk=e8cdceb1e77a8465fe20f21928e8d296
-package	v655360
-shader_versions	v655360
+build	v720896	2.2.1	main=82d187fe9ef9be921b8e1b1cddf7bd28	subsdk0=be1ee79a9968a35a6b63fc8f1036a6d4	sdk=e8cdceb1e77a8465fe20f21928e8d296
+package	v720896
+# Both updates have identical main and RomFS contents. Split shaders from the packed version alone.
+shader_versions
 
 # ---- Files ----
 # every module main imports from

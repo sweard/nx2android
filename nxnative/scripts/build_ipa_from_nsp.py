@@ -1514,6 +1514,7 @@ def mac_run(py, repo, work, game, patched, msl, aoc, gfx, lang, env, logs, g, en
     if aoc: renv['DM_AOC_DIR'] = aoc
     if gfx == 'nvn': renv['DM_NVN_SHMAP'] = g.table('shader_map.tsv')
     renv.update(DM_LANG=lang, DM_WINDOW=1, DM_AUDIO=1)
+    if ver := nacp.version(game / 'control.nacp'): renv['DM_DISPLAY_VERSION'] = ver
     if env_file: renv.update(env_file_pairs(env_file))
     PROG.end(str(host))
     q = lambda v: shlex.quote(str(v))

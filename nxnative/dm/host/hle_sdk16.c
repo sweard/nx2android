@@ -12,13 +12,16 @@
 
 // ---------- oe ----------
 HLE_FORCE("_ZN2nn2oe15SetCpuBoostModeENS0_12CpuBoostModeE", "CPU boost mode; the host does not scale clocks", void, h_oe_CpuBoost, int m) { (void)m; }
-// DisplayVersion = char[16] (the application's display version): the value from that version's control data (NACP), chosen by main's build ID (the game profile's build rows); unknown builds get 1.0.0
-HLE_FORCE("_ZN2nn2oe17GetDisplayVersionEPNS0_14DisplayVersionE", "display version (by the main build ID)", void, h_oe_DispVer, char *v) {
+// DisplayVersion = char[16]. When updates share a main build ID, prefer the row matching the packed version.
+HLE_FORCE("_ZN2nn2oe17GetDisplayVersionEPNS0_14DisplayVersionE", "display version (main build ID and packed version)", void, h_oe_DispVer, char *v) {
     static const struct { const char *build, *ver; } k[] = {DM_GAME_DISPLAY_VERSIONS};
-    const char *ver = "1.0.0";
-    for (int i = 0; i < g_nmod; i++) if (!strcmp(g_mod[i].name, "main"))
-        for (unsigned j = 0; j < sizeof k / sizeof *k; j++) if (!strcmp(g_mod[i].build_id, k[j].build)) ver = k[j].ver;
-    memset(v, 0, 16); strlcpy(v, ver, 16);
+    const char *build = dm_main_build(), *packed = getenv("DM_DISPLAY_VERSION"), *ver = NULL;
+    for (unsigned j = 0; j < sizeof k / sizeof *k; j++) {
+        if (strcmp(build, k[j].build)) continue;
+        if (!ver) ver = k[j].ver;
+        if (packed && !strcmp(packed, k[j].ver)) { ver = k[j].ver; break; }
+    }
+    memset(v, 0, 16); strlcpy(v, ver ? ver : "1.0.0", 16);
 }
 HLE_FORCE("_ZN2nn2oe24GetExpectedVolumeBalanceEPfS1_", "system / application volume balance; the host always reports 1:1", void, h_oe_GetVolBal, float *sys, float *app) { *sys = 1.0f; *app = 1.0f; }
 HLE_FORCE("_ZN2nn2oe24SetExpectedVolumeBalanceEff", "volume balance; the host ignores it", void, h_oe_SetVolBal, float sys, float app) { (void)sys; (void)app; }
