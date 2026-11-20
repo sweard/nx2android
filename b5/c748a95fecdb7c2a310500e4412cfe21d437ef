@@ -1,0 +1,21 @@
+tests/test_porter.py
+  s_926c68cc5bacfb::t_852f4d7df757b5 638-652
+porter/pipeline.py
+  s_926c68cc5bacfb::t_852f4d7df757b5 507-510
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b5c748a95fecdb7c2a310500e4412cfe21d437ef",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
