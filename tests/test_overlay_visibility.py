@@ -47,6 +47,7 @@ static int dm_framegen_target(void) { return atomic_load(&g_set_fg_target); }
 static int layout, saves, lossless_available;
 static int vk_lsfg_available(void) { return lossless_available; }
 int dm_menu_audio_available(void) { return 0; }
+int dm_menu_lossless_import_available(void) { return 1; }
 int dm_overlay_layout(void) { return layout; }
 float dm_overlay_scale(void) { return 1; }
 int dm_overlay_custom(int l, int c, float *x, float *y, float *s) {
@@ -63,6 +64,8 @@ static void ed_open(void) {}
 static void sp_open(void) {}
 static void save_export(void) {}
 static void menu_audio(void) {}
+static int dll_imports;
+static void menu_lossless_import(void) { ++dll_imports; }
 static void menu_close(void) {}
 static void dm_overlay_redraw(void) {}
 ''' + visible + hidden + hit + menu + r'''
@@ -421,6 +424,9 @@ int main(int argc, char **argv) {
             lossless_available = 0;
             menu_set_engine(0);
             assert(!dm_framegen_prefers_lossless() && saves == 4);
+            int before = dll_imports;
+            menu_do(OVM_FG_IMPORT);
+            assert(dll_imports == before + 1 && saves == 4);
         }
     }
     return 0;

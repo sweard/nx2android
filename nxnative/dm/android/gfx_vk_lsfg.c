@@ -185,6 +185,11 @@ static int shader_set(const void *data, size_t size, lsfg_shader shaders[LSFG_SH
     return 0;
 }
 
+int vk_lsfg_validate_dll(const void *data, size_t size) {
+    lsfg_shader shaders[LSFG_SHADER_COUNT];
+    return shader_set(data, size, shaders);
+}
+
 static int supported(void) {
     const VkPhysicalDeviceLimits *limits = &V.props.limits;
     const VkFormatFeatureFlags sampled = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;

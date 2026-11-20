@@ -8,6 +8,7 @@
 //   leaving and coming back pauses as on iOS.
 #include "dm.h"
 #include "front.h"
+#include "lossless_dll.h"
 #include "dm_input.h"
 #include "pad_slots.h"
 #include "overlay_layout.h"
@@ -50,7 +51,25 @@ void front_screen_match(int fps) { (void)fps; }
 // ---------------- the app ----------------
 static ANativeActivity *g_act;
 static jmethodID g_audio_menu_method;
+static jmethodID g_lossless_import_method;
+void dm_overlay_redraw(void);
+int vk_lsfg_validate_dll(const void *data, size_t size);
 int dm_menu_audio_available(void) { return g_audio_menu_method != NULL; }
+int dm_menu_lossless_import_available(void) { return g_lossless_import_method != NULL; }
+JNIEXPORT jboolean JNICALL Java_org_nx2a_GameFiles_validLossless(JNIEnv *e, jclass cls, jbyteArray bytes) {
+    (void)cls;
+    if (!bytes) return JNI_FALSE;
+    jsize n = (*e)->GetArrayLength(e, bytes);
+    if (n <= 0 || (size_t)n > LSFG_DLL_MAX_SIZE) return JNI_FALSE;
+    jbyte *data = (*e)->GetByteArrayElements(e, bytes, NULL);
+    if (!data) return JNI_FALSE;
+    int ok = vk_lsfg_validate_dll(data, (size_t)n);
+    (*e)->ReleaseByteArrayElements(e, bytes, data, JNI_ABORT);
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+JNIEXPORT void JNICALL Java_org_nx2a_GameFiles_losslessImported(JNIEnv *e, jclass cls) {
+    (void)e; (void)cls; dm_overlay_redraw();
+}
 AAssetManager *dm_front_assets(void) { return g_act ? g_act->assetManager : NULL; }   // the APK's assets (overlay_theme.c: the gamepad's theme)
 static pthread_mutex_t g_win_mu = PTHREAD_MUTEX_INITIALIZER;
 static ANativeWindow *g_win, *g_external_win;
@@ -671,6 +690,17 @@ static void menu_audio(void) {
     if ((*e)->ExceptionCheck(e)) { (*e)->ExceptionClear(e); LOG("[menu] audio selection is unavailable"); }
     if (attached) (*g_act->vm)->DetachCurrentThread(g_act->vm);
 }
+static void menu_lossless_import(void) {
+    if (!g_act || !g_lossless_import_method) return;
+    JNIEnv *e = NULL; int attached = 0;
+    if ((*g_act->vm)->GetEnv(g_act->vm, (void **)&e, JNI_VERSION_1_6) != JNI_OK) {
+        if ((*g_act->vm)->AttachCurrentThread(g_act->vm, &e, NULL) != JNI_OK) return;
+        attached = 1;
+    }
+    (*e)->CallVoidMethod(e, g_act->clazz, g_lossless_import_method);
+    if ((*e)->ExceptionCheck(e)) { (*e)->ExceptionClear(e); LOG("[menu] Lossless.dll import is unavailable"); }
+    if (attached) (*g_act->vm)->DetachCurrentThread(g_act->vm);
+}
 static void menu_do(int item) {
     if (item == OVM_OVERLAY) { atomic_store(&g_set_overlay, !atomic_load(&g_set_overlay)); atomic_store(&g_overlay, 1); settings_save(); }
     else if (item == OVM_RUMBLE) { int on = !atomic_load(&g_set_rumble); atomic_store(&g_set_rumble, on); dm_haptics_android_set(on); settings_save(); }
@@ -686,6 +716,7 @@ static void menu_do(int item) {
     else if (item == OVM_EXPORT) { if (atomic_load(&g_sv_st) == OVX_BUSY) return; save_export(); }
     else if (item == OVM_IMPORT) { dm_haptics_android_tap(); sp_open(); return; }
     else if (item == OVM_AUDIO) { menu_audio(); }
+    else if (item == OVM_FG_IMPORT) { menu_lossless_import(); }
     if (item >= 0 && item < OVM_N) dm_haptics_android_tap();
     if (item == OVM_RESUME) menu_close(); else dm_overlay_redraw();
 }
@@ -1464,6 +1495,8 @@ __attribute__((visibility("default"))) void ANativeActivity_onCreate(ANativeActi
     JNIEnv *env = act->env;
     jclass activity_class = (*env)->GetObjectClass(env, act->clazz);
     if (activity_class) g_audio_menu_method = (*env)->GetMethodID(env, activity_class, "openAudioMenu", "()V");
+    if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+    if (activity_class) g_lossless_import_method = (*env)->GetMethodID(env, activity_class, "importLosslessDll", "()V");
     if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
     if (activity_class) (*env)->DeleteLocalRef(env, activity_class);
     snprintf(g_root, sizeof g_root, "%s", act->externalDataPath ? act->externalDataPath : act->internalDataPath);

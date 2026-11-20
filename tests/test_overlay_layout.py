@@ -21,6 +21,8 @@ class OverlayLayout(unittest.TestCase):
 #include "overlay_layout.h"
 static int custom_faces, custom_a, custom_x, hidden_ctl = -1, audio_available;
 int dm_menu_audio_available(void) { return audio_available; }
+static int import_available;
+int dm_menu_lossless_import_available(void) { return import_available; }
 float dm_overlay_scale(void) { return 1; }
 int dm_overlay_off(int l, int c) { return l == 1 && c == hidden_ctl; }
 int dm_overlay_custom(int layout, int ctl, float *x, float *y, float *s) {
@@ -90,11 +92,14 @@ int main(void) {
 
     assert(ov_menu_item(0, 5) == OVM_PAD);
     for (int row = 6; row < OVM_ROWS - 1; ++row) assert(ov_menu_item(0, row) < 0);
-    assert(ov_menu_item(1, OVM_ROWS - 5) == -1);
+    assert(ov_menu_item(1, OVM_ROWS - 6) == -1);
     audio_available = 1;
-    assert(ov_menu_item(1, OVM_ROWS - 5) == OVM_AUDIO);
-    assert(ov_menu_item(1, OVM_ROWS - 4) == OVM_FRAMEGEN && ov_menu_item(1, OVM_ROWS - 3) == OVM_FG_TARGET);
-    assert(ov_menu_item(1, OVM_ROWS - 2) == OVM_FG_ENGINE);
+    assert(ov_menu_item(1, OVM_ROWS - 6) == OVM_AUDIO);
+    assert(ov_menu_item(1, OVM_ROWS - 5) == OVM_FRAMEGEN && ov_menu_item(1, OVM_ROWS - 4) == OVM_FG_TARGET);
+    assert(ov_menu_item(1, OVM_ROWS - 3) == OVM_FG_ENGINE);
+    assert(ov_menu_item(1, OVM_ROWS - 2) == -1);
+    import_available = 1;
+    assert(ov_menu_item(1, OVM_ROWS - 2) == OVM_FG_IMPORT);
     assert(ov_menu_item(1, OVM_ROWS - 1) == OVM_RESUME);
     const float screens[][2] = {{915, 412}, {1216, 760}, {2400, 1080}, {1080, 2400}};
     for (unsigned s = 0; s < sizeof screens / sizeof screens[0]; s++) {
