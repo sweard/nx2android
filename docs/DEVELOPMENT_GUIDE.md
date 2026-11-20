@@ -5,7 +5,8 @@ How to run nx2android from the repository, build the player's bundle and send ch
 ## Setup from the repository
 
 Install [Python](https://www.python.org) 3.11 or later and `python -m pip install -r requirements.txt`, then `python -m porter tools --download` (or install them yourself):
-- [Android NDK r27c](https://developer.android.com/ndk/downloads) (only the NDK: no Android Studio, SDK or JDK)
+- [Android NDK r27c](https://developer.android.com/ndk/downloads)
+- JDK `javac` and Android SDK platform and build-tools for the default system keyboard (`ANDROID_HOME`); `--no-native-keyboard` skips them for a single-screen build
 - [.NET SDK 10](https://dotnet.microsoft.com/download)
 - Android [platform-tools](https://developer.android.com/tools/releases/platform-tools) (adb), to install from the tool
 - your own `prod.keys`, dumped from your Switch
@@ -339,9 +340,9 @@ arena. Existing entries can still hit after exhaustion. Tracing, explicitly
 disabled caching and oversized keys do not increment this counter. The arena
 resets each submission; the counter remains cumulative for the host process.
 
-## Optional native keyboard
+## System keyboard
 
-`python -m porter port <folder> --native-keyboard` packages `org.nx2a.GameActivity` and its Unicode EditText dialog. Combine it with `--external-display` to select `org.nx2a.KeyboardExternalActivity`; external display alone keeps its controller keyboard. These opt-in activities require JDK `javac` plus SDK platform and build-tools; ordinary NativeActivity builds remain code-less and keep the controller keyboard. Installation and save requests resolve the installed package's launcher activity, including ports built before this option existed.
+`python -m porter port <folder>` packages `org.nx2a.GameActivity` and its Unicode EditText dialog by default (`--native-keyboard`). Combine it with `--external-display` to select `org.nx2a.KeyboardExternalActivity`. These activities require JDK `javac` plus SDK platform and build-tools. `--no-native-keyboard` explicitly keeps the controller keyboard; a single-screen opt-out build remains code-less. Installation and save requests resolve the installed package's launcher activity, including ports built before this option existed.
 
 JNI passes ordinary UTF-8 byte arrays, which preserve supplementary characters. The guest's minimum and maximum lengths are UTF-16 units, and native output truncation preserves complete UTF-8 code points. The guest passes its request-local minimum length to a host pthread and joins it. That worker attaches to the VM, looks up and calls the Java method, and detaches on its own pthread stack. The bridge caches method presence or absence for the activity class. When the optional method is absent, the guest uses the overlay keyboard after the worker exits.
 
@@ -353,7 +354,7 @@ Run the asset-free emulator contract probe with:
 python tests/android/keyboard_smoke.py --sdk "$ANDROID_HOME" --ndk "$ANDROID_NDK_HOME" --serial emulator-5554 --out /tmp/nx2a-keyboard
 ```
 
-It builds through the production Java/dex packager, uses the real guest keyboard conversion and JNI bridge, and checks Unicode/UTF-16 output, minimum length, cancel, background/resume, repeated requests and bounded UTF-8 output. Add `--without-java` to verify the default APK's fallback. The probe installs only `org.nx2a.keyboardtest` and uninstalls it afterward; run it on a dedicated emulator. No game dump is needed. This probe does not qualify the combined external-display keyboard or physical-device gameplay.
+It builds through the production Java/dex packager, uses the real guest keyboard conversion and JNI bridge, and checks Unicode/UTF-16 output, minimum length, cancel, background/resume, repeated requests and bounded UTF-8 output. Add `--without-java` to verify the explicit opt-out fallback. The probe installs only `org.nx2a.keyboardtest` and uninstalls it afterward; run it on a dedicated emulator. No game dump is needed. This probe does not qualify the combined external-display keyboard or physical-device gameplay.
 
 ### CPU descriptor readiness
 

@@ -43,7 +43,7 @@ class ExternalDisplayTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as t:
             root = pathlib.Path(t); platform = root / 'platforms/android-36/android.jar'; platform.parent.mkdir(parents=True); platform.touch()
             d8 = root / 'build-tools/36.0.0' / ('d8.bat' if os.name == 'nt' else 'd8'); d8.parent.mkdir(parents=True); d8.touch()   # what external_activity looks for
-            port = pipeline.Port(pipeline.Options(folder=root, external_display=True)); port.aw = root / 'out'; port.logs = root / 'logs'; port.env = {}
+            port = pipeline.Port(pipeline.Options(folder=root, external_display=True, native_keyboard=False)); port.aw = root / 'out'; port.logs = root / 'logs'; port.env = {}
             with mock.patch.object(pipeline.toolchain, '_sdk_roots', return_value=[root]), mock.patch.object(pipeline.shutil, 'which', return_value='/usr/bin/javac'), mock.patch.object(pipeline.nsp, 'run') as run:
                 args = port.external_activity()
             self.assertEqual(run.call_count, 2)
