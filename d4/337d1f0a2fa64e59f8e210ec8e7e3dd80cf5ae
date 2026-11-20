@@ -1,0 +1,37 @@
+nxnative/dm/android/front_android.c
+  s_926c68cc5bacfb::t_f99cc07b01d51a 101,610,652
+tests/test_vk_present_timing.py
+  s_926c68cc5bacfb::t_b1ac2a1b35e494 94-98,101,137-139
+tests/test_perf_adaptive.py
+  s_926c68cc5bacfb::t_1d8074cbee8bce 70-72
+nxnative/dm/android/gfx_vk_present.c
+  s_43884b19f27400::t_25376a5c02d3fd 413,481
+nxnative/dm/android/overlay_layout.h
+  s_43884b19f27400::t_360a3679710ba2 192
+tests/test_menu_scroll.py
+  s_43884b19f27400::t_ec1df365f0143a 167
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d4337d1f0a2fa64e59f8e210ec8e7e3dd80cf5ae",
+  "prompts": {},
+  "sessions": {
+    "s_43884b19f27400": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1d39e-e0b2-71e1-82c9-c6efaf4f6929",
+        "model": "unknown"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    },
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
