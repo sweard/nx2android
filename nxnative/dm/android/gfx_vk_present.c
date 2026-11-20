@@ -25,14 +25,15 @@ __attribute__((weak)) int dm_external_active(void) { return 0; }
 static uint64_t g_presents;
 // Vulkan present IDs include generated frames and overlay redraws; only real frames have NVN tickets.
 enum { PRES_TIMES = 64 };
-static struct { uint64_t ticket, ns; } g_pres_t[PRES_TIMES];
+static struct { uint64_t ticket, ns, ready_ns; } g_pres_t[PRES_TIMES];
 static struct { uint32_t id; uint64_t ticket; int generated; } g_pres_ids[PRES_TIMES];
 static pthread_mutex_t g_pres_mu = PTHREAD_MUTEX_INITIALIZER;
 static uint64_t g_pres_recorded;   // display times recorded so far (present_time_record): none after 240 presents with display timing on, the hand-over time stands in
 static uint64_t g_real_displayed, g_generated_displayed;   // excludes pause menu redraws
-static void present_time_begin(uint64_t ticket, uint64_t ns) {   // ns: the time to report now (no display times on this device), or 0 for the display's
+static struct { uint64_t total_ns, max_ns; unsigned samples; } g_real_latency;   // driver feedback, under g_present_mu
+static void present_time_begin(uint64_t ticket, uint64_t ns, uint64_t ready_ns) {   // ns: the time to report now (no display times on this device), or 0 for the display's
     pthread_mutex_lock(&g_pres_mu);
-    g_pres_t[ticket % PRES_TIMES] = (typeof(g_pres_t[0])){ticket, ns};
+    g_pres_t[ticket % PRES_TIMES] = (typeof(g_pres_t[0])){ticket, ns, ready_ns};
     pthread_mutex_unlock(&g_pres_mu);
 }
 static void present_time_map(uint32_t id, uint64_t ticket, int generated) {   // under g_present_mu
@@ -49,7 +50,15 @@ static void present_time_record(uint32_t id, uint64_t ns) {   // the present thr
     if (!ticket) return;
     pthread_mutex_lock(&g_pres_mu);
     typeof(g_pres_t[0]) *p = &g_pres_t[ticket % PRES_TIMES];
-    if (p->ticket == ticket) p->ns = ns;
+    if (p->ticket == ticket) {
+        p->ns = ns;
+        if (p->ready_ns && ns >= p->ready_ns) {
+            uint64_t latency = ns - p->ready_ns;
+            g_real_latency.total_ns += latency;
+            if (latency > g_real_latency.max_ns) g_real_latency.max_ns = latency;
+            ++g_real_latency.samples;
+        }
+    }
     pthread_mutex_unlock(&g_pres_mu); g_pres_recorded++;
 }
 static void present_time_reset(void) {   // the old swapchain's pending results cannot describe the new one
@@ -931,6 +940,7 @@ typedef struct {
     double target_credit;
     unsigned stable;
     unsigned near_limit;
+    unsigned queued_frames;
     enum framegen_outcome outcome;
 } framegen_cadence;
 
@@ -963,6 +973,19 @@ static double framegen_step(framegen_cadence *cadence, uint64_t ready_ns, uint64
     if (cadence->stable < 4) ++cadence->stable;
     cadence->outcome = cadence->stable == 4 ? FG_PAIR : FG_WARMUP;
     return cadence->stable == 4 ? fmax(half_ns, (double)refresh_ns) / 1e9 : 0;
+}
+
+static double framegen_frame_step(framegen_cadence *cadence, uint64_t ready_ns, uint64_t refresh_ns, int queued) {
+    unsigned queued_frames = ready_ns && queued ? cadence->queued_frames + 1 : 0;
+    // A short backlog still gives us consecutive producer timestamps. Keep the
+    // cadence but do no extra GPU work while draining. Reset on sustained backlog.
+    if (queued_frames >= 3) {
+        *cadence = (framegen_cadence){.queued_frames = 3, .outcome = FG_QUEUED};
+        return 0;
+    }
+    double step = framegen_step(cadence, ready_ns, refresh_ns);
+    cadence->queued_frames = queued_frames;
+    return queued ? 0 : step;
 }
 
 static int framegen_output_rate(int target, uint64_t refresh_ns) {
@@ -1243,6 +1266,9 @@ static void log_framegen_rate(uint64_t now, enum framegen_outcome outcome, uint6
               count[FG_PAIR] ? pair_total / (1e6 * count[FG_PAIR]) : 0, pair_max / 1e6,
               count[FG_REFRESH_LIMIT], count[FG_TARGET_LIMIT], count[FG_QUEUED], count[FG_BUNCHED], count[FG_STALL], count[FG_WARMUP], count[FG_NO_HISTORY],
               count[FG_NO_REFRESH], count[FG_MODE_CHANGE], count[FG_MOVIE], count[FG_HELD], count[FG_PACE_OFF], count[FG_SETUP_FAILED], count[FG_PRESENT_FAILED]);
+        if (measured && g_real_latency.samples)
+            VKLOG("[fg] real display latency: ready-to-display avg/max %.2f/%.2f ms (%u samples)",
+                  g_real_latency.total_ns / (1e6 * g_real_latency.samples), g_real_latency.max_ns / 1e6, g_real_latency.samples);
     }
     g_fg_sample_ns = now;
     g_fg_sample_real = real_now;
@@ -1251,6 +1277,7 @@ static void log_framegen_rate(uint64_t now, enum framegen_outcome outcome, uint6
     late0 = g_pace_slip;
     pair_total = pair_max = 0;
     memset(count, 0, sizeof count);
+    memset(&g_real_latency, 0, sizeof g_real_latency);
 }
 
 static void present_game_frame(vkimg_t *im, const int crop[4], double period, uint64_t ticket, uint64_t ready_ns, int queued) {
@@ -1288,8 +1315,8 @@ static void present_game_frame(vkimg_t *im, const int crop[4], double period, ui
         // A 60 fps game needs a 120 Hz mode for midpoints; voting only 60 Hz left interpolation permanently ineligible.
         window_rate(wants_fg && goal ? 1.0 / goal : eligible ? fmin(vote * 0.5, 1.0 / 60) : vote, ticket);
     }
-    uint64_t sample = eligible && !queued && docked == was_docked ? ready_ns : 0;
-    double step = framegen_step(&g_fg_cadence, sample, refresh_ns);
+    uint64_t sample = eligible && docked == was_docked ? ready_ns : 0;
+    double step = framegen_frame_step(&g_fg_cadence, sample, refresh_ns, queued);
     enum framegen_outcome outcome = g_fg_cadence.outcome;
     if (!refresh_ns) outcome = FG_NO_REFRESH;
     else if (!g_pace_on) outcome = FG_PACE_OFF;
@@ -1310,6 +1337,9 @@ static void present_game_frame(vkimg_t *im, const int crop[4], double period, ui
     if (mode == PRESENT_REAL) { vk_framegen_forget(); g_fg_cpu_present_ns = 0; }
 
     uint64_t start = step ? mono_ns() : 0;
+    // When draining a frame-generation backlog, submit the real frame at the
+    // first available FIFO refresh instead of reserving a later display slot.
+    if (queued && sample) period = 0;
     enum present_result result = present_window(im, crop, step ? step * 2 : period, ticket, mode);
     if (result == PRESENT_GENERATED) {
         setup_errors = 0;
@@ -1420,8 +1450,8 @@ uint64_t mtl_present(const tex_t *t, double period, const int crop[4]) {
     uint64_t n = ++g_presents;
     uint64_t ready_ns = mono_ns();
     // without display times (no VK_GOOGLE_display_timing, no window, or none came back) the hand-over time stands in, as before: the governor's late check needs readings
-    { int disp = V.has_dtiming && dm_front_window() && (n <= 240 || g_pres_recorded); struct timespec ts; if (!disp) clock_gettime(CLOCK_MONOTONIC, &ts);
-      present_time_begin(n, disp ? 0 : (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec); }
+    { int disp = V.has_dtiming && dm_front_window() && (n <= 240 || g_pres_recorded);
+      present_time_begin(n, disp ? 0 : ready_ns, ready_ns); }
     vkimg_t *im = vk_tex(t);
     static uint64_t no_img, undrawn, shown;
     if (n == 600) { void crash_handlers_check(const char *when); crash_handlers_check("after 600 presents"); }
@@ -1486,7 +1516,7 @@ uint64_t vk_present_vkimg(vkimg_t *im, double period) {
     dm_perf_frame(period);
     uint64_t n = ++g_presents;
     { int disp = V.has_dtiming && dm_front_window() && (n <= 240 || g_pres_recorded); struct timespec ts; if (!disp) clock_gettime(CLOCK_MONOTONIC, &ts);
-      present_time_begin(n, disp ? 0 : (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec); }
+      present_time_begin(n, disp ? 0 : (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec, 0); }
     atomic_fetch_add(&g_fps_frames, 1);
     if (shot_wanted(n) && im->layout == VK_IMAGE_LAYOUT_GENERAL) shot(im, n);
     return present_enqueue(im, NULL, n, period, 0);

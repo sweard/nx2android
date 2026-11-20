@@ -31,7 +31,7 @@ typedef struct { int unused; } vkimg_t;
 static struct { int has_dtiming; } V;
 static uint64_t g_pace_anchor, g_refresh_ns, g_fg_sample_ns, g_fg_cpu_present_ns;
 static uint64_t platform_refresh = 16666667;
-static double window_vote;
+static double window_vote, real_period;
 static int g_pace_on = 1, enabled = 1, held, menu = -1, captures, followups, histories, forgets, goal, usable_rate, fail_setup;
 uint8_t *dm_fps_state;
 ''' + csrc.between(src, 'enum { PRESENT_REAL, PRESENT_CAPTURE', 'static enum present_result present_window(') + cadence + r'''
@@ -56,7 +56,8 @@ static void log_framegen_rate(uint64_t n, enum framegen_outcome outcome, uint64_
     g_fg_sample_ns = n; last_outcome = outcome; (void)refresh; (void)pair;
 }
 static enum present_result present_window(vkimg_t *im, const int c[4], double p, uint64_t t, int m) {
-    (void)im; (void)c; (void)p; (void)t;
+    (void)im; (void)c; (void)t;
+    if (m == PRESENT_REAL) real_period = p;
     if ((m == PRESENT_CAPTURE || m == PRESENT_HISTORY) && fail_setup) return PRESENT_SETUP_FAILED;
     if (m == PRESENT_CAPTURE) { captures++; return PRESENT_GENERATED; }
     if (m == PRESENT_HISTORY) histories++;
@@ -83,8 +84,11 @@ int main(void) {
     menu = -1; setenv("DM_VK_PACE", "0", 1); run_frames(); assert(captures == 0);
     unsetenv("DM_VK_PACE"); run_frames(); assert(captures > 0);
     int previous = captures;
+    int previous_forgets = forgets;
     present_game_frame(NULL, NULL, 1.0/30, 9, 1300000000ull, 1); assert(captures == previous);
-    assert(last_outcome == FG_QUEUED);
+    assert(last_outcome == FG_QUEUED && forgets == previous_forgets + 1 && real_period == 0);
+    present_game_frame(NULL, NULL, 1.0/30, 10, 1333333333ull, 0);
+    assert(captures == previous + 1);  // rebuild image history immediately after the queue drains
     platform_refresh = 8333333; g_fg_cadence = (framegen_cadence){0}; captures = followups = 0;
     for (int i = 1; i <= 8; ++i) present_game_frame(NULL, NULL, 1.0/60, i, 2000000000ull + i * 16666667ull, 0);
     assert(captures > 0 && captures == followups);
@@ -144,6 +148,24 @@ int main(void) {
     for (int i = 0; i < 4; ++i, now += 50000000)
         assert(framegen_step(&cadence, now, refresh) == 0);
     assert(fabs(framegen_step(&cadence, now, refresh) - 0.025) < 1e-9);
+    for (int i = 0; i < 2; ++i) {
+        now += 50000000;
+        assert(framegen_frame_step(&cadence, now, refresh, 1) == 0);
+        assert(cadence.stable == 4);
+    }
+    now += 50000000;
+    assert(framegen_frame_step(&cadence, now, refresh, 0) > 0);
+    for (int i = 0; i < 4; ++i) {
+        now += 50000000;
+        assert(framegen_frame_step(&cadence, now, refresh, 1) == 0);
+    }
+    assert(cadence.stable == 0 && cadence.queued_frames == 3);
+    for (int i = 0; i < 4; ++i) {
+        now += 50000000;
+        assert(framegen_frame_step(&cadence, now, refresh, 0) == 0);
+    }
+    now += 50000000;
+    assert(framegen_frame_step(&cadence, now, refresh, 0) > 0);
     now += 54000000;
     assert(fabs(framegen_step(&cadence, now, refresh) - 0.0255) < 1e-9);
 
@@ -261,15 +283,16 @@ int main(void) {
 int main(void) {
     assert(present_time_get(0) == 0);
     assert(present_time_get(1) == 0);
-    present_time_begin(1, 0);
+    present_time_begin(1, 0, 950000000ull);
     assert(present_time_get(1) == 0);  // queued is not displayed
     present_time_map(42, 1, 0);
-    present_time_begin(2, 0);
+    present_time_begin(2, 0, 1980000000ull);
     present_time_map(43, 2, 0);
     present_time_record(43, 2000000000ull);  // results need not be in ticket order
     present_time_record(42, 1000000000ull);
     assert(present_time_get(1) == 1);
     assert(present_time_get(2) == 2);
+    assert(g_real_latency.samples == 2 && g_real_latency.total_ns == 70000000ull && g_real_latency.max_ns == 50000000ull);
     present_time_record(43, 0);
     assert(present_time_get(2) == 2);
     present_time_map(44, 0, 0);  // a menu redraw has a Vulkan ID but no game ticket
@@ -281,35 +304,36 @@ int main(void) {
     present_time_record(45, 3500000000ull);
     present_time_record(45, 3500000000ull);  // driver feedback may be repeated
     assert(g_real_displayed == 2 && g_generated_displayed == 1);
+    assert(g_real_latency.samples == 2);
     assert(present_time_get(2) == 2 && present_time_get(0) == 0);
 
-    present_time_begin(3, 0);
+    present_time_begin(3, 0, 0);
     present_time_map(42 + PRES_TIMES, 3, 0);
     present_time_record(42, 9000000000ull);  // overwritten Vulkan ID mapping
     assert(present_time_get(3) == 0);
     present_time_record(42 + PRES_TIMES, 3000000000ull);
     assert(present_time_get(3) == 3);
-    present_time_begin(1 + PRES_TIMES, 0);
+    present_time_begin(1 + PRES_TIMES, 0, 0);
     present_time_map(200, 1, 0);  // a delayed result must not overwrite a newer ticket
     present_time_record(200, 9000000000ull);
     assert(present_time_get(1) == 0);
     assert(present_time_get(1 + PRES_TIMES) == 0);
 
-    present_time_begin(5, 7000000000ull);  // no display times: the hand-over time stands in at once
+    present_time_begin(5, 7000000000ull, 0);  // no display times: the hand-over time stands in at once
     assert(present_time_get(5) == 7);
     present_time_reset();
     assert(present_time_get(2) == 0);
-    present_time_begin(3, 0);
+    present_time_begin(3, 0, 0);
     present_time_record(42 + PRES_TIMES, 9000000000ull);  // old swapchain feedback
     assert(present_time_get(3) == 0);
     present_time_map(UINT32_MAX, 3, 0);
     present_time_record(UINT32_MAX, 3000000000ull);
     assert(present_time_get(3) == 3);
-    present_time_begin(4, 0);
+    present_time_begin(4, 0, 0);
     present_time_map(0, 4, 0);  // Vulkan's 32-bit present ID may wrap
     present_time_record(0, 4000000000ull);
     assert(present_time_get(4) == 4);
-    present_time_begin(5, 0);  // failed, headless or unsupported presents get no result
+    present_time_begin(5, 0, 0);  // failed, headless or unsupported presents get no result
     assert(present_time_get(5) == 0);
     return 0;
 }
