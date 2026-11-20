@@ -14,12 +14,119 @@ SOURCE = Path(__file__).resolve().parents[1] / 'nxnative/dm/android/gfx_vk_prese
 
 
 class PresentTiming(unittest.TestCase):
+    def test_frame_pairs_without_driver_display_times(self):
+        cc = shutil.which('cc') or shutil.which('clang')
+        if not cc: self.skipTest('a C compiler is required')
+        src = SOURCE.read_text(encoding='utf-8')
+        start = src.index('enum framegen_outcome {')
+        cadence = src[start:src.index('static framegen_cadence g_fg_cadence;', start)]
+        harness = r'''
+#include <assert.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <stdatomic.h>
+#include <math.h>
+#define VKLOG(...) ((void)0)
+typedef struct { int unused; } vkimg_t;
+static struct { int has_dtiming; } V;
+static uint64_t g_pace_anchor, g_refresh_ns, g_fg_sample_ns, g_fg_cpu_present_ns;
+static uint64_t platform_refresh = 16666667;
+static double window_vote;
+static int g_pace_on = 1, enabled = 1, held, menu = -1, captures, followups, histories, forgets, goal, usable_rate, fail_setup;
+uint8_t *dm_fps_state;
+''' + csrc.between(src, 'enum { PRESENT_REAL, PRESENT_CAPTURE', 'static enum present_result present_window(') + cadence + r'''
+static framegen_cadence g_fg_cadence;
+static enum framegen_outcome last_outcome;
+static uint64_t mono_ns(void) { return 1; }
+static uint64_t dm_display_refresh_ns(void) { return platform_refresh; }
+static int dm_opmode(void) { return 0; }
+static int dm_external_active(void) { return 0; }
+static int dm_framegen_enabled(void) { return enabled; }
+static int dm_framegen_target(void) { return goal; }
+static void dm_perf_framegen_rate(int fps) { usable_rate = fps; }
+static int dm_game_held(void) { return held; }
+static int dm_menu_state(void) { return menu; }
+static int vk_lsfg_poll(uint64_t n) { (void)n; return 0; }
+static int dm_pacing_window_game_rate(void) { return 0; }
+int nvn_game_fps(void) { return 30; }
+static void window_rate(double p, uint64_t n) { window_vote = p; (void)n; }
+static void vk_framegen_forget(void) { forgets++; }
+static int swap_make(void) { return 1; }
+static void log_framegen_rate(uint64_t n, enum framegen_outcome outcome, uint64_t refresh, uint64_t pair) {
+    g_fg_sample_ns = n; last_outcome = outcome; (void)refresh; (void)pair;
+}
+static enum present_result present_window(vkimg_t *im, const int c[4], double p, uint64_t t, int m) {
+    (void)im; (void)c; (void)p; (void)t;
+    if ((m == PRESENT_CAPTURE || m == PRESENT_HISTORY) && fail_setup) return PRESENT_SETUP_FAILED;
+    if (m == PRESENT_CAPTURE) { captures++; return PRESENT_GENERATED; }
+    if (m == PRESENT_HISTORY) histories++;
+    if (m == PRESENT_AFTER_MIDPOINT) followups++;
+    return PRESENT_SUBMITTED;
+}
+''' + csrc.between(src, 'static int framegen_display_clock(void) {', 'static void framegen_wait_followup(') + csrc.function(src, 'static void present_game_frame(') + r'''
+static void run_frames(void) {
+    g_fg_cadence = (framegen_cadence){0}; captures = followups = 0;
+    for (int i = 1; i <= 8; ++i) present_game_frame(NULL, NULL, 1.0/30, i, 1000000000ull + i * 33333333ull, 0);
+}
+int main(void) {
+    unsetenv("DM_VK_PACE");
+    run_frames(); assert(captures > 0 && captures == followups);  // no timing extension
+    assert(fabs(window_vote - 1.0/60) < 1e-9);
+    V.has_dtiming = 1; run_frames(); assert(captures > 0);        // extension with no feedback
+    g_pace_anchor = 1; g_refresh_ns = 16666667; platform_refresh = 0;
+    run_frames(); assert(captures > 0 && captures == followups);  // actual driver timing
+    V.has_dtiming = 0; run_frames(); assert(captures == 0);       // unknown refresh: no guess
+    assert(last_outcome == FG_NO_REFRESH);
+    platform_refresh = 16666667; enabled = 0; run_frames(); assert(captures == 0);
+    enabled = 1; held = 1; run_frames(); assert(captures == 0);
+    held = 0; menu = 0; run_frames(); assert(captures == 0);
+    menu = -1; setenv("DM_VK_PACE", "0", 1); run_frames(); assert(captures == 0);
+    unsetenv("DM_VK_PACE"); run_frames(); assert(captures > 0);
+    int previous = captures;
+    present_game_frame(NULL, NULL, 1.0/30, 9, 1300000000ull, 1); assert(captures == previous);
+    assert(last_outcome == FG_QUEUED);
+    platform_refresh = 8333333; g_fg_cadence = (framegen_cadence){0}; captures = followups = 0;
+    for (int i = 1; i <= 8; ++i) present_game_frame(NULL, NULL, 1.0/60, i, 2000000000ull + i * 16666667ull, 0);
+    assert(captures > 0 && captures == followups);
+    assert(fabs(window_vote - 1.0/120) < 1e-9);  // request room for 60 -> 120 too
+    goal = 60; platform_refresh = 16666667; run_frames();
+    assert(usable_rate == 60 && captures == 4 && captures == followups);
+    goal = 90; run_frames();
+    assert(usable_rate == 60 && captures == 4);
+    assert(fabs(window_vote - 1.0/90) < 1e-9);  // keep asking even on a 60 Hz fallback
+    platform_refresh = 11111111; captures = followups = 0;
+    for (int i = 1; i <= 8; ++i) present_game_frame(NULL, NULL, 1.0/45, i, 3000000000ull + i * 22222223ull, 0);
+    assert(usable_rate == 90 && captures == 4 && captures == followups);
+    platform_refresh = 8333333; g_fg_cadence = (framegen_cadence){0};
+    captures = followups = histories = 0;
+    uint32_t patched_step[2] = {0}; dm_fps_state = (uint8_t *)patched_step;  // a game with its own timing
+    for (int i = 1; i <= 12; ++i) present_game_frame(NULL, NULL, 1.0/60, i, 4000000000ull + i * 16666667ull, 0);
+    assert(usable_rate == 0 && captures == 4 && followups == 4 && histories == 4);
+    dm_fps_state = NULL;
+    fail_setup = 1; goal = 60; platform_refresh = 16666667;
+    for (int i = 1; i <= 12; ++i) present_game_frame(NULL, NULL, 1.0/30, i, 5000000000ull + i * 33333334ull, 0);
+    assert(last_outcome == FG_SETUP_FAILED && usable_rate == 0);
+    fail_setup = 0; enabled = 0; run_frames();
+    assert(usable_rate == 0 && captures == 0);
+    assert(framegen_followup_deadline(1000000000ull, .025) == 1025000000ull);
+    assert(forgets > 0);
+    return 0;
+}
+'''
+        with tempfile.TemporaryDirectory(prefix='nx2a_fg_no_timing_') as tmp:
+            c, exe = Path(tmp) / 'check.c', Path(tmp) / 'check'
+            c.write_text(harness, encoding='utf-8')
+            result = subprocess.run([cc, '-std=gnu11', '-Wall', '-Wextra', '-Werror', str(c), '-lm', '-o', str(exe)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            result = subprocess.run([str(exe)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_framegen_tracks_render_cadence(self):
         cc = shutil.which('cc') or shutil.which('clang')
         if not cc:
             self.skipTest('a C compiler is needed for the frame cadence check')
         src = SOURCE.read_text(encoding='utf-8')
-        start = src.index('typedef struct {\n    uint64_t last_ns;')
+        start = src.index('enum framegen_outcome {')
         cadence = src[start:src.index('static framegen_cadence g_fg_cadence;', start)]
         harness = r'''
 #include <assert.h>
@@ -28,6 +135,11 @@ class PresentTiming(unittest.TestCase):
 ''' + cadence + r'''
 int main(void) {
     const uint64_t refresh = 16666667;
+    assert(framegen_output_rate(60, refresh) == 60);
+    assert(framegen_output_rate(90, 16588000) == 60);
+    assert(framegen_output_rate(90, 11111111) == 90);
+    framegen_cadence budget = {.interval_ns = 25000000};
+    assert(framegen_pair_budget(&budget, 60) == 0 && framegen_pair_budget(&budget, 60) == 1);
     framegen_cadence cadence = {0};
     uint64_t now = 1000000000;
     for (int i = 0; i < 4; ++i, now += 50000000)
@@ -38,6 +150,7 @@ int main(void) {
 
     now += 101000000;
     assert(framegen_step(&cadence, now, refresh) == 0);
+    assert(cadence.outcome == FG_STALL);
     for (int i = 0; i < 3; ++i) {
         now += 50000000;
         assert(framegen_step(&cadence, now, refresh) == 0);
@@ -45,8 +158,10 @@ int main(void) {
     now += 50000000;
     assert(framegen_step(&cadence, now, refresh) > 0);
     assert(framegen_step(&cadence, now + 10000000, refresh) == 0);  // bunched input
+    assert(cadence.outcome == FG_BUNCHED);
     assert(framegen_step(&cadence, 0, refresh) == 0);  // pause or backlog
     assert(framegen_step(&cadence, now + 50000000, refresh) == 0);
+    assert(cadence.outcome == FG_WARMUP);
 
     cadence = (framegen_cadence){0};
     for (int i = 0; i < 12; ++i, now += 25000000)
@@ -55,7 +170,29 @@ int main(void) {
     for (int i = 0; i < 4; ++i, now += 33333333)
         assert(framegen_step(&cadence, now, refresh) == 0);
     assert(fabs(framegen_step(&cadence, now, refresh) - refresh / 1e9) < 1e-9);
+    // A brief burst around a sustainable 30 fps cadence keeps its history.
+    for (int i = 0; i < 3; ++i) {
+        now += 28000000;
+        assert(fabs(framegen_step(&cadence, now, refresh) - refresh / 1e9) < 1e-9);
+    }
+    now += 49200000;
+    assert(framegen_step(&cadence, now, refresh) > 0);
+    // Sustained excess input ends the grace period even when close to the display limit.
+    cadence.interval_ns = 31000000;
+    cadence.near_limit = 0;
+    for (int i = 0; i < 3; ++i) {
+        now += 31000000;
+        assert(framegen_step(&cadence, now, refresh) > 0);
+    }
+    now += 31000000;
+    assert(framegen_step(&cadence, now, refresh) == 0);
+    assert(cadence.outcome == FG_REFRESH_LIMIT);
     assert(framegen_step(&cadence, now + 33333333, 0) == 0);
+    assert(framegen_followup_deadline(1000000000ull, 0.025) == 1025000000ull);
+    assert(framegen_followup_deadline(0, 0.025) == 0);
+    assert(framegen_followup_deadline(1000000000ull, 0) == 0);
+    assert(framegen_followup_deadline(1000000000ull, -0.1) == 0);
+    assert(framegen_followup_deadline(1000000000ull, 0.1) == 0);
     return 0;
 }
 '''

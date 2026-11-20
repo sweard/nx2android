@@ -76,7 +76,7 @@ void dm_focus_set(int st); void dm_audio_suspend(int on); void guest_clock_freez
 // ---- settings (the pause menu's), kept in the files folder as KEY=VALUE lines ----
 static char g_root[512];
 static _Atomic int g_set_overlay = 1, g_set_rumble = 1, g_set_fps;   // the gamepad shown; rumble and tap vibration; the frame rate counter (top left)
-static _Atomic int g_set_framegen, g_set_lossless;
+static _Atomic int g_set_framegen, g_set_lossless, g_set_fg_target = 60;
 static _Atomic int g_set_opacity = 60;   // the gamepad's opacity, percent (OV_OPACITY_MIN..MAX: the menu's Opacity slider)
 static _Atomic int g_set_grid;   // the layout editor's Snap to grid
 // the menu button in play (issue #397): env.txt's DM_MENU_BUTTON=0 (porter port --no-menu-button) leaves it out, as a control the player hid (dm_overlay_hidden):
@@ -98,6 +98,7 @@ static void settings_load(void) {
         else if (sscanf(line, "fps=%d", &v) == 1) atomic_store(&g_set_fps, v != 0);
         else if (sscanf(line, "framegen=%d", &v) == 1) atomic_store(&g_set_framegen, v != 0);
         else if (sscanf(line, "framegen_engine=%d", &v) == 1) atomic_store(&g_set_lossless, v == 1);
+        else if (sscanf(line, "framegen_target=%d", &v) == 1) atomic_store(&g_set_fg_target, v == 90 ? 90 : 60);
         else if (sscanf(line, "docked=%d", &v) == 1) setenv("DM_OPMODE", v ? "1" : "0", 1);   // over env.txt's: the host reads it once, at its first query
         else if (sscanf(line, "opacity=%d", &v) == 1) atomic_store(&g_set_opacity, v < OV_OPACITY_MIN ? OV_OPACITY_MIN : v > OV_OPACITY_MAX ? OV_OPACITY_MAX : v);
         else if (sscanf(line, "grid=%d", &v) == 1) atomic_store(&g_set_grid, v != 0);
@@ -121,7 +122,7 @@ static void settings_save(void) {
     fprintf(f, "overlay=%d\nrumble=%d\ndocked=%d\nfps=%d\nopacity=%d\ngrid=%d\n", atomic_load(&g_set_overlay), atomic_load(&g_set_rumble), dm_opmode() != 0, atomic_load(&g_set_fps),
             atomic_load(&g_set_opacity), atomic_load(&g_set_grid));
     if (atomic_load(&g_set_labels) >= 0) fprintf(f, "labels=%d\n", atomic_load(&g_set_labels));   // (only once the player chose: until then env.txt decides)
-    fprintf(f, "framegen=%d\nframegen_engine=%d\n", atomic_load(&g_set_framegen), atomic_load(&g_set_lossless));
+    fprintf(f, "framegen=%d\nframegen_engine=%d\nframegen_target=%d\n", atomic_load(&g_set_framegen), atomic_load(&g_set_lossless), atomic_load(&g_set_fg_target));
     for (int l = 0; l < 2; l++) for (int i = 0; i < OV_N; i++) {
         _Atomic int *c = g_cust[0][l][i]; int x = atomic_load(&c[0]), y = atomic_load(&c[1]), z = atomic_load(&c[2]), hid = atomic_load(&c[3]);
         if ((x && y) || z || hid) fprintf(f, "ui=%s,%s,%d,%d,%d,%d\n", LAYOUT_NAMES[l], OV_LAYOUTS[0][i].name, x && y ? x - 1 : -1, x && y ? y - 1 : -1, z ? z : 1000, hid);
@@ -137,6 +138,7 @@ __attribute__((weak)) void dm_overlay_redraw(void) {}   // the backend presents 
 static _Atomic int g_running, g_bg, g_menu;
 int dm_framegen_enabled(void) { return atomic_load(&g_set_framegen); }
 int dm_framegen_prefers_lossless(void) { return atomic_load(&g_set_lossless); }
+int dm_framegen_target(void) { return atomic_load(&g_set_fg_target); }
 __attribute__((weak)) int vk_lsfg_available(void) { return 0; }   // the null renderer has no LSFG
 int dm_game_held(void) { return atomic_load(&g_bg) || atomic_load(&g_menu); }
 static pthread_mutex_t g_hold_mu = PTHREAD_MUTEX_INITIALIZER; static int g_held;
@@ -587,7 +589,10 @@ static void *temp_watch(void *a) {
 // settings (shown, opacity, the layout editor, rumble, a controller's face buttons) and the game's (the frame rate counter, the mode, exporting and importing the save);
 // Resume under them ----
 static _Atomic int g_menu_hi = -1, g_menu_tab;   // the highlighted row (a controller's selection, or the row a finger is on), -1 none; the open tab
-static int g_menu_ptr = -1, g_menu_row = -2, g_menu_engine = -1;
+static _Atomic int g_menu_scroll;
+int dm_menu_scroll_position(void) { return atomic_load(&g_menu_scroll); }
+static int g_menu_ptr = -1, g_menu_row = -2, g_menu_choice = -1;
+static float g_menu_down_y; static int g_menu_down_scroll, g_menu_scrolled, g_menu_can_scroll;
 static _Atomic int g_tx_ver;   // the text entry's edit count: the panel is drawn again when it changes
 static _Atomic int g_ed_st;    // the layout editor's state for dm_menu_state (overlay_layout.h OVE_ST)
 static _Atomic int g_sp_on, g_sp_hi = -1, g_sp_ver;   // the save picker (below): open, its highlighted row, its edit count
@@ -599,14 +604,15 @@ int dm_menu_state(void) {
     if (atomic_load(&g_sp_on)) return OVS_ST | (atomic_load(&g_sp_hi) + 1) << 4 | (atomic_load(&g_sp_ver) & 255) << 20;
     int lossless = vk_lsfg_available();
     return atomic_load(&g_set_overlay) | atomic_load(&g_set_rumble) << 1 | (dm_opmode() != 0) << 2 | atomic_load(&g_set_fps) << 3 | (atomic_load(&g_menu_hi) + 1) << 4 |
-           atomic_load(&g_menu_tab) << 8 | atomic_load(&g_set_opacity) << 9 | atomic_load(&g_sv_st) << 20 | (atomic_load(&g_sv_n) & 15) << 24 | pad_labels() << 28 |
+           atomic_load(&g_menu_tab) << 8 | atomic_load(&g_set_opacity) << 9 | atomic_load(&g_sv_st) << 20 | (atomic_load(&g_sv_n) & 1) << 23 |
+           (atomic_load(&g_menu_scroll) / OVM_SCROLL_UNITS) << OVM_SCROLL_SHIFT | pad_labels() << 28 |
            dm_framegen_enabled() << OVM_FRAMEGEN_BIT | lossless << OVM_FG_AVAILABLE_BIT |
-           (lossless && dm_framegen_prefers_lossless()) << OVM_FG_LOSSLESS_BIT;
+           (lossless && dm_framegen_prefers_lossless()) << OVM_FG_LOSSLESS_BIT | (dm_framegen_target() == 90) << OVM_FG_90_BIT;
 }
 int dm_overlay_fps(void) { return atomic_load(&g_set_fps) && !atomic_load(&g_menu); }   // gfx_vk_present.c draws the counter (not while the menu holds the game)
 static void menu_open(int hi) {
     if (!atomic_load(&g_running) || atomic_exchange(&g_menu, 1)) return;
-    atomic_store(&g_menu_hi, hi); g_menu_ptr = -1;
+    atomic_store(&g_menu_hi, hi); atomic_store(&g_menu_scroll, 0); g_menu_ptr = -1;
     if (atomic_load(&g_sv_st) != OVX_BUSY) atomic_store(&g_sv_st, OVX_IDLE);   // the last export's note goes (one still copying stays)
     dm_input_set(0, 0, 0, 0, 0); dm_touch_set(NULL, 0); atomic_store(&g_touch_btn, 0);   // nothing stays pressed in the game
     for (int i = 0; i < 16; i++) atomic_store(&g_press_t[i], 0);
@@ -631,10 +637,20 @@ static void menu_opacity(int v) {   // the slider: a new value is drawn at once 
     v = v < OV_OPACITY_MIN ? OV_OPACITY_MIN : v > OV_OPACITY_MAX ? OV_OPACITY_MAX : v;
     if (atomic_exchange(&g_set_opacity, v) != v) { dm_haptics_android_tap(); dm_overlay_redraw(); }
 }
-static void menu_tab(int t) { t = (t % OVM_TABS + OVM_TABS) % OVM_TABS; if (atomic_exchange(&g_menu_tab, t) != t) dm_haptics_android_tap(); dm_overlay_redraw(); }
+static void menu_tab(int t) { t = (t % OVM_TABS + OVM_TABS) % OVM_TABS; if (atomic_exchange(&g_menu_tab, t) != t) { atomic_store(&g_menu_scroll, 0); dm_haptics_android_tap(); } dm_overlay_redraw(); }
 static void menu_set_engine(int lossless) {
     if (lossless < 0 || (lossless && !vk_lsfg_available())) return;
     if (atomic_exchange(&g_set_lossless, lossless) != lossless) {
+        settings_save();
+        dm_haptics_android_tap();
+    }
+    dm_overlay_redraw();
+}
+static void menu_set_fg_choice(int item, int choice) {
+    if (choice < 0) return;
+    if (item == OVM_FG_ENGINE) { menu_set_engine(choice); return; }
+    int target = choice ? 90 : 60;
+    if (atomic_exchange(&g_set_fg_target, target) != target) {
         settings_save();
         dm_haptics_android_tap();
     }
@@ -658,6 +674,7 @@ static void menu_do(int item) {
     else if (item == OVM_FPS) { atomic_store(&g_set_fps, !atomic_load(&g_set_fps)); settings_save(); }
     else if (item == OVM_FRAMEGEN) { atomic_store(&g_set_framegen, !dm_framegen_enabled()); settings_save(); }
     else if (item == OVM_FG_ENGINE) { menu_set_engine(!dm_framegen_prefers_lossless()); return; }
+    else if (item == OVM_FG_TARGET) { menu_set_fg_choice(item, dm_framegen_target() == 60); return; }
     else if (item == OVM_MODE) { dm_set_opmode(dm_opmode() ? 0 : 1); settings_save(); }   // the game takes it when it goes on
     else if (item == OVM_PAD) { atomic_store(&g_set_labels, !pad_labels()); settings_save(); }   // at once (pad_labels)
     else if (item == OVM_TAB) { menu_tab(atomic_load(&g_menu_tab) + 1); return; }
@@ -672,29 +689,41 @@ static void menu_do(int item) {
 static void menu_touch(AInputEvent *e, float W, float H) {   // a press on a row does it when it lifts there; a tap outside the panel or on the menu button closes
     int act = AMotionEvent_getAction(e) & AMOTION_EVENT_ACTION_MASK, ai = AMotionEvent_getAction(e) >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT;
     int i = act == AMOTION_EVENT_ACTION_DOWN || act == AMOTION_EVENT_ACTION_UP ? 0 : ai, id = AMotionEvent_getPointerId(e, (size_t)i) & 31;
-    float x = AMotionEvent_getX(e, (size_t)i), y = AMotionEvent_getY(e, (size_t)i), p[4]; ov_menu_rect(W, H, p);
-    int c = ctl_at(x, y, W, H), row = c >= 0 && OV_CTLS[c].kind == OV_MENU ? -3 : ov_menu_row_at(x, y, W, H), tab = atomic_load(&g_menu_tab);
+    float x = AMotionEvent_getX(e, (size_t)i), y = AMotionEvent_getY(e, (size_t)i), p[4], vr[4]; ov_menu_rect(W, H, p); ov_menu_view_rowrect(p, 0, vr);
+    int tab = atomic_load(&g_menu_tab); float offset = ov_menu_scroll_rows(atomic_load(&g_menu_scroll));
+    int c = ctl_at(x, y, W, H), row = c >= 0 && OV_CTLS[c].kind == OV_MENU ? -3 : ov_menu_scroll_row_at(x, y, W, H, tab, offset);
+    float slot = ov_menu_scroll_slot(tab, offset, row);
     int item = row >= 0 ? ov_menu_item(tab, row) : -1;
     if (act == AMOTION_EVENT_ACTION_DOWN || act == AMOTION_EVENT_ACTION_POINTER_DOWN) {
         if (g_menu_ptr >= 0) return;
         g_menu_ptr = id; g_menu_row = row;
-        g_menu_engine = item == OVM_FG_ENGINE ? ov_menu_engine_at(x, p, row) : -1;
+        g_menu_down_y = y; g_menu_down_scroll = atomic_load(&g_menu_scroll); g_menu_scrolled = 0;
+        g_menu_can_scroll = row > 0 && row < OVM_ROWS - 1 && item != OVM_OPACITY;
+        g_menu_choice = ov_menu_fg_choice(item) ? ov_menu_fg_choice_at(x, p, slot) : -1;
         if (item == OVM_TAB) menu_tab(ov_menu_tab_at(x, p));   // a tab opens as the finger touches it
-        else if (item == OVM_OPACITY) menu_opacity(ov_menu_track_value(x, p, row));
+        else if (item == OVM_OPACITY) menu_opacity(ov_menu_track_value(x, p, slot));
         if (row >= 0) { atomic_store(&g_menu_hi, item >= 0 ? row : -1); dm_overlay_redraw(); }
     } else if (act == AMOTION_EVENT_ACTION_MOVE && g_menu_ptr >= 0 && g_menu_row >= 0) {   // the slider follows the finger; another row's highlight follows it off the row and back
         for (size_t k = 0; k < AMotionEvent_getPointerCount(e); k++) if ((AMotionEvent_getPointerId(e, k) & 31) == g_menu_ptr) {
             float kx = AMotionEvent_getX(e, k), ky = AMotionEvent_getY(e, k);
-            if (ov_menu_item(tab, g_menu_row) == OVM_OPACITY) { menu_opacity(ov_menu_track_value(kx, p, g_menu_row)); continue; }
-            int r = ov_menu_row_at(kx, ky, W, H), hi = r == g_menu_row && ov_menu_item(tab, r) >= 0 ? r : -1;
+            if (ov_menu_item(tab, g_menu_row) == OVM_OPACITY) { menu_opacity(ov_menu_track_value(kx, p, ov_menu_scroll_slot(tab, offset, g_menu_row))); continue; }
+            if (g_menu_can_scroll && (g_menu_scrolled || fabsf(ky - g_menu_down_y) > vr[3] * 0.18f)) {
+                if (!g_menu_scrolled) g_menu_down_y -= copysignf(vr[3] * 0.18f, g_menu_down_y - ky);   // no jump when the gesture first clears touch slop
+                int value = ov_menu_scroll_drag(tab, g_menu_down_scroll, (g_menu_down_y - ky) / vr[3]);
+                g_menu_scrolled = 1; int hi = atomic_exchange(&g_menu_hi, -1), was = atomic_exchange(&g_menu_scroll, value);
+                if (was != value || hi >= 0) dm_overlay_redraw();
+                continue;
+            }
+            int r = ov_menu_scroll_row_at(kx, ky, W, H, tab, offset), hi = r == g_menu_row && ov_menu_item(tab, r) >= 0 ? r : -1;
             if (atomic_exchange(&g_menu_hi, hi) != hi) dm_overlay_redraw();
         }
     } else if ((act == AMOTION_EVENT_ACTION_UP || act == AMOTION_EVENT_ACTION_POINTER_UP) && id == g_menu_ptr) {
         int down = g_menu_row; g_menu_ptr = -1; atomic_store(&g_menu_hi, -1);
+        if (g_menu_scrolled) { atomic_store(&g_menu_scroll, ov_menu_scroll_drag(tab, g_menu_down_scroll, (g_menu_down_y - y) / vr[3])); dm_overlay_redraw(); return; }   // no snapping or activation on release
         if (down >= 0 && ov_menu_item(tab, down) == OVM_OPACITY) { settings_save(); dm_overlay_redraw(); }
-        else if (row == down && item == OVM_FG_ENGINE) {
-            int engine = ov_menu_engine_at(x, p, row);
-            if (engine == g_menu_engine) menu_set_engine(engine);
+        else if (row == down && ov_menu_fg_choice(item)) {
+            int choice = ov_menu_fg_choice_at(x, p, slot);
+            if (choice == g_menu_choice) menu_set_fg_choice(item, choice);
             dm_overlay_redraw();
         }
         else if (row == down && item >= 0 && item != OVM_TAB) menu_do(item);
@@ -709,9 +738,9 @@ static void menu_key(uint64_t bit) {   // a controller key pressed while the men
     int hi = atomic_load(&g_menu_hi), tab = atomic_load(&g_menu_tab), item = hi >= 0 ? ov_menu_item(tab, hi) : -1;
     if (bit == DM_BTN_UP || bit == DM_BTN_DOWN) {
         for (int k = 0; k < OVM_ROWS; k++) { hi = hi < 0 ? (bit == DM_BTN_UP ? OVM_ROWS - 1 : 1) : (hi + (bit == DM_BTN_UP ? OVM_ROWS - 1 : 1)) % OVM_ROWS; if (ov_menu_item(tab, hi) >= 0) break; }
-        atomic_store(&g_menu_hi, hi); dm_overlay_redraw();
+        atomic_store(&g_menu_hi, hi); atomic_store(&g_menu_scroll, (int)lroundf(ov_menu_scroll_reveal(tab, ov_menu_scroll_rows(atomic_load(&g_menu_scroll)), hi) * OVM_SCROLL_UNITS)); dm_overlay_redraw();
     } else if ((bit == DM_BTN_LEFT || bit == DM_BTN_RIGHT) && item == OVM_OPACITY) { menu_opacity(atomic_load(&g_set_opacity) + (bit == DM_BTN_LEFT ? -5 : 5)); settings_save(); }
-    else if ((bit == DM_BTN_LEFT || bit == DM_BTN_RIGHT) && item == OVM_FG_ENGINE) menu_set_engine(bit == DM_BTN_RIGHT);
+    else if ((bit == DM_BTN_LEFT || bit == DM_BTN_RIGHT) && ov_menu_fg_choice(item)) menu_set_fg_choice(item, bit == DM_BTN_RIGHT);
     else if ((bit == DM_BTN_LEFT || bit == DM_BTN_RIGHT) && item == OVM_TAB) menu_tab(tab + (bit == DM_BTN_LEFT ? -1 : 1));
     else if (bit == DM_BTN_L || bit == DM_BTN_ZL || bit == DM_BTN_R || bit == DM_BTN_ZR) {
         menu_tab(tab + (bit == DM_BTN_L || bit == DM_BTN_ZL ? -1 : 1));
@@ -1218,7 +1247,9 @@ static void shake_sensor(int on) {
     if (on) ASensorEventQueue_registerSensor(g_sq, g_accel, g_gyro ? 5000 : 16667, 0); else ASensorEventQueue_disableSensor(g_sq, g_accel);
     if (g_gyro) { if (on) ASensorEventQueue_registerSensor(g_sq, g_gyro, 5000, 0); else ASensorEventQueue_disableSensor(g_sq, g_gyro); }
 }
-static JNIEnv *g_ienv; static jobject g_display; static jmethodID g_mRotation;   // the input thread's JNI: Display.getRotation
+static JNIEnv *g_ienv; static jobject g_display; static jmethodID g_mRotation, g_mRefreshRate;   // the input thread's JNI: Display rotation and refresh
+static _Atomic uint64_t g_display_refresh_ns;
+uint64_t dm_display_refresh_ns(void) { return atomic_load(&g_display_refresh_ns); }
 static int g_rot;   // the display's rotation, Surface.ROTATION_0..270 = 0..3
 static void rotation_start(void) {
     JavaVM *vm = g_act ? g_act->vm : NULL; JNIEnv *E;
@@ -1229,11 +1260,16 @@ static void rotation_start(void) {
     jmethodID mDisp = cWm ? (*E)->GetMethodID(E, cWm, "getDefaultDisplay", "()Landroid/view/Display;") : NULL; if (jx(E) || !mDisp || !cD) return;
     jobject d = (*E)->CallObjectMethod(E, wm, mDisp); g_mRotation = (*E)->GetMethodID(E, cD, "getRotation", "()I"); if (jx(E) || !d || !g_mRotation) return;
     g_display = (*E)->NewGlobalRef(E, d); g_ienv = E;
+    g_mRefreshRate = (*E)->GetMethodID(E, cD, "getRefreshRate", "()F"); jx(E);
 }
 static void rotation_poll(int64_t now) {
     static int64_t next; static int first = 1;
     if (!g_display || now < next) return;
     next = now + 250000000;
+    if (g_mRefreshRate) {
+        float hz = (*g_ienv)->CallFloatMethod(g_ienv, g_display, g_mRefreshRate);
+        if (!jx(g_ienv) && hz >= 20 && hz <= 1000) atomic_store(&g_display_refresh_ns, (uint64_t)(1e9 / hz));
+    }
     int r = (*g_ienv)->CallIntMethod(g_ienv, g_display, g_mRotation); if (jx(g_ienv)) return;
     if ((r & 3) != g_rot || first) LOG("front end: display rotation %d degrees: motion axes follow it", (r & 3) * 90);
     g_rot = r & 3; first = 0;
@@ -1293,7 +1329,7 @@ static void shake_start(void) {
     const char *e = getenv("DM_SHAKE_G"), *mo = getenv("DM_MOTION");
     if (!(mo && !atoi(mo))) {
         g_gyro = ASensorManager_getDefaultSensor(m, ASENSOR_TYPE_GYROSCOPE);
-        if (g_gyro) { rotation_start(); LOG("front end: the device's gyroscope (%s) moves the controller's six-axis sensor", ASensor_getName(g_gyro)); }
+        if (g_gyro) LOG("front end: the device's gyroscope (%s) moves the controller's six-axis sensor", ASensor_getName(g_gyro));
         else LOG("front end: no gyroscope: using accelerometer-only shake");
     } else LOG("front end: DM_MOTION=0: using accelerometer-only shake");
     if (g_gyro && motion_raw()) LOG("front end: DM_MOTION_RAW=1: raw device motion without automatic shake override");
@@ -1315,10 +1351,12 @@ static void *input_thread(void *a) {
         }
     }
     g_ilooper = ALooper_prepare(0);
+    rotation_start();   // frame generation also needs the display's refresh rate when motion sensors are disabled or absent
     shake_start();
     uint64_t prev = 0, latched = 0, sample = 0; int64_t since = 0;
     for (;;) {
-        ALooper_pollOnce(latched ? 10 : -1, NULL, NULL, NULL);
+        ALooper_pollOnce(latched ? 10 : 250, NULL, NULL, NULL);
+        rotation_poll(mono_ns());
         ext_touch_drain();
         if (!dm_external_active()) { prev = latched = 0; atomic_store(&g_ext_presses, 0); atomic_store(&g_ext_touch_enabled, 0); continue; }
         if (atomic_load(&g_ext_touch_enabled)) continue;
