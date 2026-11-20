@@ -1,3 +1,6 @@
+# macOS Finder metadata
+.DS_Store
+
 # Toolchains and device tools, downloaded locally (NDK, .NET, adb, validation layer); tools/ also holds the APK signing key
 /tools/
 # Scratch work and probe outputs (some are made from game files)
