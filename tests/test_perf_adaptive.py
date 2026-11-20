@@ -67,9 +67,9 @@ int main(int argc, char **argv) {
     assert(g_nwork == 0 && g_nshown == 0 && g_ok_frames == 0);
     dm_perf_framegen_rate(60);
     assert(dm_present_period_adapt(16666667) == 33333334 && g_game_period == 33333334);
-    dm_perf_framegen_rate(90);
-    assert(dm_present_period_adapt(16666667) == 22222223 && g_game_period == 22222223);
-    assert(dm_present_period_adapt(33333333) == 33333333);
+    assert(dm_present_period_adapt(50000000) == 50000000);
+    dm_perf_framegen_rate(48);
+    assert(dm_present_period_adapt(16666667) == 41666667 && g_game_period == 41666667);
     adapt_frame(15000000, 30000000000ll);
     assert(g_nwork == 0 && g_step == 1);
     dm_perf_framegen_rate(0);

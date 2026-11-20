@@ -410,7 +410,7 @@ static const char *const OVM_BUTTONS[OVM_N] = {[OVM_EDIT] = "Edit", [OVM_EXPORT]
 static const char *const OVM_MODES[2] = {"Handheld", "Docked"};
 static const char *const OVM_PADS[2] = {"Position", "Label"};   // a controller's face buttons (front_android.c pad_labels)
 static const char *const *menu_segments(int item) {
-    static const char *const targets[2] = {"60 FPS", "90 FPS"};
+    static const char *const targets[2] = {"60 FPS", "No limit"};
     if (item == OVM_MODE) return OVM_MODES;
     if (item == OVM_PAD) return OVM_PADS;
     if (item == OVM_FG_TARGET) return targets;
@@ -478,7 +478,7 @@ static void ov_menu_panel(const ov_canvas *cv, int st, int position) {
             float bw = cv_text_w(OVM_BUTTONS[it], is) + 2 * sh, b[4] = {x1 - bw, cy - rh * 0.30f, bw, rh * 0.60f}; cv_button(target, b, OVM_BUTTONS[it], 0, 0);
         } else if (menu_segments(it)) {
             const char *const *seg = menu_segments(it);
-            int bit = it == OVM_MODE ? 2 : it == OVM_PAD ? 28 : it == OVM_FG_TARGET ? OVM_FG_90_BIT : OVM_FG_LOSSLESS_BIT;
+            int bit = it == OVM_MODE ? 2 : it == OVM_PAD ? 28 : it == OVM_FG_TARGET ? OVM_FG_UNCAPPED_BIT : OVM_FG_LOSSLESS_BIT;
             int cur = st >> bit & 1;
             int disabled = it == OVM_FG_ENGINE && !(st >> OVM_FG_AVAILABLE_BIT & 1);
             static const uint8_t disabled_text[4] = {126, 126, 140, 255};

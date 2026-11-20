@@ -164,7 +164,7 @@ int main(void) {
         assert(ov_menu_item(1,goal_row)==OVM_FG_TARGET && ov_menu_scroll_rowrect(p,1,2,goal_row,r));
         x=r[0]+r[2]-r[3]*.15f-ov_menu_fg_choice_width(r)*.5f; y=r[1]+r[3]/2;
         touch(AMOTION_EVENT_ACTION_DOWN,x,y,W,H); touch(AMOTION_EVENT_ACTION_UP,x,y,W,H);
-        assert(atomic_load(&g_set_fg_target)==90 && actions==0);
+        assert(atomic_load(&g_set_fg_target)==0 && actions==0);
         atomic_store(&g_menu_hi,goal_row); menu_key(DM_BTN_LEFT);
         assert(atomic_load(&g_set_fg_target)==60);
         ov_menu_view_rowrect(p,3,r); x=r[0]+r[2]*.2f; y=r[1]+r[3]/2;

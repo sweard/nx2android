@@ -91,16 +91,14 @@ int main(void) {
     assert(fabs(window_vote - 1.0/120) < 1e-9);  // request room for 60 -> 120 too
     goal = 60; platform_refresh = 16666667; run_frames();
     assert(usable_rate == 60 && captures == 4 && captures == followups);
-    goal = 90; run_frames();
-    assert(usable_rate == 60 && captures == 4);
-    assert(fabs(window_vote - 1.0/90) < 1e-9);  // keep asking even on a 60 Hz fallback
-    platform_refresh = 11111111; captures = followups = 0;
-    for (int i = 1; i <= 8; ++i) present_game_frame(NULL, NULL, 1.0/45, i, 3000000000ull + i * 22222223ull, 0);
-    assert(usable_rate == 90 && captures == 4 && captures == followups);
-    platform_refresh = 8333333; g_fg_cadence = (framegen_cadence){0};
+    goal = 0; platform_refresh = 8333333; captures = followups = 0;
+    for (int i = 1; i <= 8; ++i) present_game_frame(NULL, NULL, 1.0/60, i, 3000000000ull + i * 16666667ull, 0);
+    assert(usable_rate == 0 && captures == 4 && captures == followups);
+    assert(fabs(window_vote - 1.0/120) < 1e-9);  // no cap: 60 -> 120 when the display permits it
+    goal = 60;
     captures = followups = histories = 0;
     uint32_t patched_step[2] = {0}; dm_fps_state = (uint8_t *)patched_step;  // a game with its own timing
-    for (int i = 1; i <= 12; ++i) present_game_frame(NULL, NULL, 1.0/60, i, 4000000000ull + i * 16666667ull, 0);
+    for (int i = 1; i <= 12; ++i) present_game_frame(NULL, NULL, 1.0/40, i, 4000000000ull + i * 25000000ull, 0);
     assert(usable_rate == 0 && captures == 4 && followups == 4 && histories == 4);
     dm_fps_state = NULL;
     fail_setup = 1; goal = 60; platform_refresh = 16666667;
@@ -136,8 +134,9 @@ int main(void) {
 int main(void) {
     const uint64_t refresh = 16666667;
     assert(framegen_output_rate(60, refresh) == 60);
-    assert(framegen_output_rate(90, 16588000) == 60);
-    assert(framegen_output_rate(90, 11111111) == 90);
+    assert(framegen_output_rate(60, 11111111) == 60);
+    assert(framegen_output_rate(60, 20833333) == 48);
+    assert(framegen_output_rate(0, 11111111) == 0);
     framegen_cadence budget = {.interval_ns = 25000000};
     assert(framegen_pair_budget(&budget, 60) == 0 && framegen_pair_budget(&budget, 60) == 1);
     framegen_cadence cadence = {0};

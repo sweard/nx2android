@@ -189,7 +189,7 @@ static inline int ov_menu_item(int tab, int row) {
 #define OVM_FRAMEGEN_BIT 29   // frame generation is enabled
 #define OVM_FG_AVAILABLE_BIT 30
 #define OVM_FG_LOSSLESS_BIT 19
-#define OVM_FG_90_BIT 27
+#define OVM_FG_UNCAPPED_BIT 27
 #define OVT_ST 0x10000   // the mode bits of dm_menu_state, one each: OVT_ST the text entry, OVE_ST the layout editor, OVS_ST the save picker (tests/test_menu_bits.py)
 int dm_menu_state(void);
 enum { OVX_IDLE, OVX_BUSY, OVX_DONE, OVX_NOSAVE, OVX_FAILED };   // Export save: the button; copying; the export's name; the game has not saved yet; failed

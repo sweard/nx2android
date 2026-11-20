@@ -98,7 +98,7 @@ static void settings_load(void) {
         else if (sscanf(line, "fps=%d", &v) == 1) atomic_store(&g_set_fps, v != 0);
         else if (sscanf(line, "framegen=%d", &v) == 1) atomic_store(&g_set_framegen, v != 0);
         else if (sscanf(line, "framegen_engine=%d", &v) == 1) atomic_store(&g_set_lossless, v == 1);
-        else if (sscanf(line, "framegen_target=%d", &v) == 1) atomic_store(&g_set_fg_target, v == 90 ? 90 : 60);
+        else if (sscanf(line, "framegen_target=%d", &v) == 1) atomic_store(&g_set_fg_target, v == 0 || v == 90 ? 0 : 60);   // migrate the old 90 fps choice to no cap
         else if (sscanf(line, "docked=%d", &v) == 1) setenv("DM_OPMODE", v ? "1" : "0", 1);   // over env.txt's: the host reads it once, at its first query
         else if (sscanf(line, "opacity=%d", &v) == 1) atomic_store(&g_set_opacity, v < OV_OPACITY_MIN ? OV_OPACITY_MIN : v > OV_OPACITY_MAX ? OV_OPACITY_MAX : v);
         else if (sscanf(line, "grid=%d", &v) == 1) atomic_store(&g_set_grid, v != 0);
@@ -607,7 +607,7 @@ int dm_menu_state(void) {
            atomic_load(&g_menu_tab) << 8 | atomic_load(&g_set_opacity) << 9 | atomic_load(&g_sv_st) << 20 | (atomic_load(&g_sv_n) & 1) << 23 |
            (atomic_load(&g_menu_scroll) / OVM_SCROLL_UNITS) << OVM_SCROLL_SHIFT | pad_labels() << 28 |
            dm_framegen_enabled() << OVM_FRAMEGEN_BIT | lossless << OVM_FG_AVAILABLE_BIT |
-           (lossless && dm_framegen_prefers_lossless()) << OVM_FG_LOSSLESS_BIT | (dm_framegen_target() == 90) << OVM_FG_90_BIT;
+           (lossless && dm_framegen_prefers_lossless()) << OVM_FG_LOSSLESS_BIT | (dm_framegen_target() == 0) << OVM_FG_UNCAPPED_BIT;
 }
 int dm_overlay_fps(void) { return atomic_load(&g_set_fps) && !atomic_load(&g_menu); }   // gfx_vk_present.c draws the counter (not while the menu holds the game)
 static void menu_open(int hi) {
@@ -649,7 +649,7 @@ static void menu_set_engine(int lossless) {
 static void menu_set_fg_choice(int item, int choice) {
     if (choice < 0) return;
     if (item == OVM_FG_ENGINE) { menu_set_engine(choice); return; }
-    int target = choice ? 90 : 60;
+    int target = choice ? 0 : 60;
     if (atomic_exchange(&g_set_fg_target, target) != target) {
         settings_save();
         dm_haptics_android_tap();
