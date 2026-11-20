@@ -1,0 +1,49 @@
+nxnative/dm/android/java/org/nx2a/GameFiles.java
+  s_926c68cc5bacfb::t_852f4d7df757b5 1-98
+nxnative/dm/android/java/org/nx2a/ExternalActivity.java
+  s_926c68cc5bacfb::t_852f4d7df757b5 7,55-59,91
+docs/ARCHITECTURE.md
+  s_926c68cc5bacfb::t_852f4d7df757b5 373-379
+  s_926c68cc5bacfb::t_b8f3bcb6fd002a 186,380
+nxnative/dm/android/gfx_vk_lsfg.c
+  s_926c68cc5bacfb::t_852f4d7df757b5 188-192
+tests/test_game_files.py
+  s_926c68cc5bacfb::t_852f4d7df757b5 1-92
+tests/test_overlay_layout.py
+  s_926c68cc5bacfb::t_852f4d7df757b5 24-25,95,97-102
+nxnative/dm/android/gfx_vk_present.c
+  s_926c68cc5bacfb::t_852f4d7df757b5 407,409
+README.md
+  s_926c68cc5bacfb::t_852f4d7df757b5 75,79
+  s_926c68cc5bacfb::t_b8f3bcb6fd002a 77
+  s_926c68cc5bacfb::t_2aaed72d3b2ed4 78
+nxnative/dm/android/front_android.c
+  s_926c68cc5bacfb::t_852f4d7df757b5 11,54-56,58-72,693-703,719,1499
+  s_926c68cc5bacfb::t_78a9069c484caa 1500
+tests/test_menu_scroll.py
+  s_926c68cc5bacfb::t_852f4d7df757b5 38,102,134,136,162-164,166,172,174,187-188
+nxnative/dm/android/gfx_vk_lsfg.h
+  s_926c68cc5bacfb::t_852f4d7df757b5 2-3
+nxnative/dm/android/overlay_layout.h
+  s_926c68cc5bacfb::t_852f4d7df757b5 165,169,171-172,185,188-189
+nxnative/dm/android/java/org/nx2a/GameActivity.java
+  s_926c68cc5bacfb::t_852f4d7df757b5 4,7,10-15,28
+tests/test_overlay_visibility.py
+  s_926c68cc5bacfb::t_852f4d7df757b5 50,67-68,427-429
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e4ecc9a08294ce767df3231475816f518d94928f",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
