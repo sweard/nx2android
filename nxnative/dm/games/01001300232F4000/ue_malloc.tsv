@@ -2,5 +2,7 @@
 # Each row runs only on its main build. layout: UE5, UE4_27, UE5_6 (the vtable slots, hle_uemalloc.c k_lay); obj: the FMallocBinned object (main + obj, 0 = made by
 # GCreateMalloc, given at the gate); vtable: main + vtable; cut: the cut constructor call (a nop after the rewrite, its patches.py).
 #	build	what	layout	obj	vtable	cut
+# Chinese 1.0.4: nninitStartup's constructor call at 0x12e40 receives main+0x68022c8 (adrp/add at 0x12e38/0x12e3c); the constructor installs main+0x5b06f38 at 0x9f4b4..0x9f4c4.
+c7c4e3fe091eb9a0adc4df5cbe0c9da9	Octopath Traveler 0 1.0.4 (Chinese)	UE5	0x68022c8	0x5b06f38	0x12e40
 # Octopath Traveler 0 1.0.5 (Chinese release): the same game as the row above, its own main build with the engine's data 0x3000 bytes higher: the FMallocBinned3 object (main+0x68052c8, bss), its vtable (main+0x5b09f38, 26 slots), the cut constructor call (main+0x12e40, a nop after the rewrite)
 e3e401c28d9fd3b1f9e033bb7bb31d42	Octopath Traveler 0 1.0.5 (Chinese)	UE5	0x68052c8	0x5b09f38	0x12e40

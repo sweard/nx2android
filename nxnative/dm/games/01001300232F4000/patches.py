@@ -1,6 +1,11 @@
 # OCTOPATH TRAVELER 0, Chinese release (01001300232F4000): the rewriter's patches of this game's own builds. dm/tools/patch_nso.py loads every profile's patches.py and applies those of a module's NSO build ID;
 # CUTS, OBS and FRAME_STEP as described there ("Registered patches"). Patches of Nintendo SDK module builds are in dm/tools/sdk_patches.py
 CUTS = {
+  # Chinese 1.0.4 (v262144): main+0x12e38/0x12e3c forms the allocator object at 0x68022c8; the call at 0x12e40 is bl 0x9f480.
+  # Its constructor writes the UE5 vtable at 0x5b06f38 (adrp/add at 0x9f4b4/0x9f4b8), matching the host allocator row in ue_malloc.tsv.
+  'c7c4e3fe091eb9a0adc4df5cbe0c9da9': [
+    (0x12e40, '90310294', '1f2003d5', 'nninitStartup: bl 0x9f480 (FMallocBinned3 constructor, 37 GB of address space) → nop; the host allocator is in the object already (hle_uemalloc.c)'),
+  ],
   # Octopath Traveler 0 1.0.5 (Chinese release, v327680) main: Unreal's nninitStartup (main+0x12a50) constructs the engine allocator, an FMallocBinned3, in place at main+0x68052c8 (main+0x12e40 → constructor
   # main+0x9f480). Its constructor reserves 37 GB of address space (74 pools of 512 MB, pool index = offset >> 29), which only the Mac can give: an iPhone has about 5 GB without the
   # extended virtual addressing entitlement, and the pools are too uneven to shrink (at character creation the largest holds 68 MB, the 74 together 732 MB). The constructor is not called;
