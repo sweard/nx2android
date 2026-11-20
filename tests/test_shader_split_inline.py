@@ -1,4 +1,4 @@
-"""Synthetic embedded and archived Media.Vision shaders."""
+"""Synthetic inline Unreal and Media.Vision shaders."""
 import importlib.util
 import os
 from pathlib import Path
@@ -30,6 +30,19 @@ class InlineShaders(unittest.TestCase):
         struct.pack_into('<I', control, 0x20, len(control))
         struct.pack_into('<I', control, 0x704, len(code))
         return bytes(control), bytes(code)
+
+    def test_unreal_inline_lz4_and_stored(self):
+        control, code = self.sections('ps')
+        shader = b'LSLGSP\0\0' + struct.pack('<I', len(code)) + code + struct.pack('<I', len(control)) + control
+        packed = lz4.block.compress(shader, store_size=False)
+        prefix = packed.index(b'LSLG')
+        self.assertIn(prefix, (1, 2))
+        blob = b'other data'
+        for body, frequency in ((packed, 3), (shader, 3), (packed, 0)):
+            blob += struct.pack('<I', len(body)) + body + struct.pack('<IB', len(shader), frequency)
+        found = []
+        self.split.ue_inline_lz4_shaders(blob, 'material', found)
+        self.assertEqual([(stage, ctl, gpu) for _, stage, ctl, gpu in found], [('ps', control, code)] * 2)
 
     def test_nx_shaders_embedded_in_main(self):
         blob = bytearray(b'NXFS' + bytes(0x40))

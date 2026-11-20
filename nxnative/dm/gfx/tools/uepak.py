@@ -429,8 +429,7 @@ def paks(romfs):
     return sorted(os.path.join(dp, f) for dp, _, fs in os.walk(romfs) for f in fs if f.endswith('.pak'))
 
 def unreal_paks(romfs, legacy=None):
-    """The paks under the RomFS that Unreal wrote (its magic in the footer; legacy None = any version, True = the legacy versions, False = the others): with version 11 the NSP script decodes
-    the shader code archives (decode_ue_shaders); legacy paks keep the shaders inline in the cooked packages, which shader_split.py reads through the game's decoder (ue_legacy_jobs)"""
+    """The paks with an Unreal footer: legacy None = any version, True = the legacy versions, False = the others."""
     out = []
     for p in paks(romfs):
         try:
@@ -438,6 +437,22 @@ def unreal_paks(romfs, legacy=None):
         except (OSError, ValueError, struct.error): continue   # shorter than a footer, or no Unreal pak
         if legacy is None or (ver in LEGACY) == legacy: out.append(p)
     return out
+
+INLINE_CACHE = 'Engine/GlobalShaderCache-SF_GLSL_SWITCH.bin'
+
+def inline_lz4_pak(path):
+    """Octopath Traveler II uses version 11 paks with Zlib entries and inline LZ4 shaders."""
+    with open(path, 'rb') as f:
+        enc, _, _, methods, ver = footer(f)
+    if ver != 11 or enc or set(methods) - {'', *ZLIB}: return False
+    pak = Pak(path)
+    try:
+        return INLINE_CACHE in pak.files and not any(name.endswith('.ushaderbytecode') for name in pak.files)
+    finally:
+        pak.f.close()
+
+def shader_archive_paks(romfs):
+    return [path for path in unreal_paks(romfs, legacy=False) if not inline_lz4_pak(path)]
 
 def legacy_decoder_paks(romfs):
     """The legacy paks under the RomFS whose files need the game's own decoder: a compression method other than zlib or gzip (DRAGON QUEST XI S's LZ5), or an encrypted index, which
@@ -465,7 +480,7 @@ def job(romfs, main_nso, work, decode=None):
             name = io_library_name(t, i, names) + '.ushaderbytecode'; b = io_archive(t, i, decode)
             open(os.path.join(work, 'archives', name), 'wb').write(b)
             listing.append(dict(name=name, pak=os.path.relpath(tp, romfs), path=f'chunk {t.ids[i].hex()}', shaders=len(archive(b)['shaders']), compressed=0, compression='IoStore, decoded'))
-    for pak in unreal_paks(romfs, legacy=False):
+    for pak in shader_archive_paks(romfs):
         with open(pak, 'rb') as f: enc = footer(f)[0]
         if enc and key is None:
             key = find_key(img, lo, hi, pak)
