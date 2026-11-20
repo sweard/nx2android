@@ -1,0 +1,25 @@
+nxnative/dm/android/gfx_vk_present.c
+  s_926c68cc5bacfb::t_d7819dde76e60f 1340-1342
+  s_926c68cc5bacfb::t_7d220b44758e36 28,33-34,36,53-61,1269-1271,1280,1453-1454,1519
+  s_926c68cc5bacfb::t_334a5b0fbb4c76 943,978-990,1318-1319
+tests/test_vk_present_timing.py
+  s_926c68cc5bacfb::t_bc0ffffefe9d35 336
+  s_926c68cc5bacfb::t_d7819dde76e60f 34,59-60,89
+  s_926c68cc5bacfb::t_a45ee4942d2bb6 87,90-91,151-168,286,289,295,307,310,316,322,326,332
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "acb2f3a0ffbe60d9cc9e62e40d318b7a9d8ddfe4",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
