@@ -1,0 +1,41 @@
+tests/test_external_display.py
+  s_926c68cc5bacfb::t_852f4d7df757b5 46
+porter/cli.py
+  s_926c68cc5bacfb::t_852f4d7df757b5 26
+docs/ARCHITECTURE.md
+  s_926c68cc5bacfb::t_852f4d7df757b5 24
+  s_43884b19f27400::t_bc168c18376c80 341
+docs/DEVELOPMENT_GUIDE.md
+  s_926c68cc5bacfb::t_852f4d7df757b5 8-9,343,345,357
+README.md
+  s_926c68cc5bacfb::t_852f4d7df757b5 67
+  s_43884b19f27400::t_d03a7fd2ae15c7 87
+tests/test_native_keyboard.py
+  s_926c68cc5bacfb::t_852f4d7df757b5 1,18,20,34
+porter/pipeline.py
+  s_926c68cc5bacfb::t_852f4d7df757b5 73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6a2f3f501e9b6e61e232a8fa928f86c8db8f487a",
+  "prompts": {},
+  "sessions": {
+    "s_43884b19f27400": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1d39e-e0b2-71e1-82c9-c6efaf4f6929",
+        "model": "unknown"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    },
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
