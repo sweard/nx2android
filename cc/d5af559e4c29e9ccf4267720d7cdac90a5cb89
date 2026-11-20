@@ -1,0 +1,33 @@
+nxnative/dm/games/01001300232F4000/fps_locks.tsv
+  s_926c68cc5bacfb::t_fc1604a960d230 5-7
+nxnative/dm/games/01001300232F4000/game.tsv
+  s_926c68cc5bacfb::t_fc1604a960d230 19-20
+tests/test_jump_adr_offsets.py
+  s_926c68cc5bacfb::t_c97a1f73d47bc2 1-51
+nxnative/dm/games/01001300232F4000/ue_malloc.tsv
+  s_926c68cc5bacfb::t_fc1604a960d230 5-6
+nxnative/dm/tools/patch_nso.py
+  s_926c68cc5bacfb::t_5ce59701b29cba 649-650,664-665
+tests/test_profile_guess_memory.py
+  s_926c68cc5bacfb::t_77f979d0a8536c 1-36
+nxnative/dm/games/profile_guess.py
+  s_926c68cc5bacfb::t_c23b110462a570 170-171
+nxnative/dm/games/01001300232F4000/patches.py
+  s_926c68cc5bacfb::t_fc1604a960d230 4-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ccd5af559e4c29e9ccf4267720d7cdac90a5cb89",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
