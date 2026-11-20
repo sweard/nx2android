@@ -1,0 +1,35 @@
+nxnative/dm/gfx/tools/shader_split.py
+  s_926c68cc5bacfb::t_02e7f9483a9e5d 1673
+  s_926c68cc5bacfb::t_da0c72cd88593d 1670-1672
+  s_db1760f56a9c1f::t_8a58a151d70108 1614-1669,1681-1683,1796-1800
+nxnative/dm/gfx/tools/mvgl.py
+  s_926c68cc5bacfb::t_02e7f9483a9e5d 12,69-104
+  s_926c68cc5bacfb::t_dd7dca8eda6138 105-106
+tests/test_shader_split_inline.py
+  s_926c68cc5bacfb::t_2ceef4b53c7ddb 2-25,27-32,48-82
+  s_926c68cc5bacfb::t_b9e72ee45969d3 1,26,33-47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3f9685e074980c1de9d1721dd28f725f7edf89c5",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    },
+    "s_db1760f56a9c1f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "unknown"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
