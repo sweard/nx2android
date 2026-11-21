@@ -4,6 +4,9 @@ import android.app.AlertDialog;
 import android.app.NativeActivity;
 import android.content.Intent;
 import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.Window;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -42,23 +45,32 @@ public class GameActivity extends NativeActivity {
         label.setText(message);
         row.addView(label);
         checkpointProgress = new AlertDialog.Builder(this).setView(row).setCancelable(false).show();
+        // Override the theme's minimum dialog width, preserving its background insets.
+        Window window = checkpointProgress.getWindow();
+        View decor = window.getDecorView();
+        int insets = decor.getPaddingLeft() + decor.getPaddingRight();
+        int available = Math.max(1, getWindow().getDecorView().getWidth() - 4 * unit - insets);
+        row.measure(View.MeasureSpec.makeMeasureSpec(available, View.MeasureSpec.AT_MOST),
+                View.MeasureSpec.UNSPECIFIED);
+        window.setLayout(row.getMeasuredWidth() + insets, ViewGroup.LayoutParams.WRAP_CONTENT);
     }
 
     private void checkpointStatus(int state) {
         runOnUiThread(() -> {
             if (isFinishing() || isDestroyed()) return;
             if (state == SAVING) {
-                showCheckpointProgress("正在保存检查点…");
+                showCheckpointProgress("Saving checkpoint…");
                 return;
             }
             hideCheckpointProgress();
             if (state == RESTORED) return;
             if (state == RESTORE_FAILED) {
-                new AlertDialog.Builder(this).setTitle("检查点恢复失败")
-                        .setMessage("请重新打开游戏，选择「正常启动」或重试恢复。")
-                        .setCancelable(false).setPositiveButton("关闭游戏", (dialog, which) -> finish()).show();
+                new AlertDialog.Builder(this).setTitle("Couldn’t restore checkpoint")
+                        .setMessage("Reopen the game and choose Start normally or try restoring the checkpoint again.")
+                        .setCancelable(false).setPositiveButton("Close game", (dialog, which) -> finish()).show();
             } else if (state == SAVED || state == SAVE_FAILED || state == NO_SAVE) {
-                String message = state == SAVED ? "检查点已保存" : state == NO_SAVE ? "还没有可保存的游戏存档" : "检查点保存失败";
+                String message = state == SAVED ? "Checkpoint saved"
+                        : state == NO_SAVE ? "No in-game save yet" : "Couldn’t save checkpoint";
                 Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
             }
         });
@@ -66,13 +78,13 @@ public class GameActivity extends NativeActivity {
 
     private void offerRuntimeCheckpoint() {
         getWindow().getDecorView().post(() -> new AlertDialog.Builder(this)
-                .setTitle("恢复游戏检查点？")
-                .setMessage("回到手动保存检查点时的位置。此测试版会在独立的存档副本中继续游戏。")
-                .setPositiveButton("恢复检查点", (dialog, which) -> {
-                    showCheckpointProgress("正在恢复检查点…");
+                .setTitle("Restore checkpoint?")
+                .setMessage("Resume where you saved the checkpoint. This test version uses a separate copy of your save data.")
+                .setPositiveButton("Restore checkpoint", (dialog, which) -> {
+                    showCheckpointProgress("Restoring checkpoint…");
                     chooseCheckpoint(true);
                 })
-                .setNegativeButton("正常启动", (dialog, which) -> chooseCheckpoint(false))
+                .setNegativeButton("Start normally", (dialog, which) -> chooseCheckpoint(false))
                 .setOnCancelListener(dialog -> chooseCheckpoint(false))
                 .show());
     }
