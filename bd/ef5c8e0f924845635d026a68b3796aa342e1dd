@@ -1,0 +1,20 @@
+nxnative/dm/android/java/org/nx2a/GameActivity.java
+  s_926c68cc5bacfb::t_7fdcbb20251891 7-9,48-55
+  s_926c68cc5bacfb::t_7c990265be500d 62,68-70,72-73,81-84,87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bdef5c8e0f924845635d026a68b3796aa342e1dd",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
