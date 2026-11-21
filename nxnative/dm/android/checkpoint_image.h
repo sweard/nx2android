@@ -18,3 +18,8 @@ int dm_checkpoint_bound_image(int fd, int restore, int id, const tex_t *texture)
 
 int dm_checkpoint_bindings_save(int fd);
 int dm_checkpoint_bindings_restore(int fd);
+
+// All resident storage, including images with no current descriptor. Restore
+// only into an empty renderer in a disposable fresh process. On failure the
+// coordinator must discard that process. Each restored image is read back.
+int dm_checkpoint_scene_images(int fd, int restore);

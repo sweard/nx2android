@@ -1,6 +1,9 @@
 // Bootstrap: after loading the modules, initialize the SDK runtime in the real order of nn::init::Start (sdk+0x2b0470) in the SDK, then enter nnMain.
 #include "dm.h"
 #include "front.h"
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+#include "../android/checkpoint_memory.h"
+#endif
 #include <stdatomic.h>
 #include <sys/resource.h>
 #include <sys/sysctl.h>
@@ -33,7 +36,13 @@ static void guest_main(void) {
     { void dm_guest_spawn_selftest(void); dm_guest_spawn_selftest(); }   // DM_GUEST_SPAWN_TEST self-test of host-created guest threads (hle_guestthread.c)
     { void dm_oodle_serve_maybe(int); dm_oodle_serve_maybe(1); }   // DM_OODLE_SERVE with a decoder that needs the game's malloc (LZ5, hle_oodle.c)
     { void dm_oodle_job_maybe(void); dm_oodle_job_maybe(); }   // DM_OODLE_JOB: decode a job file with the game's own Oodle and exit (hle_oodle.c, for the offline shader tools)
-    LOG(">>> nnMain"); ((fn0)req("nnMain"))();
+    LOG(">>> nnMain");
+    fn0 entry = (fn0)req("nnMain");
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+    void *root = dm_checkpoint_thread_root(1);
+    if (root) dm_checkpoint_enter((uintptr_t)entry, 0, 0, root);
+#endif
+    entry();
     LOG("nnMain returned");
 }
 

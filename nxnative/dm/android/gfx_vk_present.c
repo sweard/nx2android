@@ -1423,6 +1423,58 @@ static pthread_mutex_t g_pq_mu = PTHREAD_MUTEX_INITIALIZER; static pthread_cond_
 // While the game is held (the pause menu) no frame comes: dm_overlay_redraw presents the last one again with what the overlay now shows.
 static _Atomic int g_redraw;
 void dm_overlay_redraw(void) { atomic_store(&g_redraw, 1); pthread_mutex_lock(&g_pq_mu); pthread_cond_broadcast(&g_pq_cv); pthread_mutex_unlock(&g_pq_mu); }
+#ifdef DM_MANUAL_CHECKPOINT
+static int checkpoint_defer_redraw;  // g_pq_mu
+
+static void checkpoint_release_redraw(void) {
+    pthread_mutex_lock(&g_pq_mu);
+    checkpoint_defer_redraw = 0;
+    pthread_cond_broadcast(&g_pq_cv);
+    pthread_mutex_unlock(&g_pq_mu);
+}
+
+int dm_checkpoint_present_ticket(uint64_t *value, int restore) {
+    // The capture gate owns presentation. Restore runs before the first present.
+    if (g_pq_tail != g_pq_head || g_pq_done > g_presents) return -EBUSY;
+    if (restore) {
+        if (g_presents || g_pq_done) return -EBUSY;
+        g_presents = g_pq_done = *value;
+    } else *value = g_presents;
+    return 0;
+}
+int dm_checkpoint_present_begin(int report_busy) {
+    pthread_mutex_lock(&g_pq_mu);
+    if (g_pq_head != g_pq_tail) {
+        if (report_busy) VKLOG("[snapshot] presents in flight=%llu", (unsigned long long)(g_pq_head - g_pq_tail));
+        pthread_mutex_unlock(&g_pq_mu);
+        return -EBUSY;
+    }
+    checkpoint_defer_redraw = 1;
+    pthread_mutex_unlock(&g_pq_mu);
+
+    // One redraw may already have left the queue. Give it time to return
+    // the swapchain image, without admitting the next loading animation.
+    struct timespec deadline;
+    clock_gettime(CLOCK_REALTIME, &deadline);
+    deadline.tv_sec += 2;
+    int rc = pthread_mutex_timedlock(&g_present_mu, &deadline);
+    if (!rc) {
+        pthread_mutex_lock(&g_vk_queue_mu);
+        rc = !V.dev ? ENODEV : vkQueueWaitIdle(V.q) == VK_SUCCESS ? 0 : EIO;
+        pthread_mutex_unlock(&g_vk_queue_mu);
+        if (!rc) return 0;
+        pthread_mutex_unlock(&g_present_mu);
+    } else VKLOG("[snapshot] presenter did not release the current frame (%d)", rc);
+    checkpoint_release_redraw();
+    return -rc;
+}
+
+void dm_checkpoint_present_end(void) {
+    pthread_mutex_unlock(&g_present_mu);
+    checkpoint_release_redraw();
+}
+#endif
+
 static void *present_thread(void *arg) {
     (void)arg; pthread_setname_np(pthread_self(), "vk present");
     typeof(g_pq[0]) last = {0};
@@ -1441,6 +1493,10 @@ static void *present_thread(void *arg) {
             }
             if (pthread_cond_timedwait(&g_pq_cv, &g_pq_mu, &deadline) == ETIMEDOUT) break;
         }
+#ifdef DM_MANUAL_CHECKPOINT
+        while (checkpoint_defer_redraw && g_pq_tail == g_pq_head)
+            pthread_cond_wait(&g_pq_cv, &g_pq_mu);
+#endif
         int redraw = atomic_exchange(&g_redraw, 0);
         if (g_pq_tail == g_pq_head) {   // a redraw, no new frame
             pthread_mutex_unlock(&g_pq_mu);

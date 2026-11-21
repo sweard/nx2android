@@ -2,6 +2,7 @@
 // SVCs even if an event was signalled before a restored worker started.
 #include "dm.h"
 #include "checkpoint_wait.h"
+#include "checkpoint_memory.h"
 #include "checkpoint_wait_cpu.h"
 #include <signal.h>
 #include <stdatomic.h>
@@ -23,7 +24,7 @@ static void resume_gate(int sig, siginfo_t *si, void *u) {
     (void)sig; (void)si;
     if (dm_checkpoint_cpu_transfer(u, &state->cpu.cpu, 1)) _exit(74);
 }
-static uintptr_t cv_svc_site(const char *mods) {
+static uintptr_t sdk_leaf_site(const char *mods, const char *expected, unsigned arg) {
     char path[1024], line[256], kind[24];
     snprintf(path, sizeof path, "%s/sdk.gates.tsv", mods);
     FILE *fp = fopen(path, "r");
@@ -32,13 +33,13 @@ static uintptr_t cv_svc_site(const char *mods) {
     unsigned long ret, orig; unsigned svc;
     while (fgets(line, sizeof line, fp)) {
         if (sscanf(line, "%lx %23s %u %lx", &ret, kind, &svc, &orig) != 4 ||
-            strcmp(kind, "svc") || svc != 0x1c || orig + 8 > sdk->text_end) continue;
+            strcmp(kind, expected) || svc != arg || orig + 8 > sdk->text_end) continue;
         // A genuine SDK WaitProcessWideKeyAtomic leaf which returns at orig+4.
         if (*(uint32_t *)(sdk->base + orig + 4) == 0xd65f03c0) {
             fclose(fp); return (uintptr_t)sdk->base + orig;
         }
     }
-    die("SDK condition wait leaf not found");
+    die("SDK %s %u leaf not found", expected, arg);
 }
 
 static _Atomic unsigned done;
@@ -138,7 +139,7 @@ void svc_wait_checkpoint(uintptr_t heap, uintptr_t stack, const char *mods, int 
         puts("Original SDK WaitProcessWideKeyAtomic returned to its guest caller on the restored stack.");
         puts("Restored CV-to-mutex handoff, FIFO wait and event handle index 1 after an early signal.");
     } else {
-        state->cv_job[0] = cv_svc_site(mods);
+        state->cv_job[0] = sdk_leaf_site(mods, "svc", 0x1c);
         state->cv_job[1] = (uintptr_t)&state->lock;
         state->cv_job[2] = (uintptr_t)&state->key;
         state->cv_job[3] = state->workers[0];
@@ -165,5 +166,61 @@ void svc_wait_checkpoint(uintptr_t heap, uintptr_t stack, const char *mods, int 
             state->count != 3 || dm_checkpoint_wait_cpu_capture(state->workers[0], &state->cpu) ||
             state->cpu.cpu.pc != state->cv_job[0] + 4 || state->cpu.tls != state->cpu.owner || state->cpu.tlr != state->cpu.owner + 8192 ||
             dm_checkpoint_events_save(events_fd)) die("wait/event save");
+    }
+}
+
+
+// Run an SDK hardware-counter leaf on the checkpoint's main-stack region.
+// Only the saved guest continuation can finish this caller in the new PID.
+static struct {
+    uint64_t site, ticks;
+    uint32_t entries;
+    _Atomic uint32_t done;
+    dm_checkpoint_wait_cpu thread;
+} *clock_job;
+extern uintptr_t sdk_clock_entry;
+static void clock_signal(int sig, siginfo_t *info, void *uc) {
+    (void)sig; (void)info;
+    if (dm_checkpoint_cpu_transfer(uc, &clock_job->thread.cpu, 1)) _exit(76);
+}
+static void restore_clock(void *unused) {
+    (void)unused;
+    if (dm_checkpoint_clock_cpu_finish(&clock_job->thread)) die("clock thread attach");
+    raise(SIGUSR1);
+    die("clock transfer returned");
+}
+void svc_clock_checkpoint(uintptr_t heap, const char *mods, int restore) {
+    clock_job = (void *)(heap + 0xc000);
+    uintptr_t stack = dm_checkpoint_main_stack();
+    if (!stack) die("checkpoint main stack unavailable");
+    if (!restore) clock_job->site = sdk_leaf_site(mods, "cntpct", 0);
+    else {
+        struct sigaction sa = {.sa_flags = SA_SIGINFO | SA_ONSTACK, .sa_sigaction = clock_signal};
+        sigemptyset(&sa.sa_mask);
+        if (sigaction(SIGUSR1, &sa, NULL)) die("clock signal");
+    }
+    guest_clock_freeze_for(1, 1);
+    uintptr_t bootstrap = restore ? (uintptr_t)malloc(65536) : 0;
+    if (restore && !bootstrap) die("clock bootstrap stack");
+    uint64_t r[32] = {0, restore ? (uintptr_t)restore_clock : sdk_clock_entry,
+                      (uintptr_t)clock_job, restore ? bootstrap + 65536 : stack + DM_CHECKPOINT_MAIN_STACK_BYTES, 44, 0};
+    if (call(0x08, r) || (restore && r[1] != clock_job->thread.handle)) die("clock thread handle");
+    r[0] = r[1];
+    if (call(0x09, r)) die("clock thread start");
+    uint64_t until = now_ns() + 2000000000;
+    if (restore) {
+        guest_clock_freeze_for(1, 0);
+        while (!clock_job->done && now_ns() < until) usleep(100);
+        if (!clock_job->done || clock_job->entries != 1 || !clock_job->ticks) die("clock caller did not continue: done=%u entries=%u ticks=%llu", atomic_load(&clock_job->done), clock_job->entries, (unsigned long long)clock_job->ticks);
+        puts("SDK counter read resumed once on the restored 16 MiB main-stack region.");
+    } else {
+        unsigned count = 0;
+        do {
+            if (dm_checkpoint_clock_cpus(&clock_job->thread, 1, &count)) die("clock frame unavailable");
+            if (!count) usleep(100);
+        } while (!count && now_ns() < until);
+        if (count != 1 || clock_job->thread.cpu.pc != clock_job->site || clock_job->done ||
+            clock_job->entries != 1 || clock_job->thread.cpu.sp <= stack ||
+            clock_job->thread.cpu.sp > stack + DM_CHECKPOINT_MAIN_STACK_BYTES) die("incorrect clock continuation");
     }
 }

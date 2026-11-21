@@ -4,7 +4,7 @@ Only the private shell scratch directory created by this run is written on the
 device. The app and its saves are never opened for writing.
 """
 import argparse
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import shlex
 import subprocess
@@ -20,11 +20,11 @@ def link(args, exe):
     gen = args.build / 'gen' / args.title
     includes = [gen, DM / 'android', DM / 'android/compat/include', DM / 'host', DM / 'gfx/nvn',
                 DM / 'gfx/nvn/include', DM / 'gfx/tex', DM / 'third_party/vulkan-headers/include']
-    src = [HERE / name for name in ('svc_probe.c', 'sdk_worker.c', 'sdk_worker.S', 'svc_gpu.c', 'svc_wait.c', 'svc_image.c')]
+    src = [HERE / name for name in ('svc_probe.c', 'sdk_worker.c', 'sdk_worker.S', 'svc_gpu.c', 'svc_wait.c', 'svc_image.c', 'svc_scene.c')]
     objects = sorted((args.build / 'obj').glob('*.o'))
     if not objects or not (gen / 'game_profile.h').is_file():
         raise ValueError('Expected an Android host build directory for this title')
-    subprocess.run([args.cc, '-O2', '-ffixed-x18', '-Wall', '-Werror', '-Wno-format',
+    subprocess.run([args.cc, '-O2', '-ffixed-x18', '-DDM_MANUAL_CHECKPOINT', '-Wall', '-Werror', '-Wno-format',
                     *['-I' + str(p) for p in includes], *src, *objects,
                     '-Wl,--wrap=main', '-Wl,-z,max-page-size=16384', '-Wl,-z,nostart-stop-gc',
                     '-landroid', '-llog', '-lvulkan', '-laaudio', '-lnativewindow', '-lmediandk',
@@ -61,6 +61,15 @@ def verify(args, exe):
         for src, name in files:
             subprocess.run([*adb, 'push', str(src), path(name)], check=True, capture_output=True)
         shell('chmod', '700', path('probe'))
+        print(shell(path('probe'), 'pause-test').stdout.strip(), flush=True)
+        if args.scene_core:
+            data = PurePosixPath(args.mods).parent
+            res = shell('env', 'LD_LIBRARY_PATH=' + scratch, 'DM_ROOT=' + scratch,
+                        f'DM_ROMFS={data / "RomFS"}', f'DM_AOC_DIR={data / "aoc"}',
+                        'DM_VK_DRIVER=libvulkan_freedreno.so', path('probe'), 'replay-core',
+                        args.mods, args.scene_core, check=False)
+            if res.returncode: raise RuntimeError(f'Cold scene probe ({res.returncode}): {res.stderr[-2500:]}')
+            print(res.stdout.strip(), flush=True)
         if getattr(args, 'scene_image', None):
             section = bytearray(args.scene_image.read_bytes())
             if (len(section) < 124 or section[:8] != b'NX2AIM1\0' or
@@ -130,6 +139,7 @@ if __name__ == '__main__':
     parser.add_argument('--title', required=True)
     parser.add_argument('--mods', required=True, help='on-device path to the title’s rewritten modules')
     parser.add_argument('--driver', required=True, type=Path, help='Turnip shared library')
+    parser.add_argument('--scene-core', help='device directory from a completed manual game survey')
     parser.add_argument('--scene-image', type=Path, help='optional bound image captured by the gameplay survey')
     parser.add_argument('--adb', default='adb')
     parser.add_argument('--serial')

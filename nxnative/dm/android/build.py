@@ -23,7 +23,12 @@ ap.add_argument('--gfx', default='vk', choices=('vk', 'null'), help='graphics ba
 ap.add_argument('--release', action='store_true', help='a build to keep installed: no debug information, stripped, no DM_CTL')
 ap.add_argument('--manual-checkpoint', '--background-checkpoint', action='store_true', help='experimental manual checkpoints on GameActivity')
 ap.add_argument('--adrenotools', action='store_true', help='also libadrenotools.so and its hooks (third_party/libadrenotools), which the APK carries with a custom Vulkan driver')
+ap.add_argument('--field-checkpoint', action='store_true', help='Octopath Traveler II Vulkan field checkpoint prototype for GameActivity')
 a = ap.parse_args()
+if a.field_checkpoint:
+    if a.gfx != 'vk' or not a.lib:
+        ap.error('--field-checkpoint requires a Vulkan shared library (--lib)')
+    a.manual_checkpoint = True
 if not (a.exe or a.lib): a.exe = a.lib = True
 
 def host_dir(base, tool):
@@ -142,7 +147,13 @@ if a.exe:
     print(r.stderr.strip() if r.returncode else f'linked {out / "dmhost"}', file=sys.stderr if r.returncode else sys.stdout)
     if r.returncode: sys.exit(1)
 if a.lib:
-    r = link(LDFLAGS + ['-shared', '-Wl,-soname,libdmhost.so', '-o', str(out / 'libdmhost.so')] + [str(o) for o in objs + vobjs] + LIBS, 'libdmhost')
+    field = []
+    if a.field_checkpoint:
+        source = DM.parents[1] / 'devtools/runtime_checkpoint'
+        field = CFLAGS + INC + [str(source / name) for name in ('game_survey.c', 'svc_scene.c')]
+        field += ['-Wl,--wrap=' + name for name in ('load_modules', 'dm_checkpoint_init',
+                  'dm_checkpoint_state', 'dm_checkpoint_request', 'vk_tex_sweep')]
+    r = link(field + LDFLAGS + ['-shared', '-Wl,-soname,libdmhost.so', '-o', str(out / 'libdmhost.so')] + [str(o) for o in objs + vobjs] + LIBS, 'libdmhost')
     print(r.stderr.strip() if r.returncode else f'linked {out / "libdmhost.so"}', file=sys.stderr if r.returncode else sys.stdout)
     if r.returncode: sys.exit(1)
     if a.release:   # the static symbol table goes too (the dynamic one stays: ANativeActivity_onCreate)

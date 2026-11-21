@@ -2,6 +2,9 @@
 // The host has no nvdrv: the SDK aborts when the decoder thread opens the device. Extractor::SetDataSource returns 0x1000 (the same code the SDK returns when it has no implementation object); Engage's Unity demuxes WebM itself and does not use it.
 // The host takes over Decoder (below; VP8 / VP9 are decoded with libvpx, H.264 with VideoToolbox in hle_movie_avc.c, Vorbis audio with stb_vorbis): Engage's movies are 103 VP9 WebM files under RomFS/Data/StreamingAssets/Movie (2.7 GB, no audio track), and the game does not go on until the opening movie S01F has played.
 #include "hle.h"
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+#include "../android/checkpoint_pause.h"
+#endif
 #include <arm_neon.h>
 #include <mach/mach.h>
 #include <pthread.h>
@@ -170,8 +173,16 @@ static void md_defer_body(void *arg) {
             if (d->started) md_event(d, e);   // not after Stop: the game takes its events apart right after Stop (a Stop within 2 ms of a Flush let the deferred signal hit events being torn down)
             continue;
         }
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+        dm_checkpoint_helper_idle(1);
+#endif
         if (!next) pthread_cond_wait(&g_dfcv, &g_dfmu);
         else { uint64_t w = next - now; struct timespec ts = { (time_t)(w / 1000000000u), (long)(w % 1000000000u) }; pthread_cond_timedwait_relative_np(&g_dfcv, &g_dfmu, &ts); }
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+        pthread_mutex_unlock(&g_dfmu);
+        dm_checkpoint_helper_idle(0);
+        pthread_mutex_lock(&g_dfmu);
+#endif
     }
 }
 // Metroid Dread 2.1.0's movie player: the main thread posts "link / unlink holders" requests into the dispatcher thread's request ring (main+0x222cc8: ring +0x368 write pointer, +0x370 pending count;

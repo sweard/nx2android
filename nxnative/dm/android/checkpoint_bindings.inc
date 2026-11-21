@@ -49,7 +49,12 @@ int dm_checkpoint_bindings_save(int fd) {
         if (binding->old) memcpy(b.version + 1, binding->old, TREG_OLD * sizeof(treg_ver));
         for (unsigned k = 0; k <= TREG_OLD; ++k) {
             if (!b.version[k].ok) memset(&b.version[k], 0, sizeof(treg_ver));
-            else if (!checkpoint_binding_valid(&b.version[k])) { rc = -ENOTSUP; break; }
+            else if (!checkpoint_binding_valid(&b.version[k])) {
+                const tex_t *t = &b.version[k].t;
+                LOG("[snapshot] binding %d version %u: unsupported texture %llu, pool=%p memory=%p bytes=%llu",
+                    i, k, (unsigned long long)t->serial, (void *)t->pool, (void *)t->mem, (unsigned long long)t->L.size);
+                rc = -ENOTSUP; break;
+            }
         }
         if (!rc) rc = checkpoint_io(&io, &b, sizeof b);
     }

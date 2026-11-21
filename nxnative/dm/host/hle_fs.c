@@ -691,11 +691,33 @@ HLE_FORCE("_ZN2nn2fs6CommitEPKcRKNS0_12CommitOptionE", "fsp-srv; same as Commit 
 HLE_FORCE("_ZN2nn2fs14CommitSaveDataEPKc", "fsp-srv; same as Commit (SDK 11's old name)", Result, h_fs_CommitSaveData, const char *name) { return h_fs_Commit(name); }
 HLE_FORCE("_ZN2nn2fs7UnmountEPKc", "fsp-srv; the mount table is permanent, unmounting is a no-op", void, h_fs_Unmount, const char *name) { (void)name; }
 
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+// A cold process has its own bionic descriptors. Preserve the integers the
+// game already has, without closing an unrelated descriptor at that number.
+static _Atomic int restored_fd[65536];  // guest ID -> real fd + 1
+static uint64_t fs_fd(uint64_t guest) {
+    int fd = guest < 65536 ? atomic_load(&restored_fd[guest]) : 0;
+    return fd ? (uint64_t)(fd - 1) : guest;
+}
+static int avoid_restored_id(int fd) {
+    while (fd >= 0 && fd < 65536 && atomic_load(&restored_fd[fd])) {
+        int next = fcntl(fd, F_DUPFD_CLOEXEC, fd + 1), saved = errno;
+        close(fd); fd = next; errno = saved;
+    }
+    return fd;
+}
+#else
+#define fs_fd(h) (h)
+#endif
+
 // ---------- Files ----------
 HLE_FORCE("_ZN2nn2fs8OpenFileEPNS0_10FileHandleEPKci", "fsp-srv → open(2)", Result, h_fs_OpenFile, uint64_t *out, const char *path, int mode) {
     HP(path);
     if (mode & (MODE_WRITE | MODE_APPEND)) RW();
     int fd = open(hp, (mode & (MODE_WRITE | MODE_APPEND)) ? ((mode & MODE_READ) ? O_RDWR : O_WRONLY) : O_RDONLY);
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+    fd = avoid_restored_id(fd);
+#endif
     if (fd < 0) return err_res("open", hp);
     struct stat st; fstat(fd, &st);
     if (S_ISDIR(st.st_mode)) { close(fd); return RES_PATH_NOT_FOUND; }
@@ -715,6 +737,7 @@ HLE_FORCE("_ZN2nn2fs8OpenFileEPNS0_10FileHandleEPKci", "fsp-srv → open(2)", Re
     return RES_OK;
 }
 HLE_FORCE("_ZN2nn2fs8ReadFileEPmNS0_10FileHandleElPvm", "fsp-srv → pread(2)", Result, h_fs_ReadFile, size_t *out, uint64_t h, int64_t off, void *buf, size_t sz) {
+    h = fs_fd(h);
     if (!h) { *out = 0; return RES_FAIL; }   // a file handle is an fd; 0 is stdin and never a file the game opened: the null handle the game keeps using after a failed open
     size_t got = 0; int reprep = 0;
     dm_guest_write_prepare(buf, sz);   // The destination may be a texture pool page write-protected by the graphics layer: a kernel write to a read-only page returns EFAULT instead of page-faulting, so unprotect and mark dirty first
@@ -758,6 +781,7 @@ HLE_FORCE("_ZN2nn2fs8ReadFileEPmNS0_10FileHandleElPvm", "fsp-srv → pread(2)", 
     return RES_OK;
 }
 HLE_FORCE("_ZN2nn2fs9WriteFileENS0_10FileHandleElPKvmRKNS0_11WriteOptionE", "fsp-srv → pwrite(2)", Result, h_fs_WriteFile, uint64_t h, int64_t off, const void *buf, size_t sz, const void *opt) {
+    h = fs_fd(h);
     if (!h) return RES_FAIL;
     (void)opt; size_t put = 0;
     if (g_fsave[(int)h & 0xffff]) {                                     // Save write injection point (for deterministic regression; only writes on the save mount are counted)
@@ -780,6 +804,7 @@ HLE_FORCE("_ZN2nn2fs9WriteFileENS0_10FileHandleElPKvmRKNS0_11WriteOptionE", "fsp
     return RES_OK;
 }
 HLE_FORCE("_ZN2nn2fs11GetFileSizeEPlNS0_10FileHandleE", "fsp-srv → fstat(2)", Result, h_fs_GetFileSize, int64_t *out, uint64_t h) {
+    h = fs_fd(h);
     if (!h) return RES_FAIL;
 #if defined(__ANDROID__)
     if (zon() && ZF(h)) { *out = (int64_t)ZF(h)->raw; return RES_OK; }   // a packed RomFS file: the original's size
@@ -788,6 +813,7 @@ HLE_FORCE("_ZN2nn2fs11GetFileSizeEPlNS0_10FileHandleE", "fsp-srv → fstat(2)", 
     *out = st.st_size; return RES_OK;
 }
 HLE_FORCE("_ZN2nn2fs11SetFileSizeENS0_10FileHandleEl", "fsp-srv → ftruncate(2)", Result, h_fs_SetFileSize, uint64_t h, int64_t sz) {
+    h = fs_fd(h);
     if (!h) return RES_FAIL;
     if (!ftruncate((int)h, sz)) return RES_OK;
     if (g_fsave[(int)h & 0xffff]) save_poison(errno);
@@ -795,10 +821,14 @@ HLE_FORCE("_ZN2nn2fs11SetFileSizeENS0_10FileHandleEl", "fsp-srv → ftruncate(2)
 }
 HLE_FORCE("_ZN2nn2fs9FlushFileENS0_10FileHandleE", "fsp-srv; host writes are already in the page cache, flushing is a no-op", Result, h_fs_FlushFile, uint64_t h) { (void)h; return RES_OK; }
 HLE_FORCE("_ZN2nn2fs9CloseFileENS0_10FileHandleE", "fsp-srv → close(2)", void, h_fs_CloseFile, uint64_t h) {
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+    int real = h < 65536 ? atomic_exchange(&restored_fd[h], 0) : 0;
+    if (real) h = real - 1;
+#endif
     if (!h) return;   // the null handle after a failed open (see ReadFile): do not touch fd 0
     g_fmode[(int)h & 0xffff] = 0; g_fsave[(int)h & 0xffff] = 0; if (zon()) zf_close((int)h);
     close((int)h); }
-HLE_FORCE("_ZN2nn2fs15GetFileOpenModeENS0_10FileHandleE", "fsp-srv; the open mode is recorded by the host", int, h_fs_GetFileOpenMode, uint64_t h) { return g_fmode[(int)h & 0xffff]; }
+HLE_FORCE("_ZN2nn2fs15GetFileOpenModeENS0_10FileHandleE", "fsp-srv; the open mode is recorded by the host", int, h_fs_GetFileOpenMode, uint64_t h) { return g_fmode[(int)fs_fd(h) & 0xffff]; }
 
 // ---------- Path operations ----------
 HLE_FORCE("_ZN2nn2fs10CreateFileEPKcl", "fsp-srv → open(O_CREAT|O_EXCL)+ftruncate", Result, h_fs_CreateFile, const char *path, int64_t sz) {
@@ -974,3 +1004,20 @@ HLE_FORCE("_ZN2nn2fs18IsSaveDataExistingERKNS_7account3UidE", "fsp-srv; save dat
 HLE_FORCE("_ZN2nn2fs26SetPriorityOnCurrentThreadENS0_8PriorityE", "fsp-srv; file read priority, ignored by the host", void, h_fs_SetPrio, int prio) { (void)prio; }
 HLE_FORCE("_ZN2nn2fs6detail18IsEnabledAccessLogEj", "fsp-srv; access log always off (returns bool)", unsigned, h_fs_AccessLogMask, unsigned mask) { (void)mask; return 0; }
 HLE_FORCE("_ZN2nn2fs6detail18IsEnabledAccessLogEv", "fsp-srv; access log always off (returns bool)", unsigned, h_fs_AccessLog, void) { return 0; }
+
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+// The coordinator holds all guest callers. Report the handles a cold process
+// must reopen before resuming the game, without reading their file contents.
+void dm_checkpoint_report_files(void) {
+    unsigned readers = 0, writers = 0, saves = 0;
+    for (unsigned i = 0; i < sizeof g_fmode; ++i) if (g_fmode[i]) {
+        if (g_fmode[i] & (MODE_WRITE | MODE_APPEND)) ++writers; else ++readers;
+        saves += !!g_fsave[i];
+    }
+    LOG("[snapshot] FS mounts=%d open read-only=%u write-capable=%u save-files=%u", g_nmnt, readers, writers, saves);
+}
+#endif
+
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+#include "../android/checkpoint_files.inc"
+#endif

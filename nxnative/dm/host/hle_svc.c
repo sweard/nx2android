@@ -1,6 +1,9 @@
 // Horizon kernel system calls (triggered by the SDK runtime once the SDK is loaded). Only what the P1 boot chain needs is implemented: memory layout + heap + query + debug output + timing.
 // Register convention: inputs w1.. / outputs w0=Result, x1=value (GetInfo / SetHeapSize), consistent with the public Horizon ABI.
 #include "dm.h"
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+#include "../android/checkpoint_memory.h"
+#endif
 #include <sys/mman.h>
 #include <errno.h>
 #include <unistd.h>
@@ -204,11 +207,24 @@ uint64_t svc_dispatch(int num, uint64_t *regs, uint64_t orig_addr) {
         uint8_t *a = (uint8_t *)addr;
         uint64_t base, size, state, perm;
         int k;
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+        uintptr_t main_stack = dm_checkpoint_main_stack();
+#endif
         pthread_mutex_lock(&g_map_lock);   // the registry branches read g_map; the other branches are cheap, so the lock simply spans the whole chain
         if (a >= g_heap && a < g_heap + g_heap_cur) { base=(uint64_t)g_heap; size=g_heap_cur; state=5/*Heap*/; perm=3; }
         else if ((k = map_find(addr, 1))) { base=g_map[k-1].base; size=g_map[k-1].size; state=g_map[k-1].state; perm=3; }
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+        else if (main_stack && addr >= main_stack && addr - main_stack < DM_CHECKPOINT_MAIN_STACK_BYTES) {
+            base = main_stack; size = DM_CHECKPOINT_MAIN_STACK_BYTES; state = 0x0b; perm = 3;
+        }
+#endif
         else if (a >= g_as && a < g_as + RESERVE) {   // free: up to the adjacent mapping/heap boundary
             uint64_t lo = (uint64_t)g_as, hi = (uint64_t)g_as + RESERVE;
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+            if (main_stack && addr < main_stack) hi = main_stack;
+            if (main_stack && addr >= main_stack + DM_CHECKPOINT_MAIN_STACK_BYTES)
+                lo = main_stack + DM_CHECKPOINT_MAIN_STACK_BYTES;
+#endif
             if (a >= g_heap) lo = (uint64_t)g_heap + g_heap_cur;
             else if (hi > (uint64_t)g_heap) hi = (uint64_t)g_heap;
             for (int i = 0; i < g_nmap; i++) {
@@ -216,7 +232,8 @@ uint64_t svc_dispatch(int num, uint64_t *regs, uint64_t orig_addr) {
                 if (e <= addr && e > lo) lo = e;
                 if (g_map[i].base > addr && g_map[i].base < hi) hi = g_map[i].base;
             }
-            base=lo; size=hi-lo; state=0; perm=0; }
+            base=lo; size=hi-lo; state=0; perm=0;
+        }
         else if (module_of(a)) {
             // Loaded module: report the regions in Horizon's layout -- code [0, ro) Code+RX, read-only [ro, data) Code+R, data and bss [data, patch area) CodeData+RW.
             // The SDK's C++ exception unwinding (nn::ro::detail::GetExceptionInfo) walks back from the PC over "Code+RX" regions to find the module start, forward over Code then CodeData to find its end, then reads MOD0 at the module start for .eh_frame_hdr.
@@ -301,7 +318,7 @@ uint64_t svc_dispatch(int num, uint64_t *regs, uint64_t orig_addr) {
         if (regs[0] & 0x80000000ull) return 0;   // notification only, can continue
         _exit(42);
     }
-    case 0x1E: guest_clock_read_wait(); regs[0] = 0; regs[1] = guest_ns() * 12 / 625; return 0;   // GetSystemTick
+    case 0x1E: guest_clock_frame_wait(regs, orig_addr); regs[0] = 0; regs[1] = guest_ns() * 12 / 625; return 0;   // GetSystemTick
     case 0x27: {  // OutputDebugString(str, len)
         if (g_flag.dbg) fprintf(stderr, "[guest] %.*s\n", (int)regs[1], (char *)regs[0]);
         regs[0] = 0; return 0;

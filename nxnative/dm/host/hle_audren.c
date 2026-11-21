@@ -11,6 +11,10 @@
 // Command list format (SDK 16): header +0x04 command count, +0x08 mix buffer address, +0x10 buffer count, +0x14 samples per frame, +0x18 sample rate, commands from +0x20;
 //   each command +0x00 magic 0xcafebabe, +0x04 enabled, +0x05 command ID (DeviceSink = 0x13), +0x06 size; DeviceSink +0x128 upsampler buffer, +0x130 input count, +0x134 input indices (s16).
 #include "hle.h"
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+#include "../android/checkpoint_pause.h"
+#include "../android/checkpoint_memory.h"
+#endif
 #include <math.h>
 #include <stdatomic.h>
 #include <time.h>
@@ -119,16 +123,25 @@ static void render_main(void *arg) {
     dm_pcmout_start(out);
     LOG("audren: render thread started (%d buffers in flight, paced by the output)", NBUF);
     while (atomic_load(&g_open)) {
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+        dm_checkpoint_helper_poll();
+#endif
         while (!nfree) {   // wait for the output to hand a block back (silent sink / sound card, one every 5 ms); it signals each release, so the thread sleeps until then (it used to poll every 1 ms)
             gbuf *b = dm_pcmout_released(out);
             if (b) { free_list[nfree++] = b; break; }
             dm_pcmout_wait(out, 10);
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+            dm_checkpoint_helper_poll();
+#endif
             if (!atomic_load(&g_open)) break;
         }
         if (!nfree) break;
         // Queued catch-up output first, else a render of our own: decided and done under g_order_mu, which the catch-up path holds while it renders and queues. Checked without it,
         // the queue looked empty while an update was rendering a catch-up frame; this thread's render then waited for that one, came out a frame later and was played first, the
         // queued frame after it: two 5 ms frames swapped. Animal Crossing: New Horizons' voices clicked at frame boundaries (all 253 jumps in 5 minutes on a 240-sample edge)
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+        dm_checkpoint_audio_frame_begin();
+#endif
         gbuf *b = free_list[--nfree]; int got, popped = 0;
         pthread_mutex_lock(&g_order_mu);
         uint32_t h = atomic_load(&g_cq_head);
@@ -144,10 +157,31 @@ static void render_main(void *arg) {
         if (!got) memset(b->ptr, 0, (size_t)n * 4);
         b->size = (uint64_t)n * 4;
         if (!dm_pcmout_append(out, b)) free_list[nfree++] = b;
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+        dm_checkpoint_audio_frame_end();
+#endif
     }
     dm_pcmout_close(out);   // the output would otherwise keep its sound card callback or silent sink running and hold one of the AudioOut slots after the renderer closes
     cq_popped();   // an update waiting for queue space (catch-up pacing) sees g_open cleared
 }
+
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+#include "../android/checkpoint_wait_cpu.h"
+#include "../android/checkpoint_io.h"
+#include <sys/stat.h>
+static dm_checkpoint_wait_cpu audio_entry;
+
+void dm_checkpoint_audio_entry(void (*fn)(void *), const uint64_t *regs) {
+    if (fn != render_main) return;
+    memset(&audio_entry, 0, sizeof audio_entry);
+    memcpy(&audio_entry.cpu.x[19], regs, 12 * 8);
+    for (int i = 0; i < 8; ++i) audio_entry.cpu.v[i+8] = regs[12+i];
+    audio_entry.cpu.sp = (uintptr_t)(regs+20);
+    audio_entry.cpu.pc = audio_entry.cpu.x[30];
+    void dm_checkpoint_helper_identity(dm_checkpoint_wait_cpu *);
+    dm_checkpoint_helper_identity(&audio_entry);
+}
+#endif
 
 // Both OpenAudioRenderer forms: CPU rendering + manual execution, then the host's render thread. With the event the game waits on it, which each render signals; without it the
 // game paces its updates itself (Balatro: LÖVE's OpenAL Soft) and still needs the renderer to run every 5 ms: the form without an event used to start no render thread, so only the
@@ -156,6 +190,20 @@ static void render_main(void *arg) {
 // hook below since that form has one (Balatro): the inner call started the render thread before the event form had created its event, and the outer call then logged a second
 // renderer. The inner call (t_in_open) goes straight to the SDK with the host's copy of the parameter, as it did before the form without an event was hooked
 static __thread int t_in_open;
+static int alloc_renderer_work(void **p, size_t size) {
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+    int rc = dm_checkpoint_service_alloc(size, p);
+    if (rc) return rc < 0 ? -rc : 0;
+#endif
+    return posix_memalign(p, WORK_PAGE, size);
+}
+static void free_renderer_work(void *p) {
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+    if (p && dm_checkpoint_service_free(p)) return;
+#endif
+    free(p);
+}
+
 static Result ar_open(void **handle, void *ev, const uint8_t *param, void *work, size_t sz) {
     static Result (*orig_ev)(void **, void *, const uint8_t *, void *, size_t), (*orig)(void **, const uint8_t *, void *, size_t);
     if (!orig_ev) orig_ev = gsym("_ZN2nn5audio17OpenAudioRendererEPNS0_19AudioRendererHandleEPNS_2os11SystemEventERKNS0_22AudioRendererParameterEPvm");
@@ -175,13 +223,13 @@ static Result ar_open(void **handle, void *ev, const uint8_t *param, void *work,
         // Smaller than what the service would ask: the host supplies the difference below, so the game's buffer is simply not used
         if (sz < guest_need) LOG("[RED] audren: the game's work buffer %#zx is below the service requirement %#zx: the host backs the renderer itself", sz, guest_need);
         if (need > sz) {
-            if (posix_memalign(&owned, WORK_PAGE, need)) { LOG("[RED] audren: cannot allocate local renderer work buffer %#zx", need); return RES_FAIL; }
+            if (alloc_renderer_work(&owned, need)) { LOG("[RED] audren: cannot allocate local renderer work buffer %#zx", need); return RES_FAIL; }
             memset(owned, 0, need); work = owned; sz = need;
             LOG("audren: host backs local renderer work buffer %p+%#zx", work, sz);
         }
     }
     t_in_open = 1; Result r = ev ? orig_ev(handle, ev, p, work, sz) : orig(handle, p, work, sz); t_in_open = 0;
-    if (r) { free(owned); LOG("[RED] audren: SDK OpenAudioRenderer failed %#x", r); return r; }
+    if (r) { free_renderer_work(owned); LOG("[RED] audren: SDK OpenAudioRenderer failed %#x", r); return r; }
     if (owned) objmap_put(handle[0], owned);   // Close releases it only after the render thread and the SDK have finished with it
     if (atomic_load(&g_open)) { LOG("[RED] audren: a second renderer (the host drives only one)"); return r; }
     g_handle[0] = handle[0]; g_handle[1] = handle[1];
@@ -201,7 +249,7 @@ HLE_FORCE("_ZN2nn5audio18CloseAudioRendererENS0_19AudioRendererHandleE", "close 
     if (obj == g_handle[0] && g_render_tt) { atomic_store(&g_open, 0); dm_guest_thread_join(g_render_tt); g_render_tt = NULL; }
     void *owned = objmap_del(obj);
     orig(obj, state);
-    free(owned);   // the host-backed CPU work buffer (ar_open), after the render thread has joined and the SDK is done
+    free_renderer_work(owned);   // the host-backed CPU work buffer (ar_open), after the render thread has joined and the SDK is done
 }
 
 // DeviceSink input mix buffers → int16 stereo. The command ID is 0x13 in SDK 16; SDK 20 inserted a command before it, making it 0x14 (written at sdk+0x233f44); SDK 8 (Link's Awakening)
@@ -238,8 +286,10 @@ HLE_FORCE("_ZN2nn5audio6server16UpsamplerManager8AllocateEv", "upsampler for a D
     return mgr ? orig(mgr) : NULL;
 }
 enum { RS_T = 16 };
+static int32_t rs_buf[2 * (RS_T - 1 + FRAME_MAX)];
+static uint32_t rs_pos;
 static uint32_t up_3_2(const int32_t *in, uint32_t n, int32_t *out) {
-    static float h[3][RS_T]; static int32_t buf[2 * (RS_T - 1 + FRAME_MAX)]; static uint32_t pos;   // pos: the next output's position in thirds of an input sample, from the frame start
+    static float h[3][RS_T];   // rs_pos: the next output's position in thirds of an input sample, from the frame start
     if (!h[0][RS_T / 2 - 1]) {
         for (int p = 0; p < 3; p++) {
             double sum = 0, w[RS_T];
@@ -251,15 +301,15 @@ static uint32_t up_3_2(const int32_t *in, uint32_t n, int32_t *out) {
             for (int k = 0; k < RS_T; k++) h[p][k] = (float)(w[k] / sum);
         }
     }
-    memcpy(buf + 2 * (RS_T - 1), in, (size_t)n * 8);   // the frame after the last RS_T - 1 samples of the one before (copied first: out may be in)
+    memcpy(rs_buf + 2 * (RS_T - 1), in, (size_t)n * 8);   // the frame after the last RS_T - 1 samples of the one before (copied first: out may be in)
     uint32_t m = 0;
-    for (; pos < 3 * n; pos += 2, m++) {
-        const int32_t *x = buf + 2 * (pos / 3); const float *c = h[pos % 3]; float l = 0, r = 0;
+    for (; rs_pos < 3 * n; rs_pos += 2, m++) {
+        const int32_t *x = rs_buf + 2 * (rs_pos / 3); const float *c = h[rs_pos % 3]; float l = 0, r = 0;
         for (int k = 0; k < RS_T; k++) { l += c[k] * (float)x[2 * k]; r += c[k] * (float)x[2 * k + 1]; }
         out[2 * m] = (int32_t)lrintf(l); out[2 * m + 1] = (int32_t)lrintf(r);
     }
-    pos -= 3 * n;
-    memmove(buf, buf + 2 * n, (RS_T - 1) * 8);
+    rs_pos -= 3 * n;
+    memmove(rs_buf, rs_buf + 2 * n, (RS_T - 1) * 8);
     return m;
 }
 static int capture(const uint8_t *cl, size_t len, int16_t *dst) {
@@ -476,3 +526,50 @@ HLE_FORCE("_ZN2nn5audio39AcquireAudioDeviceNotificationForOutputEPNS_2os11System
 // SDK 7 names of the two above (Super Mario Odyssey): the device-switch event and the active channel count
 HLE_FORCE("_ZN2nn5audio36AcquireAudioDeviceSwitchNotificationEPNS_2os11SystemEventE", "output device switch notification (SDK 7 name): bound, never signaled", void, h_ad_Notify7, void *ev) { hle_bind_system_event(ev, 0); }
 HLE_FORCE("_ZN2nn5audio21GetActiveChannelCountEv", "output channel count (SDK 7 name): 2", int, h_ad_Channels7, void) { return 2; }
+
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+typedef struct {
+    char magic[8];
+    uint64_t handle[2], thread_type, owned;
+    uint32_t open, event_layout, head, tail, phase;
+    int32_t lengths[CQ], history[2 * (RS_T - 1)];
+    int16_t pcm[CQ][FRAME_MAX * 2];
+    dm_checkpoint_wait_cpu entry;
+} checkpoint_renderer;
+
+int dm_checkpoint_renderer(int fd, int restore, dm_checkpoint_wait_cpu *helper) {
+    checkpoint_renderer r = {.magic = "NX2AAR1"};
+    if (!restore && (r.open = atomic_load(&g_open))) {
+        r.handle[0] = (uintptr_t)g_handle[0]; r.handle[1] = (uintptr_t)g_handle[1];
+        r.thread_type = (uintptr_t)g_render_tt; r.owned = (uintptr_t)objmap_get(g_handle[0]);
+        r.event_layout = g_ev_layout; r.entry = audio_entry;
+        r.head = atomic_load(&g_cq_head); r.tail = atomic_load(&g_cq_tail);
+        memcpy(r.lengths, g_cq_n, sizeof r.lengths); memcpy(r.pcm, g_cq, sizeof r.pcm);
+        r.phase = rs_pos; memcpy(r.history, rs_buf, sizeof r.history);
+        if (!r.entry.handle) return -ENOTSUP;
+    }
+    checkpoint_stream io = {.fd = fd, .loading = restore};
+    int rc = checkpoint_io(&io, &r, sizeof r);
+    uint32_t expected = io.crc, sum = expected;
+    if (!rc) rc = checkpoint_io(&io, &sum, sizeof sum);
+    if (rc || !restore) return rc;
+    struct stat st;
+    if (fstat(fd, &st) || st.st_size != io.off || expected != sum || memcmp(r.magic, "NX2AAR1", 8) ||
+        r.open > 1 || r.event_layout > 1 || r.tail - r.head > CQ || r.phase > 2) return -EBADMSG;
+    if (!r.open) return 0;
+    if (!dm_checkpoint_memory_committed(r.thread_type, 0x200) ||
+        (r.owned && !dm_checkpoint_memory_committed(r.owned, 1)) ||
+        r.entry.cpu.pc != r.entry.cpu.x[30] || dm_checkpoint_wait_cpu_supported(&r.entry)) return -ESTALE;
+    for (int i = 0; i < 2; ++i)
+        if (r.handle[i] && !dm_checkpoint_memory_committed(r.handle[i], 8) && !module_of((void *)r.handle[i])) return -ESTALE;
+    for (int i = 0; i < CQ; ++i) if (r.lengths[i] < 0 || r.lengths[i] > FRAME_MAX) return -ERANGE;
+    g_handle[0] = (void *)r.handle[0]; g_handle[1] = (void *)r.handle[1]; g_render_tt = (void *)r.thread_type;
+    if (r.owned) objmap_put(g_handle[0], (void *)r.owned);
+    g_ev_layout = r.event_layout; audio_entry = r.entry; *helper = r.entry;
+    memcpy(g_cq_n, r.lengths, sizeof r.lengths); memcpy(g_cq, r.pcm, sizeof r.pcm);
+    rs_pos = r.phase; memcpy(rs_buf, r.history, sizeof r.history);
+    atomic_store(&g_cq_head, r.head); atomic_store(&g_cq_tail, r.tail); atomic_store(&g_open, 1);
+    return 0;
+}
+void *dm_checkpoint_audio_function(void) { return render_main; }
+#endif

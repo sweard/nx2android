@@ -33,5 +33,19 @@ sdk_cv_caller:
     stlr x9, [x10]
 2:  wfe
     b 2b
+.global sdk_clock_caller
+sdk_clock_caller:
+    mov x19, x0
+    ldr w8, [x19, #16]
+    add w8, w8, #1
+    str w8, [x19, #16]
+    ldr x16, [x19]
+    blr x16
+    str x0, [x19, #8]
+    mov w8, #1
+    add x9, x19, #20
+    stlr w8, [x9]
+3:  wfe
+    b 3b
 sdk_caller_end:
 .section .note.GNU-stack,"",%progbits

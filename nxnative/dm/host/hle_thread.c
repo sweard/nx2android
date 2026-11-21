@@ -10,6 +10,11 @@
 // Semantics follow the public Horizon kernel behavior (KConditionVariable / KAddressArbiter / KSynchronization of Atmosphère mesosphère).
 // All waits hang on one global lock G, with one condition variable per thread; correctness first, performance to be measured later.
 #include "dm.h"
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+#include "../android/checkpoint_pause.h"
+#include "../android/checkpoint_wait_cpu.h"
+#include "../android/checkpoint_memory.h"
+#endif
 #include "dm_uc.h"
 #include <errno.h>
 #include <sched.h>
@@ -57,8 +62,11 @@ typedef struct thr {
     // Current wait: kind 0=none 1=lock 2=condition 3=address 4=synchronization object
     int wkind, woke; uint64_t waddr, wkey; uint32_t wtag; int64_t wres;
 #if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+    const dm_checkpoint_wait_cpu *checkpoint_retry_cpu;
     uint64_t checkpoint_deadline, checkpoint_tls, checkpoint_tlr, checkpoint_tls_owner;
-    int checkpoint_guest_clock, checkpoint_installed;
+    int checkpoint_guest_clock, checkpoint_installed, checkpoint_stop, checkpoint_was_started;
+    const uint64_t *clock_regs;
+    uint64_t clock_orig, clock_x18;
 #endif
     _Atomic int sleeping;      // inside SleepThread's timed sleep (not runnable; used by dm_yield_to_core_peers)
     int yield_pending;         // this SVC woke a higher-priority thread pinned to this core: let it run before the SVC returns (svc_thread)
@@ -120,6 +128,8 @@ static inline void G_lock(void) {
 #define MAX_H 4096
 static struct { int type; void *obj; } g_h[MAX_H];
 static pthread_key_t g_keythr;
+static pthread_once_t g_thread_key_once = PTHREAD_ONCE_INIT;
+static void make_thread_key(void) { if (pthread_key_create(&g_keythr, NULL)) die("thread identity key"); }
 static uint64_t g_next_id = 0x51;
 static thr_t *g_wait;          // All waiting threads (lock / condition / address / synchronization)
 
@@ -147,7 +157,7 @@ static thr_t *cur(void) {
 // Some games rely on this as synchronization: in Metroid Dread's movie player the main thread (priority 44, core 0) posts "tear down the decoder" to the dispatcher and worker threads (priority 30, core 0 only), then frees the object without waiting
 // and builds the next one in the same memory; on the host the threads truly run in parallel, the dispatcher still had the old holders linked and the worker still had the old object queued, so SignalEvent hit a null MultiWait and the worker read a freed object.
 // svc_thread calls it after an SVC that woke such a thread: it waits until every started, unexited, not host-created thread allowed only on this core with a higher priority is waiting or sleeping, for at most max_us; returns −1 on timeout
-void dm_thread_mark_host(void) { thr_t *t = pthread_getspecific(g_keythr); if (t) t->host_owned = 1; }
+void dm_thread_mark_host(void) { thr_t *t = pthread_getspecific(g_keythr); if (t) { G_lock(); t->host_owned = 1; pthread_mutex_unlock(&G); } }
 // Whether a thread is really running: besides guest waits / timed sleeps it may be blocked in host code (an HLE call waiting on a host condition variable, the GPU, a file), which has no guest wait kind; only the kernel's thread state tells
 static int thr_running(const thr_t *t) {
     if (t->wkind || t->sleeping || !t->mport || (t->host_work && *t->host_work)) return 0;
@@ -186,6 +196,10 @@ int dm_yield_to_core_peers(unsigned max_us) {
         { struct timespec ts = {0, 50000}; nanosleep(&ts, 0); } waited = 1;
     }
 }
+
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+#include "../android/checkpoint_pause.inc"
+#endif
 
 // ---------- Wait primitives (called holding G) ----------
 static void wait_unlink(thr_t *t) {
@@ -238,13 +252,14 @@ static int64_t block(thr_t *t, int kind, int64_t ns) {
     }
     t->nblock++;
     while (!t->woke) {
-        int rc;
-        if (det_wait) {
-            uint64_t now = guest_ns();
-            if (now >= guest_deadline) { wait_unlink(t); t->wkind = 0; return R_TIMEOUT; }
-            (void)(guest_deadline - now);
-            rc = pthread_cond_wait(&t->cv, &G);
-        } else rc = ns > 0 ? pthread_cond_timedwait(&t->cv, &G, &dl) : pthread_cond_wait(&t->cv, &G);
+        if (det_wait && guest_ns() >= guest_deadline) { wait_unlink(t); t->wkind = 0; return R_TIMEOUT; }
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+        t->checkpoint_stop = CP_KERNEL_WAIT;
+#endif
+        int rc = ns > 0 && !det_wait ? pthread_cond_timedwait(&t->cv, &G, &dl) : pthread_cond_wait(&t->cv, &G);
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+        checkpoint_leave_stop(t);
+#endif
         if (rc == ETIMEDOUT && !t->woke && (!det_wait || guest_ns() >= guest_deadline)) { wait_unlink(t); t->wkind = 0; return R_TIMEOUT; }
     }
     return t->wres;
@@ -309,7 +324,18 @@ static void *thread_main(void *p) {
     t->mport = pthread_mach_thread_np(pthread_self()); t->host_work = &dm_host_work;
     crash_thread_init();
     guest_thread_init();
-    G_lock(); while (!t->started) pthread_cond_wait(&t->cv, &G); pthread_mutex_unlock(&G);
+    G_lock(); while (!t->started) pthread_cond_wait(&t->cv, &G);
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+    if (atomic_load(&dm_checkpoint_pausing)) {
+        t->checkpoint_stop = CP_GATE;
+        checkpoint_leave_stop(t);
+    }
+#endif
+    pthread_mutex_unlock(&G);
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+    void *root = dm_checkpoint_thread_root(0);
+    if (root) dm_checkpoint_enter(t->entry, t->arg, t->stack_top, root);
+#endif
     dm_thread_enter(t->entry, t->arg, t->stack_top);   // Does not return: the guest must exit through ExitThread
     die("guest thread entry returned");
 }
@@ -399,7 +425,7 @@ static void ctx_fill(const thr_t *t, hz_ctx_t *o) {   // holding G, t is stopped
 
 // Register the main thread and return its handle (passed to nnosInitialize as the main thread handle)
 uint32_t svc_thread_main_init(void) {
-    pthread_key_create(&g_keythr, NULL);
+    pthread_once(&g_thread_key_once, make_thread_key);
     qos_map_init();
     pause_install();
     thr_t *t = calloc(1, sizeof *t);

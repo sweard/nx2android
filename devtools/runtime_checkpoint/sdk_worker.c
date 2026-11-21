@@ -28,7 +28,8 @@ typedef struct {
 _Static_assert(offsetof(hash_job, state) == 64, "SDK caller layout");
 static hash_job *job;
 static uintptr_t sdk_base, sdk_end, stack_top;
-uintptr_t sdk_cv_entry;
+uintptr_t sdk_cv_entry, sdk_clock_entry;
+extern const uint8_t sdk_clock_caller[];
 extern const uint8_t sdk_cv_caller[];
 static int loading, parked[2];
 static _Atomic int captured;
@@ -73,6 +74,7 @@ void sdk_worker_checkpoint(uintptr_t heap, uintptr_t stack, int restore) {
     uint8_t *wish = (void *)UINT64_C(0x290000000);
     uint8_t *caller = mmap(wish, page, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
     if (caller != wish || (uintptr_t)sdk_caller_end - (uintptr_t)sdk_caller_begin > page) die("SDK caller reservation");
+    sdk_clock_entry = (uintptr_t)caller + ((uintptr_t)sdk_clock_caller - (uintptr_t)sdk_caller_begin);
     sdk_cv_entry = (uintptr_t)caller + ((uintptr_t)sdk_cv_caller - (uintptr_t)sdk_caller_begin);
     memcpy(caller, sdk_caller_begin, (uintptr_t)sdk_caller_end - (uintptr_t)sdk_caller_begin);
     __builtin___clear_cache((char *)caller, (char *)caller + page);

@@ -42,7 +42,37 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-void front_run(void (*guest)(void)) { guest(); }
+#ifdef DM_MANUAL_CHECKPOINT
+#include "checkpoint_memory.h"
+#include <setjmp.h>
+static _Thread_local jmp_buf checkpoint_boot_return;
+static _Thread_local int checkpoint_boot_active;
+void dm_checkpoint_main_returned(void) {
+    LOG("nnMain returned");
+    if (!checkpoint_boot_active) die("main thread returned outside its host bootstrap");
+    longjmp(checkpoint_boot_return, 1);
+}
+extern void dm_thread_enter(uint64_t entry, uint64_t arg, uint64_t sp);
+static void checkpoint_main_entry(void (*guest)(void)) {
+    guest();
+    longjmp(checkpoint_boot_return, 1);
+}
+#endif
+void front_run(void (*guest)(void)) {
+#ifdef DM_MANUAL_CHECKPOINT
+    uintptr_t stack = dm_checkpoint_main_stack();
+    if (stack) {
+        // The pthread and its bionic TLS remain on the native stack. Only
+        // the game entry runs in the region that can be mapped in a new PID.
+        checkpoint_boot_active = 1;
+        if (!setjmp(checkpoint_boot_return))
+            dm_thread_enter((uintptr_t)checkpoint_main_entry, (uintptr_t)guest, stack + DM_CHECKPOINT_MAIN_STACK_BYTES);
+        checkpoint_boot_active = 0;
+        return;
+    }
+#endif
+    guest();
+}
 void *front_metal_layer(void) { return NULL; }
 int front_screen_max_fps(void) { return 0; }
 void front_screen_match(int fps) { (void)fps; }
@@ -1515,11 +1545,10 @@ static int romfs_readable(ANativeActivity *act, int sdk) {   // 0: the game cann
 static void start_game(ANativeActivity *act) {
     settings_load(NULL);
     dm_haptics_android_start(act, atomic_load(&g_set_rumble)); dm_lan_android_start(act);
-    g_vm = act->vm;
+    pthread_t t;
     { pthread_t w; if (!pthread_create(&w, NULL, pad_watch, act->vm)) pthread_detach(w); }
     { pthread_t w; if (!pthread_create(&w, NULL, temp_watch, act->vm)) pthread_detach(w); }
     LOG("NX2A host on Android: files %s, RomFS %s, saves %s", g_root, getenv("DM_ROMFS"), act->internalDataPath);
-    pthread_t t; pthread_create(&t, NULL, input_thread, NULL); pthread_detach(t);
     // Map the main thread's full 16 MiB stack. The guest queries and scans the entire mapped range.
     size_t ssz = 16 << 20, guard = 64 << 10;
     uint8_t *stk = mmap(NULL, ssz + guard, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
@@ -1530,12 +1559,19 @@ static void start_game(ANativeActivity *act) {
 }
 
 #ifdef DM_MANUAL_CHECKPOINT
-enum { CHECKPOINT_WAIT_FRAME = 1, CHECKPOINT_WAIT_CHOICE };
+enum { CHECKPOINT_WAIT_FRAME = 1, CHECKPOINT_WAIT_CHOICE, CHECKPOINT_WAIT_FIELD };
 static _Atomic int checkpoint_choice_pending;
 static jmethodID checkpoint_offer_method;
+void dm_checkpoint_field_choose(int) __attribute__((weak));
 JNIEXPORT void JNICALL Java_org_nx2a_GameActivity_chooseCheckpoint(JNIEnv *env, jobject activity, jboolean restore) {
     if (!(*env)->IsSameObject(env, activity, g_act->clazz)) return;
-    int expected = CHECKPOINT_WAIT_CHOICE;
+    int expected = CHECKPOINT_WAIT_FIELD;
+    if (dm_checkpoint_field_choose && atomic_compare_exchange_strong(&checkpoint_choice_pending, &expected, 0)) {
+        dm_checkpoint_field_choose(restore);
+        start_game(g_act);
+        return;
+    }
+    expected = CHECKPOINT_WAIT_CHOICE;
     if (!atomic_compare_exchange_strong(&checkpoint_choice_pending, &expected, 0)) return;
     if (restore) {
         settings_load(dm_checkpoint_settings());
@@ -1546,15 +1582,29 @@ JNIEXPORT void JNICALL Java_org_nx2a_GameActivity_chooseCheckpoint(JNIEnv *env, 
     dm_checkpoint_consume();
 }
 
-static void prepare_checkpoint(ANativeActivity *act) {
+static int prepare_checkpoint(ANativeActivity *act) {
     JNIEnv *env = act->env;
     jclass cls = (*env)->GetObjectClass(env, act->clazz);
     checkpoint_offer_method = cls ? (*env)->GetMethodID(env, cls, "offerCheckpoint", "()V") : NULL;
     if (cls) (*env)->DeleteLocalRef(env, cls);
-    if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); return; }
-    if (!checkpoint_offer_method) return;
-    if (dm_checkpoint_init(act->internalDataPath, g_root)) atomic_store(&checkpoint_choice_pending, CHECKPOINT_WAIT_FRAME);
+    if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); return 0; }
+    if (!checkpoint_offer_method) return 0;
+    int kind = dm_checkpoint_init(act->internalDataPath, g_root);
+    if (kind == 2 && dm_checkpoint_field_choose) {
+        jclass game = (*env)->GetObjectClass(env, act->clazz);
+        jmethodID offer = game ? (*env)->GetMethodID(env, game, "offerRuntimeCheckpoint", "()V") : NULL;
+        if (game) (*env)->DeleteLocalRef(env, game);
+        if (offer) {
+            atomic_store(&checkpoint_choice_pending, CHECKPOINT_WAIT_FIELD);
+            (*env)->CallVoidMethod(env, act->clazz, offer);
+            if (!(*env)->ExceptionCheck(env)) return 1;
+            atomic_store(&checkpoint_choice_pending, 0);
+        }
+        if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+        dm_checkpoint_field_choose(0);
+    } else if (kind) atomic_store(&checkpoint_choice_pending, CHECKPOINT_WAIT_FRAME);
     else dm_checkpoint_consume();
+    return 0;
 }
 #endif
 
@@ -1609,8 +1659,13 @@ __attribute__((visibility("default"))) void ANativeActivity_onCreate(ANativeActi
     // the save manager's requests (saves_android.c), before the host mounts the save: an import chosen in the menu or pushed by porter, an export porter asks for
     if (dm_saves_start(g_root)) { LOG("[saves] the request asked the app to end: the game is not started"); g_quit = 1; return; }
     if (!romfs_readable(act, sdk)) { g_quit = 1; return; }   // after the save manager's requests, which need no RomFS
+    // NativeActivity attaches its input queue before the startup dialog can be used.
+    g_vm = act->vm;
+    pthread_t input;
+    if (pthread_create(&input, NULL, input_thread, NULL)) { g_quit = 1; return; }
+    pthread_detach(input);
 #ifdef DM_MANUAL_CHECKPOINT
-    prepare_checkpoint(act);
+    if (prepare_checkpoint(act)) return;
 #endif
     start_game(act);
 }

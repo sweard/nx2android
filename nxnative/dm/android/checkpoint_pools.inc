@@ -68,6 +68,8 @@ int dm_checkpoint_pools_save(int memory_fd, int pools_fd) {
         const vkpool_t *p = &g_pool[g_pool_ord[i]];
         if (!p->zero_copy || p->lazy || p->left || p->base != p->lo || p->end != p->hi ||
             (i && maps[i-1].pool->hi > p->lo) || !dm_checkpoint_memory_committed(p->lo, p->hi - p->lo)) {
+            LOG("[snapshot] unsupported pool %d/%d range=%p..%p zero_copy=%d lazy=%d partial=%d",
+                i, n, (void *)p->lo, (void *)p->hi, !!p->zero_copy, !!p->lazy, !!p->left);
             rc = -ENOTSUP; goto out;
         }
         desc[i] = (pool_desc){p->lo, p->hi - p->lo, p->flags, 0};
@@ -82,13 +84,17 @@ int dm_checkpoint_pools_save(int memory_fd, int pools_fd) {
         int first = 1;
         for (int k = 0; k < i; ++k) if (maps[k].device == m->device && maps[k].inode == m->inode) { first = 0; break; }
         if (first) {
-            if ((rc = sync_pool_fd(m->fd, DMA_BUF_SYNC_START))) goto out;
+            if ((rc = sync_pool_fd(m->fd, DMA_BUF_SYNC_START))) {
+                LOG("[snapshot] pool %d/%d DMA-BUF read start failed (%d)", i, n, rc);
+                goto out;
+            }
             m->sync_started = 1;
         }
     }
     checkpoint_mappings = maps;
     checkpoint_mapping_count = n;
     rc = dm_checkpoint_memory_save_shared(memory_fd, shared_pool_vma);
+    if (rc) LOG("[snapshot] guest memory capture refused (%d)", rc);
     checkpoint_mappings = NULL;
     checkpoint_mapping_count = 0;
     if (!rc) {

@@ -94,11 +94,13 @@ int dm_checkpoint_wait_finish(uint64_t *regs) {
         if (end && checkpoint_wait_now(t->checkpoint_guest_clock) >= end) {
             wake(t, R_TIMEOUT); break;
         }
+        if (t->checkpoint_retry_cpu) t->checkpoint_stop = CP_KERNEL_WAIT;
         if (!end || t->checkpoint_guest_clock) pthread_cond_wait(&t->cv, &G);
         else {
             struct timespec dl = {(time_t)(end / 1000000000), (long)(end % 1000000000)};
             pthread_cond_timedwait(&t->cv, &G, &dl);
         }
+        if (t->checkpoint_retry_cpu) checkpoint_leave_stop(t);
     }
     int64_t result = t->wres;
     if (kind == 4 && result != R_TIMEOUT) {
@@ -211,28 +213,67 @@ static int checkpoint_guest_pc(uint64_t pc) {
     return !(pc & 3) && m && pc - (uintptr_t)m->base < m->text_end;
 }
 
-int dm_checkpoint_wait_cpu_capture(uint32_t handle, dm_checkpoint_wait_cpu *out) {
-    int rc = -ENOTSUP;
-    G_lock();
-    thr_t *t = h_peek(handle, O_THREAD);
-    if (!t || t->handle != handle || !t->wkind || t->host_owned) goto done;
-    const uint64_t *r = atomic_load(&t->svc_regs);
-    if (!r || !dm_checkpoint_memory_committed((uintptr_t)r, 816)) goto done;
-    // gates.tsv records orig as an NSO offset; LR identifies the owning NSO.
-    module_t *owner = module_of((const void *)(uintptr_t)r[30]);
-    if (!owner || t->svc_pc >= owner->text_end || owner->text_end - t->svc_pc <= 4) goto done;
-    uint64_t next = (uintptr_t)owner->base + t->svc_pc + 4;
+static void checkpoint_gate_cpu(const thr_t *t, const uint64_t *r, uintptr_t next,
+                                uint64_t x18, uint32_t svc, dm_checkpoint_wait_cpu *out) {
     // patch_nso.site_gate saves guest FP/LR in a 16-byte record. dm_gate
     // pushes its 800-byte register file beneath that record. Returning
     // directly to orig+4 consumes both frames, as the rewritten stub would.
-    *out = (dm_checkpoint_wait_cpu){.logical_x18 = t->svc_x18, .tls = t->checkpoint_tls,
-        .tlr = t->checkpoint_tlr, .owner = t->checkpoint_tls_owner, .handle = handle, .svc = t->last_svc};
+    *out = (dm_checkpoint_wait_cpu){.logical_x18 = x18, .tls = t->checkpoint_tls,
+        .tlr = t->checkpoint_tlr, .owner = t->checkpoint_tls_owner, .handle = t->handle, .svc = svc};
     memcpy(out->cpu.x, r, sizeof out->cpu.x);
     out->cpu.x[18] = 0;
     out->cpu.x[29] = r[100]; out->cpu.x[30] = r[101];
     out->cpu.pc = next; out->cpu.sp = (uintptr_t)(r + 102);
     out->cpu.nzcv = r[96]; out->cpu.fpsr = r[97]; out->cpu.fpcr = r[98];
     memcpy(out->cpu.v, r + 32, sizeof out->cpu.v);
+}
+
+int dm_checkpoint_clock_cpus(dm_checkpoint_wait_cpu *out, unsigned capacity, unsigned *count) {
+    *count = 0;
+    int rc = 0;
+    G_lock();
+    for (thr_t *t = g_all; t; t = t->all) {
+        if (t->host_owned || t->exited || t->checkpoint_stop != CP_CLOCK_WAIT) continue;
+        if (*count == capacity) { rc = -ENOSPC; break; }
+        const uint64_t *r = t->clock_regs;
+        if (!r || !dm_checkpoint_memory_committed((uintptr_t)r, 816)) { rc = -ENOTSUP; break; }
+        module_t *m = module_of((void *)(uintptr_t)r[30]);
+        if (!m || !t->clock_orig || t->clock_orig >= m->text_end) { rc = -ENOTSUP; break; }
+        // Re-execute the original patched clock instruction in the new PID:
+        // it chooses the proper destination register and observes the new clock.
+        checkpoint_gate_cpu(t, r, (uintptr_t)m->base + t->clock_orig,
+                            t->clock_x18, DM_CHECKPOINT_RETRY_CLOCK, &out[*count]);
+        rc = dm_checkpoint_wait_cpu_supported(&out[*count]);
+        if (rc) break;
+        ++*count;
+    }
+    pthread_mutex_unlock(&G);
+    if (rc) *count = 0;
+    return rc;
+}
+
+int dm_checkpoint_wait_cpu_capture(uint32_t handle, dm_checkpoint_wait_cpu *out) {
+    int rc = -ENOTSUP;
+    G_lock();
+    thr_t *t = h_peek(handle, O_THREAD);
+    if (!t || t->handle != handle || !t->wkind || t->host_owned) goto done;
+    // A thread still in its original reconstructed wait has not returned
+    // through the SVC gate in this PID yet. Its guest registers remain valid.
+    if (t->checkpoint_retry_cpu) { *out = *t->checkpoint_retry_cpu; rc = 0; goto done; }
+    const uint64_t *r = atomic_load(&t->svc_regs);
+    if (!r || !dm_checkpoint_memory_committed((uintptr_t)r, 816)) {
+        LOG("[snapshot] wait CPU %#x: %s (wait=%d, SVC=%#x)", handle,
+            r ? "frame outside checkpoint memory" : "no SVC gate frame", t->wkind, t->last_svc);
+        goto done;
+    }
+    // gates.tsv records orig as an NSO offset; LR identifies the owning NSO.
+    module_t *owner = module_of((const void *)(uintptr_t)r[30]);
+    if (!owner || t->svc_pc >= owner->text_end || owner->text_end - t->svc_pc <= 4) {
+        LOG("[snapshot] wait CPU %#x: gate outside identified module (wait=%d, SVC=%#x)", handle, t->wkind, t->last_svc);
+        goto done;
+    }
+    uint64_t next = (uintptr_t)owner->base + t->svc_pc + 4;
+    checkpoint_gate_cpu(t, r, next, t->svc_x18, t->last_svc, out);
     rc = 0;
 done:
     pthread_mutex_unlock(&G);
@@ -246,7 +287,7 @@ int dm_checkpoint_wait_cpu_supported(const dm_checkpoint_wait_cpu *s) {
     return 0;
 }
 
-int dm_checkpoint_wait_cpu_finish(dm_checkpoint_wait_cpu *s) {
+static int checkpoint_attach_thread(dm_checkpoint_wait_cpu *s) {
     if (s->handle != cur()->handle) return -EINVAL;
     int rc = dm_checkpoint_wait_cpu_supported(s);
     if (rc) return rc;
@@ -256,5 +297,147 @@ int dm_checkpoint_wait_cpu_finish(dm_checkpoint_wait_cpu *s) {
     dm_tsd_set(g_key18, (void *)(uintptr_t)s->logical_x18);
     dm_tsd_set(g_keytls, (void *)(uintptr_t)s->tls);
     dm_tsd_set(g_keytlr, (void *)(uintptr_t)s->tlr);
-    return dm_checkpoint_wait_finish(s->cpu.x);
+    return 0;
+}
+
+void dm_checkpoint_helper_identity(dm_checkpoint_wait_cpu *s) {
+    s->handle = cur()->handle;
+    s->owner = dm_guest_tls_owner();
+    s->tls = (uintptr_t)dm_tsd_get(g_keytls);
+    s->tlr = (uintptr_t)dm_tsd_get(g_keytlr);
+    s->logical_x18 = (uintptr_t)dm_tsd_get(g_key18);
+}
+static int attach_restored_handle(uint32_t handle, int service) {
+    if (pthread_getspecific(g_keythr)) return -EBUSY;
+    G_lock();
+    thr_t *t = h_peek(handle, O_THREAD);
+    int rc = -EINVAL;
+    if (t && t->handle == handle && t->checkpoint_was_started && !t->started &&
+        !t->exited && !!t->host_owned == service) {
+        rc = -pthread_setspecific(g_keythr, t);
+        if (!rc) {
+            t->pt = pthread_self();
+            t->started = 1;
+            t->mport = pthread_mach_thread_np(t->pt);
+            t->host_work = &dm_host_work;
+        }
+    }
+    pthread_mutex_unlock(&G);
+    if (!rc) {
+        crash_thread_init();
+        guest_thread_init();
+    }
+    return rc;
+}
+
+int dm_checkpoint_attach_handle(uint32_t handle) { return attach_restored_handle(handle, 0); }
+int dm_checkpoint_attach_audio(dm_checkpoint_wait_cpu *s) {
+    int rc = attach_restored_handle(s->handle, 1);
+    if (rc) return rc;
+    // The saved PC is the verified SDK return address during validation.
+    return checkpoint_attach_thread(s);
+}
+
+int dm_checkpoint_clock_cpu_finish(dm_checkpoint_wait_cpu *s) {
+    return s->svc == DM_CHECKPOINT_RETRY_CLOCK ? checkpoint_attach_thread(s) : -EINVAL;
+}
+
+int dm_checkpoint_wait_cpu_finish(dm_checkpoint_wait_cpu *s) {
+    if (s->svc == DM_CHECKPOINT_RETRY_CLOCK) return -EINVAL;
+    int rc = checkpoint_attach_thread(s);
+    if (rc) return rc;
+    thr_t *t = cur();
+    G_lock(); t->checkpoint_retry_cpu = s; pthread_mutex_unlock(&G);
+    rc = dm_checkpoint_wait_finish(s->cpu.x);
+    G_lock(); t->checkpoint_retry_cpu = NULL; pthread_mutex_unlock(&G);
+    return rc;
+}
+
+typedef struct {
+    uint64_t id, entry, arg, stack_top, mask;
+    uint32_t handle, started, exited, host, cancelled;
+    int32_t priority, core;
+    uint32_t reserved;
+} snapshot_thread_handle;
+typedef struct {
+    char magic[8];
+    uint64_t next_id, wait_sequence;
+    uint32_t count, reserved;
+} snapshot_thread_table;
+
+int dm_checkpoint_handles_save(int fd) {
+    struct stat st;
+    if (fstat(fd, &st) || !S_ISREG(st.st_mode) || st.st_size) return -EINVAL;
+    checkpoint_stream io = {.fd = fd};
+    G_lock();
+    snapshot_thread_table h = {.magic = "NX2ATH1", .next_id = g_next_id, .wait_sequence = g_wseq};
+    int rc = 0;
+    for (thr_t *t = g_all; t; t = t->all) {
+        if (t->closed || h_peek(t->handle, O_THREAD) != t) { rc = -ENOTSUP; break; }
+        ++h.count;
+    }
+    if (!rc) rc = checkpoint_io(&io, &h, sizeof h);
+    for (unsigned i = 1; !rc && i < MAX_H; ++i) {
+        if (g_h[i].type != O_THREAD) continue;
+        thr_t *t = g_h[i].obj;
+        snapshot_thread_handle r = {.id = t->id, .entry = t->entry, .arg = t->arg,
+            .stack_top = t->stack_top, .mask = t->mask, .priority = t->prio, .core = t->core,
+            .started = t->started, .exited = t->exited, .host = t->host_owned, .handle = t->handle,
+            .cancelled = t->cancel};
+        rc = checkpoint_io(&io, &r, sizeof r);
+    }
+    pthread_mutex_unlock(&G);
+    uint32_t sum = io.crc;
+    return rc ? rc : checkpoint_io(&io, &sum, sizeof sum);
+}
+
+int dm_checkpoint_handles_restore(int fd) {
+    pthread_once(&g_thread_key_once, make_thread_key);
+    struct stat st;
+    snapshot_thread_table h;
+    checkpoint_stream io = {.fd = fd, .loading = 1};
+    if (fstat(fd, &st) || checkpoint_io(&io, &h, sizeof h) || memcmp(h.magic, "NX2ATH1", 8) ||
+        !h.count || h.count >= MAX_H || h.next_id < 0x52 || h.reserved ||
+        st.st_size != (off_t)(sizeof h + h.count * sizeof(snapshot_thread_handle) + 4)) return -EBADMSG;
+    snapshot_thread_handle *records = calloc(h.count, sizeof *records);
+    thr_t **threads = calloc(h.count, sizeof *threads);
+    int rc = (!records || !threads) ? -ENOMEM : checkpoint_io(&io, records, h.count * sizeof *records);
+    uint32_t sum = io.crc, footer;
+    if (!rc && (checkpoint_io(&io, &footer, sizeof footer) || sum != footer)) rc = -EBADMSG;
+    G_lock();
+    if (!rc && g_all) rc = -EBUSY;
+    for (unsigned i = 0; !rc && i < h.count; ++i) {
+        const snapshot_thread_handle *r = &records[i];
+        unsigned slot = r->handle - 0x1000;
+        if (!slot || slot >= MAX_H || g_h[slot].type || (i ? r->handle <= records[i-1].handle : slot != 1) ||
+            r->id < 0x51 || r->id >= h.next_id || r->exited > r->started || r->started > 1 || r->host > 1 ||
+            r->cancelled > 1 || r->priority < 0 || r->priority > 63 || r->core < 0 || r->core > 63 || r->reserved ||
+            (i && !r->exited && (!checkpoint_guest_pc(r->entry) || !r->stack_top || (r->stack_top & 15) ||
+             !dm_checkpoint_memory_committed(r->stack_top - 16, 16)))) { rc = -EBADMSG; break; }
+        for (unsigned j = 0; j < i; ++j) if (records[j].id == r->id) { rc = -EBADMSG; break; }
+        if (rc) break;
+        thr_t *t = calloc(1, sizeof *t);
+        if (!t) { rc = -ENOMEM; break; }
+        if (pthread_cond_init(&t->cv, NULL)) { free(t); rc = -ENOMEM; break; }
+        if (pthread_cond_init(&t->pcv, NULL)) { pthread_cond_destroy(&t->cv); free(t); rc = -ENOMEM; break; }
+        t->handle = r->handle; t->id = r->id; t->entry = r->entry; t->arg = r->arg; t->stack_top = r->stack_top;
+        t->mask = r->mask; t->core = r->core; t->prio = r->priority; t->host_owned = r->host;
+        t->exited = r->exited; t->cancel = r->cancelled; t->checkpoint_was_started = r->started;
+        threads[i] = t;
+    }
+    if (!rc) {
+        for (unsigned i = 0; i < h.count; ++i) {
+            thr_t *t = threads[i];
+            unsigned slot = t->handle - 0x1000;
+            g_h[slot].type = O_THREAD; g_h[slot].obj = t;
+            t->all = g_all; g_all = t;
+        }
+        g_next_id = h.next_id; g_wseq = h.wait_sequence;
+    }
+    pthread_mutex_unlock(&G);
+    if (rc && threads) for (unsigned i = 0; i < h.count; ++i) if (threads[i]) {
+        pthread_cond_destroy(&threads[i]->cv); pthread_cond_destroy(&threads[i]->pcv); free(threads[i]);
+    }
+    free(threads); free(records);
+    return rc;
 }

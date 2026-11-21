@@ -1,5 +1,8 @@
 // Import resolution (implemented ones go to the host, the rest go to named stubs) and host gate dispatch.
 #include "dm.h"
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+#include "../android/checkpoint_pause.h"
+#endif
 #include <mach-o/getsect.h>
 #include <mach-o/ldsyms.h>
 #include <dlfcn.h>
@@ -80,11 +83,14 @@ void gate_register(uint64_t ret_abs, const char *kind, int arg, uint64_t orig) {
 uint64_t svc_dispatch(int num, uint64_t *regs, uint64_t orig_addr);   // hle_svc.c
 
 uint64_t gate_dispatch(uint64_t ret_addr, uint64_t *regs) {
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+    if (atomic_load_explicit(&dm_checkpoint_pausing, memory_order_relaxed)) dm_checkpoint_gate_pause();
+#endif
     for (unsigned i = gate_h(ret_addr);; i = (i + 1) & ((1u << GATE_BITS) - 1)) {
         const gate_t *g = &g_gate[i];
         if (g->ret == ret_addr) switch (g->kind) {
             case G_CNTPCT: case G_CNTVCT: {
-                guest_clock_read_wait();
+                guest_clock_frame_wait(regs, g->orig);
                 uint64_t t = guest_ns() * 12 / 625;    // 19.2 MHz system counter; original instruction mrs xN, cntpct_el0, arg = N
                 regs[g->arg] = t;
                 return t;

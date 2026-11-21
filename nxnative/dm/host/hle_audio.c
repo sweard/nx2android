@@ -6,6 +6,7 @@
 #include <AudioToolbox/AudioToolbox.h>
 #include <TargetConditionals.h>
 #include <dispatch/dispatch.h>
+#include <errno.h>
 #include <sched.h>
 #include <stdatomic.h>
 #include <unistd.h>
@@ -17,6 +18,9 @@ typedef struct { void *ptr; uint64_t cap, size; } gbuf;     // The first 24 byte
 #define QMAX 64
 #define RELMAX QMAX                    // Released max = number of in-flight buffers (the game must take a buffer back before it can append again), same limit as pending
 typedef struct {
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+    void *checkpoint_key;
+#endif
     pthread_mutex_t m;
     void *event;                       // Guest SystemEvent: signaled whenever a buffer is released
     int ch;
@@ -319,6 +323,9 @@ static Result au_open_at(void *g, void *ev, const char *name, const uint8_t *par
     a->notify_sem = dispatch_semaphore_create(0); a->id = atomic_fetch_add(&nopen, 1);
     pthread_create(&a->notify_th, NULL, event_notify, a);
     if (ev) hle_bind_system_event(ev, 1);   // Buffer release event: bind a kernel event on the guest thread (auto-clear), afterwards signaled by the audio thread
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+    a->checkpoint_key = g;
+#endif
     objmap_put(g, a);
     // the SDK's AudioOut starts with a word that is non-zero while it is open (its session), and games read it: Xenoblade Chronicles 3 stops and closes an
     // output only when that word is set (main+0x11ecd98), then clears it. Left zero, every operation mode change opened another output beside the old ones,
@@ -502,3 +509,116 @@ void dm_audio_reset(void) {
     LOG("audio outputs set up again after the media services reset");
     pthread_mutex_unlock(&g_aos_lock);
 }
+
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+// Called by the single checkpoint coordinator after all guest producers
+// and the SDK renderer have parked. A held pull also pins the output
+// against au_close until the coordinator releases it.
+static aout *checkpoint_pulls[AOMAX];
+void dm_checkpoint_audio_end(void) {
+    for (int i = 0; i < AOMAX; ++i) {
+        if (checkpoint_pulls[i]) pull_end(checkpoint_pulls[i]);
+        checkpoint_pulls[i] = NULL;
+    }
+}
+int dm_checkpoint_audio_begin(void) {
+    const uint64_t deadline = now_ns() + 500000000;
+    for (;;) {
+        int ready = 1;
+        pthread_mutex_lock(&g_aos_lock);
+        for (int i = 0; i < AOMAX; ++i) {
+            aout *a = g_aos[i];
+            if (!a) continue;
+            if (!checkpoint_pulls[i] && pull_begin(a)) checkpoint_pulls[i] = a;
+            if (checkpoint_pulls[i] != a || atomic_load(&a->notify_armed) ||
+                atomic_load(&a->notify_pending)) ready = 0;
+        }
+        pthread_mutex_unlock(&g_aos_lock);
+        if (ready) return 0;
+        if (now_ns() >= deadline) break;
+        usleep(1000);
+    }
+    dm_checkpoint_audio_end();
+    return -EBUSY;
+}
+#include "../android/checkpoint_io.h"
+#include "../android/checkpoint_memory.h"
+#include <sys/stat.h>
+
+// Guest-owned AudioOuts only. The renderer owns a separate PCM sink with
+// process-local buffers. It must create that sink with its own worker.
+typedef struct {
+    uint64_t key, event, released[RELMAX];
+    uint32_t channels, volume, state, count;
+} checkpoint_audio_out;
+
+static int audio_range(uint64_t address, size_t bytes) {
+    if (dm_checkpoint_memory_committed(address, bytes)) return 1;
+    module_t *m = module_of((void *)(uintptr_t)address);
+    if (!m) return 0;
+    uintptr_t off = address - (uintptr_t)m->base;
+    return off >= m->data_off && off < m->size && bytes <= m->size - off;
+}
+
+int dm_checkpoint_audio_outputs(int fd, int restore) {
+    struct {
+        char magic[8];
+        uint32_t count, crc;
+        checkpoint_audio_out out[AOMAX];
+    } table = {.magic = "NX2AAU1"};
+    checkpoint_stream io = {.fd = fd, .loading = restore};
+    if (!restore) {
+        for (int i = 0; i < AOMAX; ++i) {
+            aout *a = checkpoint_pulls[i];
+            if (!a || a->rel_sem) continue;
+            if (atomic_load(&a->q_head) != atomic_load(&a->q_tail) || a->pos) return -EBUSY;
+            checkpoint_audio_out *r = &table.out[table.count++];
+            r->key = (uintptr_t)a->checkpoint_key;
+            r->event = (uintptr_t)a->event;
+            r->channels = a->ch;
+            r->state = atomic_load(&a->state);
+            r->volume = atomic_load(&a->vol);
+            uint32_t head = atomic_load(&a->rel_head);
+            r->count = atomic_load(&a->rel_tail) - head;
+            if (r->count > RELMAX) return -ERANGE;
+            for (unsigned j = 0; j < r->count; ++j) r->released[j] = (uintptr_t)a->rel[(head+j) % RELMAX];
+        }
+        table.crc = crc32(0, (const Bytef *)table.out, sizeof table.out);
+    }
+    int rc = checkpoint_io(&io, &table, sizeof table);
+    if (rc || !restore) return rc;
+    struct stat st;
+    if (fstat(fd, &st) || st.st_size != sizeof table || memcmp(table.magic, "NX2AAU1", 8) ||
+        table.count > AOMAX || table.crc != crc32(0, (const Bytef *)table.out, sizeof table.out)) return -EBADMSG;
+    for (unsigned i = 0; i < table.count; ++i) {
+        const checkpoint_audio_out *r = &table.out[i];
+        if (!audio_range(r->key, 4) || (r->event && !audio_range(r->event, 0x30)) ||
+            (r->channels != 2 && r->channels != 6) || r->state > STATE_STOPPED || r->count > RELMAX) return -ERANGE;
+        void *key = (void *)(uintptr_t)r->key;
+        if (objmap_get(key)) return -EEXIST;
+        for (unsigned j = 0; j < r->count; ++j)
+            if (!audio_range(r->released[j], sizeof(gbuf))) return -ERANGE;
+        uint32_t param[2] = {RATE, r->channels};
+        rc = au_open_at(key, (void *)(uintptr_t)r->event, NULL, (const uint8_t *)param, NULL);
+        if (rc) return -EIO;
+        aout *a = ao(key);
+        for (unsigned j = 0; j < r->count; ++j) a->rel[j] = (gbuf *)(uintptr_t)r->released[j];
+        atomic_store(&a->rel_tail, r->count);
+        atomic_store(&a->vol, r->volume);
+        if (r->state == STATE_STARTED) au_start_at(key, NULL);
+        LOG("[snapshot] restored guest AudioOut channels=%u released=%u", r->channels, r->count);
+    }
+    return 0;
+}
+void dm_checkpoint_report_audio(void) {
+    pthread_mutex_lock(&g_aos_lock);
+    for (int i = 0; i < AOMAX; ++i) {
+        aout *a = g_aos[i];
+        if (!a) continue;
+        LOG("[snapshot] audio output #%d channels=%d pending=%u released=%u position=%llu host_sink=%d",
+            a->id, a->ch, atomic_load(&a->q_tail) - atomic_load(&a->q_head),
+            atomic_load(&a->rel_tail) - atomic_load(&a->rel_head), (unsigned long long)a->pos, !!a->rel_sem);
+    }
+    pthread_mutex_unlock(&g_aos_lock);
+}
+#endif

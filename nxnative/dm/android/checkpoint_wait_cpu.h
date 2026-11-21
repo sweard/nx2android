@@ -12,3 +12,7 @@ int dm_checkpoint_wait_cpu_capture(uint32_t handle, dm_checkpoint_wait_cpu *out)
 // its signal frame only after success. Guest TLS storage must already exist.
 int dm_checkpoint_wait_cpu_supported(const dm_checkpoint_wait_cpu *saved);
 int dm_checkpoint_wait_cpu_finish(dm_checkpoint_wait_cpu *saved);
+
+#define DM_CHECKPOINT_RETRY_CLOCK UINT32_MAX
+int dm_checkpoint_clock_cpus(dm_checkpoint_wait_cpu *out, unsigned capacity, unsigned *count);
+int dm_checkpoint_clock_cpu_finish(dm_checkpoint_wait_cpu *saved);

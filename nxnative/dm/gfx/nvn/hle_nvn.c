@@ -9,6 +9,10 @@
 // Every implementation gets a compile-time signature check against the prototypes in nvn_protos.h (NVNboolean parameters are received as uint32_t, only the low 8 bits are looked at).
 // Environment switches: DM_NVN_FRAMES=N prints the call table per frame for the first N frames (default 3); DM_NVN_TSV=path writes the per-frame call table and timing to a TSV (DM_NVN_TSV_CALLS=0 writes timing only); DM_SLOWFRAME=1 writes only the per-frame breakdown of dropped frames to the log; DM_NVN_LOG=1 logs object creation.
 #include "../../host/hle.h"
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+#include "../../android/checkpoint_memory.h"
+#include "../../android/checkpoint_io.h"
+#endif
 #include "../../host/dm_pacing.h"   // the frame-pacing policy
 #include "nvn_protos.h"
 #include "nvn_count.h"
@@ -106,7 +110,13 @@ static void nvn_prof_install(void) {
 static void *nvn_lookup(const char *name) {
     nvn_init_slots(); nvn_prof_install();
     for (unsigned i = 0; i < NVN_NFUNC; i++)
-        if (!strcmp(nvn_names[i], name)) return nvn_thunk[i];
+        if (!strcmp(nvn_names[i], name)) {
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+            void *stable = dm_checkpoint_nvn_slot(i);
+            if (stable) return stable;
+#endif
+            return nvn_thunk[i];
+        }
     LOG("[RED] NVN address lookup of an unknown name: %s", name ? name : "(null)");
     return NULL;
 }
@@ -1286,7 +1296,7 @@ __attribute__((weak)) void dm_vk_drain(void) {}   // dm/gfx/vk/hle_vk.m: wait fo
 __attribute__((weak)) void dm_gl_drain(void) {}   // dm/gfx/gl/hle_gl.m: the same for the GL layer
 void dm_gfx_suspend(int on) {
     pthread_mutex_lock(&g_susp_mu);
-    g_susp = on != 0;
+    g_susp = (g_susp & ~1) | (on != 0);
     if (on) while (g_inflight_api) pthread_cond_wait(&g_susp_cv, &g_susp_mu);
     else pthread_cond_broadcast(&g_susp_cv);
     pthread_mutex_unlock(&g_susp_mu);
@@ -1353,10 +1363,20 @@ static int job_wait(uint64_t id, uint64_t timeout_ns) {
     pthread_mutex_unlock(&g_job_mu); return 1;
 }
 // The fence a sync takes now: the last job queued, or the last commit when replay is synchronous
-static uint64_t nvn_fence_now(void) { return nvn_async() ? ASYNC_FENCE | g_job_enq : mtl_last_fence(); }
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+static uint64_t checkpoint_device_fence, checkpoint_done_job;
+uint64_t dm_checkpoint_guest_fence(uint64_t physical) { return checkpoint_device_fence + physical; }
+#define NVN_FENCE_BASE checkpoint_device_fence
+#else
+#define NVN_FENCE_BASE UINT64_C(0)
+#endif
+static uint64_t nvn_fence_now(void) { return nvn_async() ? ASYNC_FENCE | g_job_enq : NVN_FENCE_BASE + mtl_last_fence(); }
 // mtl_wait for a fence nvn_fence_now gave: first the job's replay, then its commit fence on the GPU (a job too old for the ring has long been replayed: the latest fence covers it)
 static int nvn_fence_wait(uint64_t f, uint64_t timeout_ns) {
-    if (!(f & ASYNC_FENCE)) return mtl_wait(f, timeout_ns);
+    if (!(f & ASYNC_FENCE)) return f <= NVN_FENCE_BASE || mtl_wait(f - NVN_FENCE_BASE, timeout_ns);
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+    if ((f & ~ASYNC_FENCE) <= checkpoint_done_job) return 1;
+#endif
     uint64_t id = f & ~ASYNC_FENCE, t0 = now_ns();
     if (job_wait(id, timeout_ns) < 0) return 0;
     pthread_mutex_lock(&g_job_mu); uint64_t real = g_job_done - id < JOB_RING ? g_job_fence[id % JOB_RING] : mtl_last_fence(); pthread_mutex_unlock(&g_job_mu);
@@ -1367,6 +1387,78 @@ static int nvn_fence_wait(uint64_t f, uint64_t timeout_ns) {
         if (g_tl_n == 300) { LOG("[timeline] per frame: game gap %.1f ms, queue delay %.1f, replay %.1f, GPU tail %.1f; %.1f jobs", g_tl_sum[0] / 3e8, g_tl_sum[1] / 3e8, g_tl_sum[2] / 3e8, g_tl_sum[3] / 3e8, g_tl_jobs / 300.0); memset(g_tl_sum, 0, sizeof g_tl_sum); g_tl_n = 0; g_tl_jobs = 0; } }
     return r;
 }
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+int dm_checkpoint_present_begin(int report_busy);
+void dm_checkpoint_present_end(void);
+int dm_checkpoint_present_ticket(uint64_t *value, int restore);
+
+// The capture gate has drained all jobs, Vulkan completions and presents.
+// Keep their guest-visible numbering while using fresh physical Vulkan fences.
+int dm_checkpoint_graphics_timeline(int fd, int restore) {
+    struct { char magic[8]; uint64_t frame, jobs, device, ticket; } t = {
+        .magic = "NX2AGT1", .frame = g_frame, .jobs = g_job_done,
+        .device = NVN_FENCE_BASE + mtl_last_fence()
+    };
+    checkpoint_stream io = {.fd = fd, .loading = restore};
+    int rc = restore ? 0 : dm_checkpoint_present_ticket(&t.ticket, 0);
+    if (!rc) rc = checkpoint_io(&io, &t, sizeof t);
+    uint32_t expected = io.crc, sum = expected;
+    if (!rc) rc = checkpoint_io(&io, &sum, sizeof sum);
+    if (rc || !restore) return rc;
+    if (sum != expected || memcmp(t.magic, "NX2AGT1", 8) ||
+        ((t.frame | t.jobs | t.device | t.ticket) & ASYNC_FENCE) ||
+        g_frame || g_job_enq || g_job_done) return -EBADMSG;
+    if ((rc = dm_checkpoint_present_ticket(&t.ticket, 1))) return rc;
+    g_frame = t.frame;
+    g_job_enq = g_job_done = checkpoint_done_job = t.jobs;
+    checkpoint_device_fence = t.device;
+    LOG("[snapshot] restored graphics timeline: frame=%llu jobs=%llu device=%llu present=%llu",
+        (unsigned long long)t.frame, (unsigned long long)t.jobs, (unsigned long long)t.device, (unsigned long long)t.ticket);
+    return 0;
+}
+
+int dm_checkpoint_graphics_begin(int report_busy) {
+    pthread_mutex_lock(&g_susp_mu);
+    if (g_susp || g_inflight_api) {
+        if (report_busy) LOG("[snapshot] graphics busy: lifecycle=%d in-flight API=%d", g_susp, g_inflight_api);
+        pthread_mutex_unlock(&g_susp_mu);
+        return -EBUSY;
+    }
+    g_susp |= 2;
+    pthread_mutex_unlock(&g_susp_mu);
+
+    int rc = -EBUSY;
+    if (!pthread_mutex_trylock(&g_sub_mu)) {
+        pthread_mutex_lock(&g_job_mu);
+        int idle = !g_njob && g_job_done == g_job_enq;
+        if (!idle && report_busy) LOG("[snapshot] replay pending: queued=%d", g_njob);
+        pthread_mutex_unlock(&g_job_mu);
+        if (idle) rc = dm_checkpoint_present_begin(report_busy);
+        if (!rc) {
+            // GPU idle precedes the completion worker's writes into guest
+            // memory (reports, events and shadow-pool copies).
+            if (mtl_wait(mtl_last_fence(), 1000000000ull)) return 0;
+            dm_checkpoint_present_end();
+            rc = -ETIMEDOUT;
+        }
+        pthread_mutex_unlock(&g_sub_mu);
+    } else if (report_busy) LOG("[snapshot] submission mutex held");
+    pthread_mutex_lock(&g_susp_mu);
+    g_susp &= ~2;
+    pthread_cond_broadcast(&g_susp_cv);
+    pthread_mutex_unlock(&g_susp_mu);
+    return rc;
+}
+
+void dm_checkpoint_graphics_end(void) {
+    dm_checkpoint_present_end();
+    pthread_mutex_unlock(&g_sub_mu);
+    pthread_mutex_lock(&g_susp_mu);
+    g_susp &= ~2;
+    pthread_cond_broadcast(&g_susp_cv);
+    pthread_mutex_unlock(&g_susp_mu);
+}
+#endif
 static void nvn_drain(void) { if (nvn_async()) job_wait(g_job_enq, ~0ull); }   // every job queued so far replayed
 static void replay_lock(void) { if (nvn_async()) pthread_mutex_lock(&g_sub_mu); }
 static void replay_unlock(void) { if (nvn_async()) pthread_mutex_unlock(&g_sub_mu); }

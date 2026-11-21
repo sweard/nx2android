@@ -12,6 +12,16 @@ public class GameActivity extends NativeActivity {
 
     private native void chooseCheckpoint(boolean restore);
 
+    private void offerRuntimeCheckpoint() {
+        getWindow().getDecorView().post(() -> new AlertDialog.Builder(this)
+                .setTitle("恢复游戏检查点？")
+                .setMessage("回到手动保存检查点时的位置。此测试版会在独立的存档副本中继续游戏。")
+                .setPositiveButton("恢复检查点", (dialog, which) -> chooseCheckpoint(true))
+                .setNegativeButton("正常启动", (dialog, which) -> chooseCheckpoint(false))
+                .setOnCancelListener(dialog -> chooseCheckpoint(false))
+                .show());
+    }
+
     private void offerCheckpoint() {
         runOnUiThread(() -> new AlertDialog.Builder(this)
                 .setTitle("Game checkpoint")

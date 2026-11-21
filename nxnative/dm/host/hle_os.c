@@ -2,6 +2,9 @@
 // (The former 136 HLE entries for nn::os/mem/lmem/C++ ABI have been deleted: the SDK brings its own nn::os, and at load time not one of these entries was resolved and used.)
 #include <pthread.h>
 #include "hle.h"
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+#include "../android/checkpoint_pause.h"
+#endif
 #include <mach/mach_time.h>
 #include <stdatomic.h>
 
@@ -77,11 +80,50 @@ static pthread_mutex_t g_gfz_mu = PTHREAD_MUTEX_INITIALIZER; static unsigned g_g
 // frames as its period, got 0, and the next frame's loop that steps by it (main+0x9abd0) never ended. Guest reads of the system counter (the cntpct gate, svc GetSystemTick) wait while
 // the app is in the background (reason 1); host work (dm_host_work: inside a submit or present, which the graphics suspend waits for) reads the frozen clock, as do the other reasons
 static pthread_cond_t g_gfz_cv = PTHREAD_COND_INITIALIZER; static _Atomic int g_gfz_bg;
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+// Stop the host-owned renderer between completed SDK callbacks. If the menu
+// opens mid-callback it may finish reading the (frozen) clock, just like an
+// in-flight GPU submit. The next callback waits outside the audio order mutex.
+static _Thread_local int checkpoint_audio_frame;
+
+int dm_checkpoint_clock_rebase(uint64_t ns, uint64_t frame) {
+    if (!ns || detclock_cfg()) return -1;
+    pthread_mutex_lock(&g_gfz_mu);
+    atomic_store(&g_glag, now_ns() - ns);
+    if (atomic_load(&g_gfz)) atomic_store(&g_gfrozen, ns);
+    atomic_store(&g_guest_frame, frame);
+    pthread_mutex_unlock(&g_gfz_mu);
+    return 0;
+}
+
+void dm_checkpoint_audio_frame_begin(void) {
+    if (atomic_load(&g_gfz_bg)) {
+        dm_checkpoint_helper_idle(1);
+        pthread_mutex_lock(&g_gfz_mu);
+        while (g_gfz_reasons & 2u) pthread_cond_wait(&g_gfz_cv, &g_gfz_mu);
+        pthread_mutex_unlock(&g_gfz_mu);
+        dm_checkpoint_helper_idle(0);
+    }
+    checkpoint_audio_frame = 1;
+}
+void dm_checkpoint_audio_frame_end(void) { checkpoint_audio_frame = 0; }
+
+void guest_clock_read_wait(void) { guest_clock_frame_wait(NULL, 0); }
+void guest_clock_frame_wait(uint64_t *regs, uint64_t orig) {
+#else
 void guest_clock_read_wait(void) {
+#endif
     if (!atomic_load(&g_gfz_bg) || atomic_load(&dm_host_work)) return;
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+    if (checkpoint_audio_frame) return;
+    dm_checkpoint_clock_wait(1, regs, orig);
+#endif
     pthread_mutex_lock(&g_gfz_mu);
     while (g_gfz_reasons & 2u) pthread_cond_wait(&g_gfz_cv, &g_gfz_mu);
     pthread_mutex_unlock(&g_gfz_mu);
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+    dm_checkpoint_clock_wait(0, NULL, 0);
+#endif
 }
 void guest_clock_freeze_for(int reason, int on) {
     pthread_mutex_lock(&g_gfz_mu);

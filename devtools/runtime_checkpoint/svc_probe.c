@@ -8,9 +8,34 @@
 #include <signal.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <pthread.h>
+#include "checkpoint_pause.h"
+
+uint32_t svc_thread_main_init(void);
+static void *pause_coordinator(void *unused) {
+    (void)unused;
+    if (dm_checkpoint_pause_begin()) die("cooperative checkpoint timed out");
+    if (dm_checkpoint_pause_begin() != -EBUSY) die("second coordinator acquired the pause");
+    dm_checkpoint_pause_end();
+    return NULL;
+}
+static int verify_pause(void) {
+    // The only registered guest is this thread. First keep it running,
+    // then let it join at a gate. The second round requires complete cleanup.
+    svc_thread_main_init();
+    if (dm_checkpoint_pause_begin() != -ETIMEDOUT || atomic_load(&dm_checkpoint_pausing)) return 1;
+    pthread_t controller;
+    if (pthread_create(&controller, NULL, pause_coordinator, NULL)) return 1;
+    while (!atomic_load(&dm_checkpoint_pausing)) sched_yield();
+    dm_checkpoint_gate_pause();
+    if (pthread_join(controller, NULL) || atomic_load(&dm_checkpoint_pausing)) return 1;
+    puts("Timeout released the pause; the next guest rendezvous and resume succeeded.");
+    return 0;
+}
 
 uint64_t svc_dispatch(int num, uint64_t *regs, uint64_t orig_addr);
 void svc_wait_checkpoint(uintptr_t heap, uintptr_t stack, const char *mods, int fd, int restore);
+void svc_clock_checkpoint(uintptr_t heap, const char *mods, int restore);
 void svc_image_checkpoint(uintptr_t heap, int fd, int bindings, int restore);
 void svc_gpu_checkpoint(uintptr_t heap, int memfd, int poolfd, int restore);
 void sdk_worker_checkpoint(uintptr_t heap, uintptr_t stack, int restore);
@@ -25,6 +50,11 @@ static uint64_t svc(int num, uint64_t a, uint64_t b, uint64_t c) {
 }
 
 int __wrap_main(int argc, char **argv) {
+    if (argc == 4 && !strcmp(argv[1], "replay-core")) {
+        int svc_replay_scene_core(const char *, const char *, void (*)(const char *, const char **, int));
+        return svc_replay_scene_core(argv[2], argv[3], load_modules);
+    }
+    if (argc == 2 && !strcmp(argv[1], "pause-test")) return verify_pause();
     if (argc == 4 && !strcmp(argv[1], "replay-image")) {
         int in = open(argv[2], O_RDONLY), out = open(argv[3], O_CREAT | O_EXCL | O_RDWR, 0600);
         int svc_replay_scene_image(int, int);
@@ -99,6 +129,7 @@ int __wrap_main(int argc, char **argv) {
         sdk_worker_checkpoint(heap, stack, 0);
         svc(0x04, stack + 0x30000, heap + 0xb0000, 0x10000);
         svc_wait_checkpoint(heap, stack, argv[2], events, 0);
+        svc_clock_checkpoint(heap, argv[2], 0);
         extern void vk_init(void);
         vk_init();
         svc_image_checkpoint(heap, images, bindings, 0);
@@ -121,6 +152,7 @@ int __wrap_main(int argc, char **argv) {
         svc_gpu_checkpoint(heap, fd, pfd, 1);
         sdk_worker_checkpoint(heap, stack, 1);
         svc_wait_checkpoint(heap, stack, argv[2], events, 1);
+        svc_clock_checkpoint(heap, argv[2], 1);
         svc_image_checkpoint(heap, images, bindings, 1);
         uint64_t info[6] = {0};
         svc(0x06, (uintptr_t)info, 0, stack);

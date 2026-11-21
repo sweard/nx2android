@@ -230,6 +230,10 @@ static int ubwc_mode(void) { static int v = -1; if (v < 0) { const char *e = get
 static vkimg_t *img_new(const tex_t *t, const vkfmt_t *f) {
     vkimg_t *im = calloc(1, sizeof *im);
     const nvn_texdesc *d = &t->d;
+    if (!im) return NULL;
+#ifdef DM_MANUAL_CHECKPOINT
+    im->checkpoint_desc = *d;
+#endif
     im->w = d->width ? d->width : 1; im->h = d->target == 0 || d->target == 3 ? 1 : (d->height ? d->height : 1);
     im->d = d->target == 2 ? (d->depth ? d->depth : 1) : 1; im->layers = layers_of(d);
     im->levels = d->levels ? d->levels : 1; im->samples = d->samples > 1 ? d->samples : 1; im->target = d->target; im->nvn_format = d->format;
@@ -1145,4 +1149,5 @@ void dm_checkpoint_report_images(void) {
 #ifdef DM_MANUAL_CHECKPOINT
 #include "checkpoint_image.inc"
 #include "checkpoint_bindings.inc"
+#include "checkpoint_scene_images.inc"
 #endif
