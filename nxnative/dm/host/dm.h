@@ -8,6 +8,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include "game_profile.h"   // constants of the current game profile (generated from dm/games/<id>/game.tsv, chosen by the Makefile's GAME)
+#ifdef DM_CHECKPOINT_HEAP_CTORS
+extern int dm_checkpoint_native_heap;
+#else
+#define dm_checkpoint_native_heap 0
+#endif
 
 #define MAX_MOD 128   // the profile's modules (up to 8) and the NROs a game loads at run time (Super Smash Bros. Ultimate: 98)
 // Seconds since process start, the same origin the fs read log uses (hle_fs.c's g_t0_ns), so log.txt and fslog.tsv line up. g_t0_ns is set once by

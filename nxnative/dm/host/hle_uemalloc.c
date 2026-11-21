@@ -94,6 +94,7 @@ static void obj_made(const uint64_t *regs) {
 
 // Called once the modules are loaded and relocated, before any guest code runs
 void dm_ue_malloc_install(void) {
+    if (dm_checkpoint_native_heap) return;
     for (int i = 0; i < g_nmod; i++) if (!strcmp(g_mod[i].name, "main"))
         for (int k = 0; k < NUE; k++) if (!strcmp(g_mod[i].build_id, k_ue[k].build)) {
             uint8_t *b = g_mod[i].base; int L = k_ue[k].layout;

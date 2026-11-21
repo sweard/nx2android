@@ -84,6 +84,25 @@ CFLAGS = [TARGET, f'-O{a.O}'] + DBG + ['-fPIC', '-fno-omit-frame-pointer', '-ffi
           '-Wno-format', '-Wno-deprecated-declarations', '-Wno-gnu-folding-constant', '-Werror=implicit-function-declaration', '-Werror=return-type',
           '-Werror=incompatible-pointer-types', '-Werror=int-conversion', '-D_GNU_SOURCE', '-DDM_ANDROID=1', '-fno-strict-aliasing', '-fvisibility=hidden'] + (['-DDM_RELEASE=1'] if a.release else [])
 if a.manual_checkpoint: CFLAGS.append('-DDM_MANUAL_CHECKPOINT=1')
+if a.field_checkpoint:
+    # A derived profile can reuse its upstream constructor rows. The loader
+    # selects by the actual main build ID before reserving any guest memory.
+    sys.path.insert(0, str(DM / 'games'))
+    from game import find_dir
+    filename = 'checkpoint_heap.tsv'
+    table = find_dir(a.game) / filename
+    if not table.exists(): table = DM / 'games' / a.game / filename
+    if table.is_file():
+        rows = []
+        for line in table.read_text().splitlines():
+            if not line or line.startswith('#'): continue
+            build, offset, opcode = line.split('\t')
+            if not re.fullmatch('[0-9a-f]{32}', build): raise ValueError(f'{table}: invalid build ID')
+            offset, opcode = int(offset, 0), int(opcode, 0)
+            if offset < 0 or offset % 4 or opcode >> 26 != 0x25:
+                raise ValueError(f'{table}: invalid constructor call')
+            rows.append(f'{{"{build}",{offset:#x},{opcode:#x}}}')
+        if rows: CFLAGS.append('-DDM_CHECKPOINT_HEAP_CTORS=' + ','.join(rows))
 VPX_FLAGS = [TARGET, '-O2'] + DBG + ['-fPIC', f'-I{DM / "third_party/libvpx"}', f'-I{DM / "third_party/libvpx/config"}', '-w']
 ZSTD_FLAGS = [TARGET, '-O2'] + DBG + ['-fPIC', '-fvisibility=hidden', '-DZSTDLIB_VISIBLE=', '-DZSTDERRORLIB_VISIBLE=', '-w']   # its API stays inside libdmhost.so
 

@@ -12,18 +12,30 @@ static uint64_t checkpoint_wait_now(int guest) {
     return (uint64_t)ts.tv_sec * 1000000000 + ts.tv_nsec;
 }
 
+// The synchronization event has already woken this waiter, but the pause gate
+// still holds its native thread inside block(). Recheck the saved handle set
+// on resume, just as svcThread's WaitSynchronization loop does after wake().
+enum { CP_WOKEN_SYNC = 5 };
+static int checkpoint_woken_sync(const thr_t *t) {
+    uint32_t svc = t->checkpoint_retry_cpu ? t->checkpoint_retry_cpu->svc : t->last_svc;
+    return t->checkpoint_stop == CP_KERNEL_WAIT && !t->wkind && t->woke && t->wres == -1 && svc == 0x18;
+}
+
 int dm_checkpoint_waits_capture(dm_checkpoint_wait *items, unsigned capacity, unsigned *count) {
     *count = 0;
     G_lock();
     int rc = 0;
-    for (thr_t *t = g_wait; t; t = t->next) {
+    for (thr_t *t = g_all; t; t = t->all) {
+        int kind = t->wkind;
+        if (checkpoint_woken_sync(t)) kind = CP_WOKEN_SYNC;
+        if (!kind) continue;
         if (*count >= capacity) { rc = -ENOSPC; break; }
-        if (t->host_owned || t->closed || t->woke) { rc = -ENOTSUP; break; }
+        if (t->host_owned || t->closed || (kind != CP_WOKEN_SYNC && t->woke)) { rc = -ENOTSUP; break; }
         uint64_t now = checkpoint_wait_now(t->checkpoint_guest_clock);
         items[(*count)++] = (dm_checkpoint_wait){
-            .thread = t->handle, .kind = t->wkind, .sequence = t->wseq,
-            .address = t->wkind == 4 ? 0 : t->waddr, .key = t->wkind == 2 ? t->wkey : 0,
-            .tag = t->wkind <= 2 ? t->wtag : 0, .priority = t->prio, .cancelled = t->cancel,
+            .thread = t->handle, .kind = kind, .sequence = t->wseq,
+            .address = kind >= 4 ? 0 : t->waddr, .key = kind == 2 ? t->wkey : 0,
+            .tag = kind <= 2 ? t->wtag : 0, .priority = t->prio, .cancelled = t->cancel,
             .handles = (uintptr_t)t->whs, .count = t->whn,
             .remaining_ns = !t->checkpoint_deadline ? -1 :
                 t->checkpoint_deadline > now ? (int64_t)(t->checkpoint_deadline - now) : 0};
@@ -54,11 +66,11 @@ int dm_checkpoint_waits_install(const dm_checkpoint_wait *items, unsigned count)
         const dm_checkpoint_wait *w = &items[i];
         thr_t *t = h_peek(w->thread, O_THREAD);
         if (!t || t->handle != w->thread || t->started || t->closed || t->prio != w->priority ||
-            w->kind < 1 || w->kind > 4 || !w->sequence || w->sequence >= UINT64_MAX - MAX_H ||
+            w->kind < 1 || w->kind > CP_WOKEN_SYNC || !w->sequence || w->sequence >= UINT64_MAX - MAX_H ||
             w->remaining_ns < -1 || (w->cancelled != 0 && w->cancelled != 1) ||
             (w->kind < 4 && (!checkpoint_wait_word(w->address) || w->count || w->handles)) ||
             (w->kind == 2 && !checkpoint_wait_word(w->key)) ||
-            (w->kind == 4 && (w->count > 64 || (w->count &&
+            (w->kind >= 4 && (w->count > 64 || (w->count &&
                 ((w->handles & 3) || !checkpoint_guest_bytes(w->handles, 4ull * w->count)))))) {
             rc = -EINVAL; goto out;
         }
@@ -76,7 +88,10 @@ int dm_checkpoint_waits_install(const dm_checkpoint_wait *items, unsigned count)
         t->checkpoint_deadline = w->remaining_ns < 0 ? 0 :
             checkpoint_wait_now(t->checkpoint_guest_clock) + (uint64_t)w->remaining_ns;
         if (g_wseq < w->sequence) g_wseq = w->sequence;
-        t->next = g_wait; g_wait = t;
+        if (w->kind == CP_WOKEN_SYNC) {
+            t->checkpoint_installed = 4;
+            t->wkind = 0; t->woke = 1; t->wres = -1;
+        } else { t->next = g_wait; g_wait = t; }
     }
 out:
     pthread_mutex_unlock(&G);
@@ -89,6 +104,14 @@ int dm_checkpoint_wait_finish(uint64_t *regs) {
     int kind = t->checkpoint_installed;
     if (!kind) { pthread_mutex_unlock(&G); return -EINVAL; }
     t->checkpoint_installed = 0;
+    // An event may have become signaled between capturing the waiting thread
+    // and capturing its event table. Use the restored predicate before parking.
+    if (kind == 4 && !t->woke) {
+        int bad = 0, ready = t->cancel;
+        for (uint32_t i = 0; !ready && !bad && i < t->whn; ++i)
+            ready = sig_obj(t->whs[i], &bad);
+        if (ready || bad) wake(t, -1);
+    }
     while (!t->woke) {
         uint64_t end = t->checkpoint_deadline;
         if (end && checkpoint_wait_now(t->checkpoint_guest_clock) >= end) {
@@ -256,7 +279,11 @@ int dm_checkpoint_wait_cpu_capture(uint32_t handle, dm_checkpoint_wait_cpu *out)
     int rc = -ENOTSUP;
     G_lock();
     thr_t *t = h_peek(handle, O_THREAD);
-    if (!t || t->handle != handle || !t->wkind || t->host_owned) goto done;
+    if (!t || t->handle != handle || (!t->wkind && !checkpoint_woken_sync(t)) || t->host_owned) {
+        LOG("[snapshot] wait CPU %#x: stale wait (thread=%#x kind=%d)", handle,
+            t ? t->handle : 0, t ? t->wkind : 0);
+        goto done;
+    }
     // A thread still in its original reconstructed wait has not returned
     // through the SVC gate in this PID yet. Its guest registers remain valid.
     if (t->checkpoint_retry_cpu) { *out = *t->checkpoint_retry_cpu; rc = 0; goto done; }
@@ -281,9 +308,18 @@ done:
 }
 
 int dm_checkpoint_wait_cpu_supported(const dm_checkpoint_wait_cpu *s) {
-    if (!checkpoint_guest_pc(s->cpu.pc) || (s->cpu.sp & 15) ||
-        s->cpu.sp < 816 || !dm_checkpoint_memory_committed(s->cpu.sp - 816, 816) ||
-        (s->tls && !checkpoint_guest_bytes(s->tls, 1)) || (s->tlr && !checkpoint_guest_bytes(s->tlr, 512))) return -ENOTSUP;
+    const char *field = NULL;
+    if (!checkpoint_guest_pc(s->cpu.pc)) field = "pc";
+    else if ((s->cpu.sp & 15) || s->cpu.sp < 816 ||
+             !dm_checkpoint_memory_committed(s->cpu.sp - 816, 816)) field = "stack";
+    else if (s->tls && !checkpoint_guest_bytes(s->tls, 1)) field = "TLS";
+    else if (s->tlr && !checkpoint_guest_bytes(s->tlr, 512)) field = "TLR";
+    if (field) {
+        LOG("[snapshot] thread %#x: unsupported %s (svc=%#x pc=%p sp=%p tls=%p tlr=%p)",
+            s->handle, field, s->svc, (void *)(uintptr_t)s->cpu.pc, (void *)(uintptr_t)s->cpu.sp,
+            (void *)(uintptr_t)s->tls, (void *)(uintptr_t)s->tlr);
+        return -ENOTSUP;
+    }
     return 0;
 }
 

@@ -12,6 +12,9 @@ ANDROID = Path(__file__).resolve().parents[1] / 'nxnative/dm/android'
 HARNESS = r'''
 #include <assert.h>
 #include <errno.h>
+#include <dirent.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -20,6 +23,7 @@ HARNESS = r'''
 #include <unistd.h>
 #include "checkpoint_android.h"
 #include "saves_android.h"
+#include "field_slot.inc"
 
 static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cv = PTHREAD_COND_INITIALIZER;
@@ -87,6 +91,11 @@ static void set_docked(const char *root, int docked) {
 int main(int argc, char **argv) {
     assert(argc == 5);
     const char *base = argv[1], *files = argv[2], *save = argv[3], *mode = argv[4];
+    if (!strcmp(mode, "field-start")) return __wrap_dm_checkpoint_init(base, files);
+    if (!strcmp(mode, "field-publish")) {
+        private_dir = open(base, O_RDONLY | O_DIRECTORY);
+        return private_dir < 0 || publish_scene(save);
+    }
     assert(!setenv("DM_SAVE", save, 1));
     dm_saves_paths(files);
     int ready = dm_checkpoint_init(base, files);
@@ -139,6 +148,12 @@ class ManualCheckpoint(unittest.TestCase):
         cls.executable = root / 'checkpoint'
         (root / 'dm.h').write_text('#include <stdio.h>\n#define LOG(...) ((void)0)\n')
         (root / 'saves.c').write_text('#define dm_saves_checkpoint_capture capture_impl\n#include "saves_android.c"\n')
+        field = (ANDROID.parents[2] / 'devtools/runtime_checkpoint/game_survey.c').read_text()
+        # Exercise the native slot code on a real filesystem without the Android GPU backend.
+        (root / 'field_slot.inc').write_text(
+            '#include "dm.h"\n' +
+            field[field.index('static const char *survey_files'):field.index('static _Atomic int diagnostic_state')] +
+            field[field.index('static int read_current_scene('):])
         harness = root / 'test.c'
         harness.write_text(HARNESS)
         flags = ['-Dst_ctim=st_ctimespec', '-DSYS_renameat2=-1', '-Wno-deprecated-declarations'] if sys.platform == 'darwin' else []
@@ -150,6 +165,65 @@ class ManualCheckpoint(unittest.TestCase):
                                 capture_output=True, text=True, timeout=30)
         if result.returncode:
             raise AssertionError(result.stderr)
+
+    def test_field_cleanup_at_cold_start(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            files = root / 'external'
+            files.mkdir()
+            current = root / 'runtime-checkpoint.current'
+            pending = root / 'runtime-checkpoint.pending'
+            pending.write_text('interrupted publication')
+            partial = root / '.runtime-survey-core.abc123'
+            partial.mkdir()
+            user_save = root / 'save'
+            user_save.mkdir()
+            (user_save / 'slot').write_text('game progress')
+            link = root / '.runtime-survey-core.lnk123'
+            link.symlink_to(user_save, target_is_directory=True)
+            (partial / 'link').symlink_to(user_save, target_is_directory=True)
+            parts = [files / ('.runtime-survey-' + name + '.part') for name in ('threads', 'field-image')]
+            for part in parts:
+                part.touch()
+            unrelated = files / 'unrelated.part'
+            unrelated.touch()
+
+            def start(expected):
+                result = subprocess.run([self.executable, root, files, '', 'field-start'], timeout=5)
+                self.assertEqual(result.returncode, expected)
+
+            # A killed first save may have only an empty or partly populated directory.
+            start(0)
+            self.assertFalse(partial.exists() or pending.exists() or any(p.exists() for p in parts))
+            self.assertTrue(link.is_symlink() and unrelated.exists())
+            sections = 'events bindings modules memory pools threads images handles files mounts audio timeline renderer'
+            old = root / '.runtime-survey-core.old123'
+            latest = root / '.runtime-survey-core.new123'
+            for slot in (old, latest):
+                slot.mkdir()
+                for section in sections.split():
+                    (slot / section).write_text(section)
+                subprocess.run([self.executable, root, files, slot, 'field-publish'], check=True)
+
+            partial.mkdir()
+            pending.write_text(partial.name)
+            start(2)
+            start(2)
+            self.assertEqual(current.read_text(), latest.name)
+            self.assertEqual((latest / 'memory').read_text(), 'memory')
+            self.assertFalse(old.exists() or partial.exists() or pending.exists())
+            self.assertEqual((user_save / 'slot').read_text(), 'game progress')
+
+            # If the marker or its target is damaged, never guess which slot to erase.
+            old.mkdir()
+            (latest / 'memory').unlink()
+            start(0)
+            current.write_text('invalid')
+            start(0)
+            current.unlink()
+            current.symlink_to('missing')
+            start(0)
+            self.assertTrue(old.is_dir() and latest.is_dir())
 
     def run_case(self, mode, check, change=None):
         with tempfile.TemporaryDirectory(prefix='nx2a_checkpoint_fixture_') as name:

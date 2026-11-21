@@ -7,6 +7,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.view.WindowManager;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -32,7 +33,7 @@ public class GameActivity extends NativeActivity {
         }
     }
 
-    private void showCheckpointProgress(String message) {
+    private void showCheckpointProgress(String message, boolean keepGameFocus) {
         hideCheckpointProgress();
         int unit = Math.round(8 * getResources().getDisplayMetrics().density);
         LinearLayout row = new LinearLayout(this);
@@ -44,9 +45,13 @@ public class GameActivity extends NativeActivity {
         label.setTextSize(18);
         label.setText(message);
         row.addView(label);
-        checkpointProgress = new AlertDialog.Builder(this).setView(row).setCancelable(false).show();
-        // Override the theme's minimum dialog width, preserving its background insets.
+        checkpointProgress = new AlertDialog.Builder(this).setView(row).setCancelable(false).create();
         Window window = checkpointProgress.getWindow();
+        // A focus loss posts an applet event and wakes guest threads. During a
+        // save their wait queues must stay frozen until the capture finishes.
+        if (keepGameFocus) window.addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);
+        checkpointProgress.show();
+        // Override the theme's minimum dialog width, preserving its background insets.
         View decor = window.getDecorView();
         int insets = decor.getPaddingLeft() + decor.getPaddingRight();
         int available = Math.max(1, getWindow().getDecorView().getWidth() - 4 * unit - insets);
@@ -59,7 +64,7 @@ public class GameActivity extends NativeActivity {
         runOnUiThread(() -> {
             if (isFinishing() || isDestroyed()) return;
             if (state == SAVING) {
-                showCheckpointProgress("Saving checkpoint…");
+                showCheckpointProgress("Saving checkpoint…", true);
                 return;
             }
             hideCheckpointProgress();
@@ -81,7 +86,7 @@ public class GameActivity extends NativeActivity {
                 .setTitle("Restore checkpoint?")
                 .setMessage("Resume where you saved the checkpoint. This test version uses a separate copy of your save data.")
                 .setPositiveButton("Restore checkpoint", (dialog, which) -> {
-                    showCheckpointProgress("Restoring checkpoint…");
+                    showCheckpointProgress("Restoring checkpoint…", false);
                     chooseCheckpoint(true);
                 })
                 .setNegativeButton("Start normally", (dialog, which) -> chooseCheckpoint(false))

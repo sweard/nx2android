@@ -592,6 +592,16 @@ static void *module_pages(module_t *m, size_t size, const void *raw, size_t len)
 static void map_image(module_t *m, const char *dir) {
     char path[1024]; snprintf(path, sizeof path, "%s/%s.patched.bin", dir, m->name);
     size_t sz; uint8_t *raw = slurp(path, &sz);
+#ifdef DM_CHECKPOINT_HEAP_CTORS
+    if (dm_checkpoint_native_heap && !strcmp(m->name, "main")) {
+        const size_t off = checkpoint_ctor->offset;
+        const uint32_t nop = 0xd503201f;
+        if (off > sz || sz - off < 4 || off + 4 > m->text_end || memcmp(raw + off, &nop, 4))
+            die("unexpected checkpoint heap constructor site");
+        memcpy(raw + off, &checkpoint_ctor->instruction, 4);
+        LOG("[snapshot] enabled guest heap constructor at main+%#zx", off);
+    }
+#endif
     if (m->patch_off < 0) {
         // Patch area before the base: file = the first part of the image (text + ro + data) + patch area; bss and the key page are anonymous zero pages. The gap from the patch area's end to the base is left inaccessible (PROT_NONE)
         uint64_t pre = (uint64_t)-m->patch_off, fl = m->file_image_len;

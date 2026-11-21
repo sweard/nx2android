@@ -16,6 +16,15 @@ typedef struct {
     uint32_t image_crc, reserved;
 } module_identity;
 
+#ifdef DM_CHECKPOINT_HEAP_CTORS
+static const struct checkpoint_heap_ctor {
+    const char *build;
+    size_t offset;
+    uint32_t instruction;
+} heap_ctors[] = {DM_CHECKPOINT_HEAP_CTORS}, *checkpoint_ctor;
+int dm_checkpoint_native_heap;
+#endif
+
 static modules_header arena;
 static uint64_t arena_used;
 static struct {
@@ -37,6 +46,13 @@ int dm_checkpoint_modules_begin(const char *dir, const char **names, int count, 
         module_t m = {0};
         strlcpy(m.name, names[i], sizeof m.name);
         read_layout(&m, dir);
+#ifdef DM_CHECKPOINT_HEAP_CTORS
+        if (!strcmp(m.name, "main")) {
+            for (size_t k = 0; k < sizeof heap_ctors / sizeof heap_ctors[0]; ++k)
+                if (!strcmp(heap_ctors[k].build, m.build_id)) checkpoint_ctor = &heap_ctors[k];
+            dm_checkpoint_native_heap = checkpoint_ctor != NULL;
+        }
+#endif
         if (strlen(m.build_id) != 32) return -ENOTSUP;
         struct stat st;
         if (snprintf(path, sizeof path, "%s/%s.patched.bin", dir, m.name) >= (int)sizeof path) return -ENAMETOOLONG;

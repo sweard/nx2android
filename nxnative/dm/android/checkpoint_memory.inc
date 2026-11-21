@@ -212,7 +212,7 @@ int dm_checkpoint_memory_begin(void) {
         if (rc != -EADDRINUSE) return rc;
     }
     if (!base) return -EADDRINUSE;
-    g_alias_bits = calloc((DM_GAME_MEM_ALIAS >> 18) + 1, sizeof *g_alias_bits);
+    g_alias_bits = calloc((ALIAS_CAP >> 18) + 1, sizeof *g_alias_bits);
     if (!g_alias_bits) { munmap(base, RESERVE); return -ENOMEM; }
     if (mprotect(base + main_stack_offset, DM_CHECKPOINT_MAIN_STACK_BYTES, PROT_READ | PROT_WRITE)) {
         int rc = -errno;
@@ -322,12 +322,12 @@ static int memory_image(int fd, int loading, dm_checkpoint_shared_map known) {
     if (fstat(fd, &st)) return -errno;
     if (!S_ISREG(st.st_mode) || (!loading && st.st_size)) return -EINVAL;
 
-    const size_t alias_off = 0x10000000, stack_off = alias_off + DM_GAME_MEM_ALIAS;
+    const size_t alias_off = 0x10000000, stack_off = alias_off + ALIAS_CAP;
     const size_t heap_off = stack_off + DM_GAME_MEM_STACK;
-    const size_t pages = DM_GAME_MEM_ALIAS >> 12, words = (pages + 63) / 64;
+    const size_t pages = ALIAS_CAP >> 12, words = (pages + 63) / 64;
     checkpoint_stream s = {.fd = fd, .loading = loading};
     memory_header h = {.magic = "NX2ASV2", .program = DM_GAME_PROGRAM_ID, .base = (uintptr_t)g_as,
-                       .reserve = RESERVE, .alias = DM_GAME_MEM_ALIAS, .stack = DM_GAME_MEM_STACK,
+                       .reserve = RESERVE, .alias = ALIAS_CAP, .stack = DM_GAME_MEM_STACK,
                        .heap = g_heap_cur, .page_size = (uint32_t)getpagesize(), .stack_count = g_nmap};
     if (has_main_stack) memcpy(h.magic, checkpoint_roots_ready ? "NX2ASV6" :
                                checkpoint_dispatch_ready ? "NX2ASV5" : "NX2ASV4", 8);
@@ -344,7 +344,7 @@ static int memory_image(int fd, int loading, dm_checkpoint_shared_map known) {
     int main_bytes = (v4 || !memcmp(h.magic, "NX2ASV3", 8)) ? DM_CHECKPOINT_MAIN_STACK_BYTES : 0;
     int has_tls = main_bytes || !memcmp(h.magic, "NX2ASV2", 8);
     if ((!has_tls && memcmp(h.magic, "NX2ASV1", 8)) || (has_tls && tls_stride % getpagesize()) || memcmp(h.build, build, 33) || h.program != DM_GAME_PROGRAM_ID ||
-        h.reserve != RESERVE || h.alias != DM_GAME_MEM_ALIAS || h.stack != DM_GAME_MEM_STACK ||
+        h.reserve != RESERVE || h.alias != ALIAS_CAP || h.stack != DM_GAME_MEM_STACK ||
         h.page_size != (uint32_t)getpagesize() || !h.base || h.base > UINTPTR_MAX - RESERVE ||
         ((h.base + alias_off) & ((1ull << 30) - 1)) || h.heap > RESERVE - heap_off ||
         (h.heap & 4095) || h.stack_count > MAX_MAP) return -EINVAL;
@@ -409,7 +409,7 @@ static int memory_image(int fd, int loading, dm_checkpoint_shared_map known) {
             rc = -EBADMSG; goto out;
         }
         if ((rc = reserve_exact(h.base, &base))) goto out;
-        restored_bits = calloc((DM_GAME_MEM_ALIAS >> 18) + 1, sizeof *restored_bits);
+        restored_bits = calloc((ALIAS_CAP >> 18) + 1, sizeof *restored_bits);
         if (!restored_bits) { rc = -ENOMEM; goto out; }
     }
     for (unsigned i = 0; i < tls_slots; ++i) {

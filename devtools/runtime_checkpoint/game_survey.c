@@ -34,6 +34,7 @@ int dm_checkpoint_mounts(int fd, const char *scene, int restore);
 static char chosen_scene[64];
 static int private_dir = -1;
 static const char current[] = "runtime-checkpoint.current";
+static const char pending[] = "runtime-checkpoint.pending";
 static const char core_prefix[] = ".runtime-survey-core.";
 static const char *const names[] = {"events", "bindings", "modules", "memory", "pools", "threads", "images", "handles", "files", "mounts", "audio", "timeline", "renderer"};
 enum { section_count = sizeof names / sizeof names[0] };
@@ -49,15 +50,14 @@ static int is_trial(const char *name) {
 static int publish_scene(const char *dir) {
     const char *name = strrchr(dir, '/');
     if (private_dir < 0 || !name || !is_trial(++name)) return -EINVAL;
-    const char *tmp = "runtime-checkpoint.pending";
-    int fd = openat(private_dir, tmp, O_CREAT | O_TRUNC | O_WRONLY | O_CLOEXEC | O_NOFOLLOW, 0600);
+    int fd = openat(private_dir, pending, O_CREAT | O_TRUNC | O_WRONLY | O_CLOEXEC | O_NOFOLLOW, 0600);
     if (fd < 0) return -errno;
     ssize_t n = (ssize_t)strlen(name);
     int rc = write(fd, name, n) == n && !fsync(fd) ? 0 : -EIO;
     if (close(fd) && !rc) rc = -errno;
-    if (!rc && renameat(private_dir, tmp, private_dir, current)) rc = -errno;
+    if (!rc && renameat(private_dir, pending, private_dir, current)) rc = -errno;
     if (!rc && fsync(private_dir)) rc = -errno;
-    if (rc) unlinkat(private_dir, tmp, 0);
+    if (rc) unlinkat(private_dir, pending, 0);
     return rc;
 }
 
@@ -65,8 +65,8 @@ void dm_checkpoint_field_choose(int restore) {
     if (!restore) chosen_scene[0] = 0;
 }
 
-// Retain the most recently verified sample. Older surveys used fewer
-// sections. Remove only files belonging to a recognized survey directory.
+// These private mkdtemp directories belong to checkpoint capture even if the
+// process died before creating its first section. Skip the live session's source.
 static void prune_trials(const char *keep) {
     DIR *dir = opendir(survey_private);
     if (!dir) return;
@@ -74,20 +74,15 @@ static void prune_trials(const char *keep) {
     unsigned removed = 0;
     while ((e = readdir(dir))) {
         if (!is_trial(e->d_name) || !strcmp(keep, e->d_name) || !strcmp(chosen_scene, e->d_name)) continue;
-        int sub = openat(dirfd(dir), e->d_name, O_DIRECTORY | O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
-        if (sub < 0) continue;
         struct stat st;
-        if (!fstatat(sub, "memory", &st, AT_SYMLINK_NOFOLLOW) && S_ISREG(st.st_mode) &&
-            !fstatat(sub, "modules", &st, AT_SYMLINK_NOFOLLOW) && S_ISREG(st.st_mode)) {
-            char trial[1400];
-            if (snprintf(trial, sizeof trial, "%s/%s", survey_private, e->d_name) >= (int)sizeof trial) { close(sub); continue; }
-            dm_saves_checkpoint_remove(trial);
-            if (faccessat(dirfd(dir), e->d_name, F_OK, 0) && errno == ENOENT) ++removed;
-        }
-        close(sub);
+        if (fstatat(dirfd(dir), e->d_name, &st, AT_SYMLINK_NOFOLLOW) || !S_ISDIR(st.st_mode)) continue;
+        char trial[1400];
+        if (snprintf(trial, sizeof trial, "%s/%s", survey_private, e->d_name) >= (int)sizeof trial) continue;
+        dm_saves_checkpoint_remove(trial);
+        if (fstatat(dirfd(dir), e->d_name, &st, AT_SYMLINK_NOFOLLOW) && errno == ENOENT) ++removed;
     }
     closedir(dir);
-    LOG("[snapshot] removed %u previous diagnostic trials; retained %s", removed, keep);
+    LOG("[snapshot] removed %u old or interrupted checkpoint directories", removed);
 }
 static _Atomic int diagnostic_state = DM_CHECKPOINT_IDLE;
 static _Atomic int sample_image;
@@ -265,7 +260,6 @@ void __wrap_load_modules(const char *dir, const char **mods, int count) {
                 snprintf(scene, sizeof scene, "%s/%s", survey_private, basename) < (int)sizeof scene) {
                 int svc_replay_private_scene(const char *, const char *, void (*)(const char *, const char **, int));
                 rc = svc_replay_private_scene(dir, scene, __real_load_modules);
-                if (!rc) prune_trials(basename);
             }
             LOG("[snapshot] cold scene inspection complete pid=%d result=%d", getpid(), rc);
             fflush(NULL);
@@ -306,6 +300,27 @@ void __wrap_vk_tex_sweep(void) {
     dm_checkpoint_report_images();
 }
 
+// A missing marker is normal after an interrupted first save. Any other
+// read/validation error leaves all scenes intact until the slot is identifiable.
+static int read_current_scene(void) {
+    int fd = openat(private_dir, current, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK);
+    if (fd < 0) return errno == ENOENT ? 0 : -1;
+    ssize_t n = read(fd, chosen_scene, sizeof chosen_scene - 1);
+    close(fd);
+    if (n != sizeof core_prefix - 1 + 6 || !is_trial(chosen_scene)) return -1;
+    int dir = openat(private_dir, chosen_scene, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    if (dir < 0) return -1;
+    for (unsigned i = 0; i < section_count; ++i) {
+        struct stat st;
+        if (fstatat(dir, names[i], &st, AT_SYMLINK_NOFOLLOW) || !S_ISREG(st.st_mode) || st.st_size == 0) {
+            close(dir);
+            return -1;
+        }
+    }
+    close(dir);
+    return 2;
+}
+
 int __wrap_dm_checkpoint_init(const char *private_root, const char *files_root) {
     survey_private = private_root;
     survey_files = files_root;
@@ -313,20 +328,27 @@ int __wrap_dm_checkpoint_init(const char *private_root, const char *files_root) 
     diagnostic_samples = snprintf(opt, sizeof opt, "%s/.runtime-survey-enable-core", files_root) < (int)sizeof opt && !access(opt, F_OK);
     private_dir = open(private_root, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
     if (private_dir < 0) return 0;
-    int fd = openat(private_dir, current, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
-    if (fd < 0) return 0;
-    ssize_t n = read(fd, chosen_scene, sizeof chosen_scene - 1);
-    close(fd);
-    if (n != sizeof core_prefix - 1 + 6 || !is_trial(chosen_scene)) { chosen_scene[0] = 0; return 0; }
-    int dir = openat(private_dir, chosen_scene, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
-    if (dir < 0) { chosen_scene[0] = 0; return 0; }
-    for (unsigned i = 0; i < section_count; ++i) {
-        struct stat st;
-        if (fstatat(dir, names[i], &st, AT_SYMLINK_NOFOLLOW) || !S_ISREG(st.st_mode) || st.st_size == 0) {
-            chosen_scene[0] = 0;
-            break;
+    int kind = read_current_scene();
+    unlinkat(private_dir, pending, 0);
+    char replay[sizeof chosen_scene] = {0};
+    int files = open(files_root, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (files >= 0) {
+        unlinkat(files, ".runtime-survey-threads.part", 0);
+        unlinkat(files, ".runtime-survey-field-image.part", 0);
+        // A one-shot diagnostic can explicitly request an older scene.
+        int fd = openat(files, ".runtime-survey-replay-once", O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
+        if (fd >= 0) {
+            ssize_t n = read(fd, replay, sizeof replay - 1);
+            if (n != sizeof core_prefix - 1 + 6 || !is_trial(replay)) replay[0] = 0;
+            close(fd);
         }
+        close(files);
     }
-    close(dir);
-    return chosen_scene[0] ? 2 : 0;
+    if (kind < 0) {
+        chosen_scene[0] = 0;
+        LOG("[snapshot] current checkpoint could not be verified; keeping scene directories");
+        return 0;
+    }
+    prune_trials(replay);
+    return kind;
 }

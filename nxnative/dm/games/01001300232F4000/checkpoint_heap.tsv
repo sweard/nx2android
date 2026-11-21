@@ -1,0 +1,5 @@
+# Verified original BL instructions from this profile's patches.py. Use Binned3 in
+# the guest address space for runtime snapshots. The small-VA profile uses host malloc.
+# main build ID	constructor offset	original AArch64 instruction
+c7c4e3fe091eb9a0adc4df5cbe0c9da9	0x12e40	0x94023190
+e3e401c28d9fd3b1f9e033bb7bb31d42	0x12e40	0x94023190
