@@ -111,14 +111,24 @@ static _Atomic int g_cust[2][2][DM_AOV_N][CUST_K], g_cust_ver, g_edit;
 static const char *const LAYOUT_NAMES[2] = {"tablet", "phone"};
 static int ctl_named(const char *n) { for (int i = 0; i < OV_N; i++) if (!strcmp(OV_LAYOUTS[0][i].name, n)) return i; return -1; }
 int dm_opmode(void); void dm_set_opmode(int m);   // hle_oe.c: 0 handheld, 1 docked; a change reaches the game as the Switch's operation mode notification
-static void settings_load(void) {
-    char p[600]; snprintf(p, sizeof p, "%s/settings.txt", g_root); FILE *f = fopen(p, "r"); char line[128];
+static void settings_load(const char *checkpoint) {
+    char p[600]; snprintf(p, sizeof p, "%s/settings.txt", g_root); FILE *f = fopen(checkpoint ? checkpoint : p, "r"); char line[128];
     if (!f) return;
+    if (checkpoint) {
+        atomic_store(&g_set_overlay, 1); atomic_store(&g_set_rumble, 1); atomic_store(&g_set_fps, 0);
+        atomic_store(&g_set_framegen, 0); atomic_store(&g_set_fg_target, 60);
+        atomic_store(&g_set_opacity, 60); atomic_store(&g_set_grid, 0); atomic_store(&g_set_labels, -1);
+        for (int l = 0; l < 2; ++l) for (int i = 0; i < OV_N; ++i)
+            for (int k = 0; k < CUST_K; ++k) atomic_store(&g_cust[0][l][i][k], 0);
+    }
     while (fgets(line, sizeof line, f)) { int v; if (sscanf(line, "overlay=%d", &v) == 1) atomic_store(&g_set_overlay, v != 0); else if (sscanf(line, "rumble=%d", &v) == 1) atomic_store(&g_set_rumble, v != 0);
         else if (sscanf(line, "fps=%d", &v) == 1) atomic_store(&g_set_fps, v != 0);
         else if (sscanf(line, "framegen=%d", &v) == 1) atomic_store(&g_set_framegen, v != 0);
         else if (sscanf(line, "framegen_target=%d", &v) == 1) atomic_store(&g_set_fg_target, v == 0 || v == 90 ? 0 : 60);   // migrate the old 90 fps choice to no cap
-        else if (sscanf(line, "docked=%d", &v) == 1) setenv("DM_OPMODE", v ? "1" : "0", 1);   // over env.txt's: the host reads it once, at its first query
+        else if (sscanf(line, "docked=%d", &v) == 1) {
+            if (checkpoint) dm_set_opmode(v != 0);
+            else setenv("DM_OPMODE", v ? "1" : "0", 1);   // over env.txt's: the host reads it once, at its first query
+        }
         else if (sscanf(line, "opacity=%d", &v) == 1) atomic_store(&g_set_opacity, v < OV_OPACITY_MIN ? OV_OPACITY_MIN : v > OV_OPACITY_MAX ? OV_OPACITY_MAX : v);
         else if (sscanf(line, "grid=%d", &v) == 1) atomic_store(&g_set_grid, v != 0);
         else if (sscanf(line, "labels=%d", &v) == 1) atomic_store(&g_set_labels, v != 0);
@@ -134,6 +144,7 @@ static void settings_load(void) {
         else if (sscanf(line, "menu_y=%d", &v) == 1 && v >= 0 && v <= 10000) { int m = ctl_named("menu"); for (int l = 0; l < 2 && m >= 0; l++) atomic_store(&g_cust[0][l][m][1], v + 1); }   // the editor
     }
     fclose(f);
+    if (checkpoint) atomic_fetch_add(&g_cust_ver, 1);
 }
 static void settings_save(void) {
     char p[600], tmp[610]; snprintf(p, sizeof p, "%s/settings.txt", g_root); snprintf(tmp, sizeof tmp, "%s.new", p);
@@ -212,7 +223,11 @@ static void activity_game_mode(ANativeActivity *a) {
     }
     dm_perf_game_mode(mode);   // absent service / older Android keeps the standard policy
 }
-static void on_resume(ANativeActivity *a) { if (g_quit) { act_finish(a); return; } activity_game_mode(a); go_foreground(); }
+static void on_resume(ANativeActivity *a) {
+    if (g_quit) { act_finish(a); return; }
+    activity_game_mode(a);
+    go_foreground();
+}
 static void on_destroy(ANativeActivity *a) { (void)a; dm_perf_gpu_release(); _exit(0); }   // one game per process
 
 // ---- input ----
@@ -612,6 +627,7 @@ static void *temp_watch(void *a) {
 // Resume under them ----
 static _Atomic int g_menu_hi = -1, g_menu_tab;   // the highlighted row (a controller's selection, or the row a finger is on), -1 none; the open tab
 static _Atomic int g_menu_scroll;
+static _Atomic int g_menu_checkpoint_focus;
 int dm_menu_scroll_position(void) { return atomic_load(&g_menu_scroll); }
 static int g_menu_ptr = -1, g_menu_row = -2, g_menu_choice = -1;
 static float g_menu_down_y; static int g_menu_down_scroll, g_menu_scrolled, g_menu_can_scroll;
@@ -627,7 +643,7 @@ int dm_menu_state(void) {
     int lossless = vk_lsfg_available();
     return atomic_load(&g_set_overlay) | atomic_load(&g_set_rumble) << 1 | (dm_opmode() != 0) << 2 | atomic_load(&g_set_fps) << 3 | (atomic_load(&g_menu_hi) + 1) << 4 |
            atomic_load(&g_menu_tab) << 8 | atomic_load(&g_set_opacity) << 9 | atomic_load(&g_sv_st) << 20 | (atomic_load(&g_sv_n) & 1) << 23 |
-           (atomic_load(&g_menu_scroll) / OVM_SCROLL_UNITS) << OVM_SCROLL_SHIFT | pad_labels() << 28 |
+           atomic_load(&g_menu_checkpoint_focus) << OVM_CHECKPOINT_FOCUS_BIT | dm_checkpoint_state() << OVM_CHECKPOINT_SHIFT | pad_labels() << 28 |
            (lossless && atomic_load(&g_set_framegen)) << OVM_FRAMEGEN_BIT | lossless << OVM_FG_AVAILABLE_BIT |
            (dm_framegen_target() == 0) << OVM_FG_UNCAPPED_BIT;
 }
@@ -635,6 +651,7 @@ int dm_overlay_fps(void) { return atomic_load(&g_set_fps) && !atomic_load(&g_men
 static void menu_open(int hi) {
     if (!atomic_load(&g_running) || atomic_exchange(&g_menu, 1)) return;
     atomic_store(&g_menu_hi, hi); atomic_store(&g_menu_scroll, 0); g_menu_ptr = -1;
+    atomic_store(&g_menu_checkpoint_focus, 0);
     if (atomic_load(&g_sv_st) != OVX_BUSY) atomic_store(&g_sv_st, OVX_IDLE);   // the last export's note goes (one still copying stays)
     dm_input_set(0, 0, 0, 0, 0); dm_touch_set(NULL, 0); atomic_store(&g_touch_btn, 0);   // nothing stays pressed in the game
     for (int i = 0; i < 16; i++) atomic_store(&g_press_t[i], 0);
@@ -647,6 +664,7 @@ static void menu_open(int hi) {
 }
 static void ed_cancel(void); static void sp_back(void);
 static void menu_close(void) {
+    if (dm_checkpoint_state() == DM_CHECKPOINT_SAVING) return;
     if (atomic_load(&g_edit)) { ed_cancel(); return; }   // the editor first: its changes are kept or thrown away before the game goes on
     if (atomic_load(&g_sp_on)) { sp_back(); return; }    // the save picker: back a step
     if (!atomic_exchange(&g_menu, 0)) return;
@@ -693,6 +711,7 @@ static void menu_lossless_import(void) {
     if (attached) (*g_act->vm)->DetachCurrentThread(g_act->vm);
 }
 static void menu_do(int item) {
+    if (dm_checkpoint_state() == DM_CHECKPOINT_SAVING) return;
     if (item == OVM_OVERLAY) { atomic_store(&g_set_overlay, !atomic_load(&g_set_overlay)); atomic_store(&g_overlay, 1); settings_save(); }
     else if (item == OVM_RUMBLE) { int on = !atomic_load(&g_set_rumble); atomic_store(&g_set_rumble, on); dm_haptics_android_set(on); settings_save(); }
     else if (item == OVM_FPS) { atomic_store(&g_set_fps, !atomic_load(&g_set_fps)); settings_save(); }
@@ -711,10 +730,12 @@ static void menu_do(int item) {
     else if (item == OVM_IMPORT) { dm_haptics_android_tap(); sp_open(); return; }
     else if (item == OVM_AUDIO) { menu_audio(); }
     else if (item == OVM_FG_IMPORT) { menu_lossless_import(); }
+    else if (item == OVM_CHECKPOINT) { dm_checkpoint_request(); }
     if (item >= 0 && item < OVM_N) dm_haptics_android_tap();
     if (item == OVM_RESUME) menu_close(); else dm_overlay_redraw();
 }
 static void menu_touch(AInputEvent *e, float W, float H) {   // a press on a row does it when it lifts there; a tap outside the panel or on the menu button closes
+    if (dm_checkpoint_state() == DM_CHECKPOINT_SAVING) return;
     int act = AMotionEvent_getAction(e) & AMOTION_EVENT_ACTION_MASK, ai = AMotionEvent_getAction(e) >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT;
     int i = act == AMOTION_EVENT_ACTION_DOWN || act == AMOTION_EVENT_ACTION_UP ? 0 : ai, id = AMotionEvent_getPointerId(e, (size_t)i) & 31;
     float x = AMotionEvent_getX(e, (size_t)i), y = AMotionEvent_getY(e, (size_t)i), p[4], vr[4]; ov_menu_rect(W, H, p); ov_menu_view_rowrect(p, 0, vr);
@@ -722,12 +743,16 @@ static void menu_touch(AInputEvent *e, float W, float H) {   // a press on a row
     int c = ctl_at(x, y, W, H), row = c >= 0 && OV_CTLS[c].kind == OV_MENU ? -3 : ov_menu_scroll_row_at(x, y, W, H, tab, offset);
     float slot = ov_menu_scroll_slot(tab, offset, row);
     int item = row >= 0 ? ov_menu_item(tab, row) : -1;
+    int split_footer = dm_checkpoint_state() != DM_CHECKPOINT_DISABLED;
+    if (item == OVM_RESUME && split_footer) item = ov_menu_footer_item(p, x);
     if (act == AMOTION_EVENT_ACTION_DOWN || act == AMOTION_EVENT_ACTION_POINTER_DOWN) {
         if (g_menu_ptr >= 0) return;
         g_menu_ptr = id; g_menu_row = row;
         g_menu_down_y = y; g_menu_down_scroll = atomic_load(&g_menu_scroll); g_menu_scrolled = 0;
         g_menu_can_scroll = row > 0 && row < OVM_ROWS - 1 && item != OVM_OPACITY;
         g_menu_choice = ov_menu_fg_choice(item) ? ov_menu_fg_choice_at(x, p, slot) : -1;
+        if (row == OVM_ROWS - 1) g_menu_choice = item;
+        atomic_store(&g_menu_checkpoint_focus, item == OVM_CHECKPOINT);
         if (item == OVM_TAB) menu_tab(ov_menu_tab_at(x, p));   // a tab opens as the finger touches it
         else if (item == OVM_OPACITY) menu_opacity(ov_menu_track_value(x, p, slot));
         if (row >= 0) { atomic_store(&g_menu_hi, item >= 0 ? row : -1); dm_overlay_redraw(); }
@@ -743,6 +768,7 @@ static void menu_touch(AInputEvent *e, float W, float H) {   // a press on a row
                 continue;
             }
             int r = ov_menu_scroll_row_at(kx, ky, W, H, tab, offset), hi = r == g_menu_row && ov_menu_item(tab, r) >= 0 ? r : -1;
+            if (hi == OVM_ROWS - 1 && split_footer && ov_menu_footer_item(p, kx) != g_menu_choice) hi = -1;
             if (atomic_exchange(&g_menu_hi, hi) != hi) dm_overlay_redraw();
         }
     } else if ((act == AMOTION_EVENT_ACTION_UP || act == AMOTION_EVENT_ACTION_POINTER_UP) && id == g_menu_ptr) {
@@ -754,27 +780,36 @@ static void menu_touch(AInputEvent *e, float W, float H) {   // a press on a row
             if (choice == g_menu_choice) menu_set_fg_choice(choice);
             dm_overlay_redraw();
         }
-        else if (row == down && item >= 0 && item != OVM_TAB) menu_do(item);
+        else if (row == down && item >= 0 && item != OVM_TAB && (row != OVM_ROWS - 1 || item == g_menu_choice)) menu_do(item);
         else if (row == down && (row == -2 || row == -3)) { dm_haptics_android_tap(); menu_close(); }
         else dm_overlay_redraw();
     } else if (act == AMOTION_EVENT_ACTION_CANCEL) { g_menu_ptr = -1; atomic_store(&g_menu_hi, -1); dm_overlay_redraw(); }
 }
 static void ed_key(uint64_t bit); static void sp_key(uint64_t bit);
 static void menu_key(uint64_t bit) {   // a controller key pressed while the menu is open: up and down go through the rows, left and right change the tab or the
+    if (dm_checkpoint_state() == DM_CHECKPOINT_SAVING) return;
     if (atomic_load(&g_edit)) { ed_key(bit); return; }   // opacity on their rows, L and R change the tab anywhere, A does the row, B and + close
     if (atomic_load(&g_sp_on)) { sp_key(bit); return; }
     int hi = atomic_load(&g_menu_hi), tab = atomic_load(&g_menu_tab), item = hi >= 0 ? ov_menu_item(tab, hi) : -1;
     if (bit == DM_BTN_UP || bit == DM_BTN_DOWN) {
+        atomic_store(&g_menu_checkpoint_focus, 0);
         for (int k = 0; k < OVM_ROWS; k++) { hi = hi < 0 ? (bit == DM_BTN_UP ? OVM_ROWS - 1 : 1) : (hi + (bit == DM_BTN_UP ? OVM_ROWS - 1 : 1)) % OVM_ROWS; if (ov_menu_item(tab, hi) >= 0) break; }
         atomic_store(&g_menu_hi, hi); atomic_store(&g_menu_scroll, (int)lroundf(ov_menu_scroll_reveal(tab, ov_menu_scroll_rows(atomic_load(&g_menu_scroll)), hi) * OVM_SCROLL_UNITS)); dm_overlay_redraw();
     } else if ((bit == DM_BTN_LEFT || bit == DM_BTN_RIGHT) && item == OVM_OPACITY) { menu_opacity(atomic_load(&g_set_opacity) + (bit == DM_BTN_LEFT ? -5 : 5)); settings_save(); }
     else if ((bit == DM_BTN_LEFT || bit == DM_BTN_RIGHT) && ov_menu_fg_choice(item)) menu_set_fg_choice(bit == DM_BTN_RIGHT);
+    else if ((bit == DM_BTN_LEFT || bit == DM_BTN_RIGHT) && item == OVM_RESUME && dm_checkpoint_state() != DM_CHECKPOINT_DISABLED) {
+        atomic_store(&g_menu_checkpoint_focus, bit == DM_BTN_LEFT);
+        dm_overlay_redraw();
+    }
     else if ((bit == DM_BTN_LEFT || bit == DM_BTN_RIGHT) && item == OVM_TAB) menu_tab(tab + (bit == DM_BTN_LEFT ? -1 : 1));
     else if (bit == DM_BTN_L || bit == DM_BTN_ZL || bit == DM_BTN_R || bit == DM_BTN_ZR) {
         menu_tab(tab + (bit == DM_BTN_L || bit == DM_BTN_ZL ? -1 : 1));
         if (hi > 0 && ov_menu_item(atomic_load(&g_menu_tab), hi) < 0) atomic_store(&g_menu_hi, OVM_ROWS - 1);   // (the other tab has fewer rows)
     }
-    else if (bit == DM_BTN_A) menu_do(hi < 0 ? OVM_RESUME : item);
+    else if (bit == DM_BTN_A) {
+        if (item == OVM_RESUME && atomic_load(&g_menu_checkpoint_focus)) item = OVM_CHECKPOINT;
+        menu_do(hi < 0 ? OVM_RESUME : item);
+    }
     else if (bit == DM_BTN_B || bit == DM_BTN_PLUS) menu_close();
 }
 
@@ -1477,6 +1512,69 @@ static int romfs_readable(ANativeActivity *act, int sdk) {   // 0: the game cann
     LOG("RomFS: %s, outside the app's files folder (%s granted)", r, what);
     return 1;
 }
+static void start_game(ANativeActivity *act) {
+    settings_load(NULL);
+    dm_haptics_android_start(act, atomic_load(&g_set_rumble)); dm_lan_android_start(act);
+    g_vm = act->vm;
+    { pthread_t w; if (!pthread_create(&w, NULL, pad_watch, act->vm)) pthread_detach(w); }
+    { pthread_t w; if (!pthread_create(&w, NULL, temp_watch, act->vm)) pthread_detach(w); }
+    LOG("NX2A host on Android: files %s, RomFS %s, saves %s", g_root, getenv("DM_ROMFS"), act->internalDataPath);
+    pthread_t t; pthread_create(&t, NULL, input_thread, NULL); pthread_detach(t);
+    // Map the main thread's full 16 MiB stack. The guest queries and scans the entire mapped range.
+    size_t ssz = 16 << 20, guard = 64 << 10;
+    uint8_t *stk = mmap(NULL, ssz + guard, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+    pthread_attr_t at; pthread_attr_init(&at);
+    if (stk != MAP_FAILED) { mprotect(stk, guard, PROT_NONE); pthread_attr_setstack(&at, stk + guard, ssz); } else pthread_attr_setstacksize(&at, ssz);
+    if (pthread_create(&t, &at, host_thread, NULL)) LOG("[RED] cannot start the host thread"); else pthread_detach(t);
+    pthread_attr_destroy(&at);
+}
+
+#ifdef DM_MANUAL_CHECKPOINT
+enum { CHECKPOINT_WAIT_FRAME = 1, CHECKPOINT_WAIT_CHOICE };
+static _Atomic int checkpoint_choice_pending;
+static jmethodID checkpoint_offer_method;
+JNIEXPORT void JNICALL Java_org_nx2a_GameActivity_chooseCheckpoint(JNIEnv *env, jobject activity, jboolean restore) {
+    if (!(*env)->IsSameObject(env, activity, g_act->clazz)) return;
+    int expected = CHECKPOINT_WAIT_CHOICE;
+    if (!atomic_compare_exchange_strong(&checkpoint_choice_pending, &expected, 0)) return;
+    if (restore) {
+        settings_load(dm_checkpoint_settings());
+        dm_haptics_android_set(atomic_load(&g_set_rumble));
+        settings_save();
+        dm_overlay_redraw();
+    }
+    dm_checkpoint_consume();
+}
+
+static void prepare_checkpoint(ANativeActivity *act) {
+    JNIEnv *env = act->env;
+    jclass cls = (*env)->GetObjectClass(env, act->clazz);
+    checkpoint_offer_method = cls ? (*env)->GetMethodID(env, cls, "offerCheckpoint", "()V") : NULL;
+    if (cls) (*env)->DeleteLocalRef(env, cls);
+    if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); return; }
+    if (!checkpoint_offer_method) return;
+    if (dm_checkpoint_init(act->internalDataPath, g_root)) atomic_store(&checkpoint_choice_pending, CHECKPOINT_WAIT_FRAME);
+    else dm_checkpoint_consume();
+}
+#endif
+
+void dm_checkpoint_frame_shown(void) {
+#ifdef DM_MANUAL_CHECKPOINT
+    int expected = CHECKPOINT_WAIT_FRAME;
+    if (!atomic_compare_exchange_strong(&checkpoint_choice_pending, &expected, CHECKPOINT_WAIT_CHOICE)) return;
+    ANativeActivity *act = g_act;
+    JNIEnv *env = NULL;
+    int attached = (*act->vm)->GetEnv(act->vm, (void **)&env, JNI_VERSION_1_6) != JNI_OK;
+    if (attached && (*act->vm)->AttachCurrentThread(act->vm, &env, NULL) != JNI_OK) {
+        atomic_store(&checkpoint_choice_pending, 0);
+        return;
+    }
+    (*env)->CallVoidMethod(env, act->clazz, checkpoint_offer_method);
+    if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); atomic_store(&checkpoint_choice_pending, 0); }
+    if (attached) (*act->vm)->DetachCurrentThread(act->vm);
+#endif
+}
+
 __attribute__((visibility("default"))) void ANativeActivity_onCreate(ANativeActivity *act, void *saved, size_t saved_size) {
     (void)saved; (void)saved_size;
     g_act = act;
@@ -1511,19 +1609,8 @@ __attribute__((visibility("default"))) void ANativeActivity_onCreate(ANativeActi
     // the save manager's requests (saves_android.c), before the host mounts the save: an import chosen in the menu or pushed by porter, an export porter asks for
     if (dm_saves_start(g_root)) { LOG("[saves] the request asked the app to end: the game is not started"); g_quit = 1; return; }
     if (!romfs_readable(act, sdk)) { g_quit = 1; return; }   // after the save manager's requests, which need no RomFS
-    settings_load(); dm_haptics_android_start(act, atomic_load(&g_set_rumble)); dm_lan_android_start(act);
-    g_vm = act->vm;
-    { pthread_t w; if (!pthread_create(&w, NULL, pad_watch, act->vm)) pthread_detach(w); }
-    { pthread_t w; if (!pthread_create(&w, NULL, temp_watch, act->vm)) pthread_detach(w); }
-    LOG("NX2A host on Android: files %s, RomFS %s, saves %s", g_root, getenv("DM_ROMFS"), act->internalDataPath);
-    pthread_t t; pthread_create(&t, NULL, input_thread, NULL); pthread_detach(t);
-    // The game's main thread: a 16 MB stack mapped here and handed over whole (pthread_attr_setstack), so the range pthread_getattr_np reports, which
-    // svcQueryMemory gives the game as its main thread stack (hle_svc.c), is exactly mapped memory: IL2CPP's garbage collector scans that range from
-    // its bottom, and with bionic's own stack the bottom of the reported range was not readable (SIGSEGV at main+0x2a59b4). A guard page sits below it.
-    size_t ssz = 16 << 20, guard = 64 << 10;
-    uint8_t *stk = mmap(NULL, ssz + guard, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
-    pthread_attr_t at; pthread_attr_init(&at);
-    if (stk != MAP_FAILED) { mprotect(stk, guard, PROT_NONE); pthread_attr_setstack(&at, stk + guard, ssz); } else pthread_attr_setstacksize(&at, ssz);
-    if (pthread_create(&t, &at, host_thread, NULL)) LOG("[RED] cannot start the host thread"); else pthread_detach(t);
-    pthread_attr_destroy(&at);
+#ifdef DM_MANUAL_CHECKPOINT
+    prepare_checkpoint(act);
+#endif
+    start_game(act);
 }

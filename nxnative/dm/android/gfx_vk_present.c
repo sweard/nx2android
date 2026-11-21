@@ -252,7 +252,7 @@ static void barrier(VkCommandBuffer cb, VkImage img, VkImageLayout from, VkImage
 enum { SP_DISC = OV_N, SP_BLACK, SP_WHITE, SP_ACCENT, SP_N };   // (black, white, accent: solid blocks, the dimming and the layout editor's frames)
 #define OV_FPS_CHARS "0123456789 -ABCDEFILNOPRSTY"   // FPS, RENDER, DISPLAY, PRESENT, SOC and BAT
 static struct { VkImage img; VkDeviceMemory mem; VkImageView view; VkSampler samp; VkDescriptorSetLayout dsl; VkPipelineLayout layout; VkDescriptorPool pool; VkDescriptorSet set;
-                VkPipeline pipe; VkFormat pfmt; uint32_t w, h, sh, pw, ph, gh, gs; VkBuffer up; VkDeviceMemory upm; uint8_t *px; int uploaded, lay, cver; uint64_t panel; float sp[SP_N][4];
+                VkPipeline pipe; VkFormat pfmt; uint32_t w, h, sh, pw, ph, gh, gs; VkBuffer up; VkDeviceMemory upm; uint8_t *px; int uploaded, lay, cver, checkpoint_phase; uint64_t panel; float sp[SP_N][4];
                 VkRenderPass rp; VkFramebuffer fb[8]; VkImageView fbview[8]; VkExtent2D fbext[8]; } g_ov;
 static struct { const ov_theme *t; VkImage img; VkDeviceMemory mem; VkImageView view; VkDescriptorSet set; VkBuffer up; VkDeviceMemory upm; uint32_t upk; int ready; } g_tt[2];   // per layout
 // Without dynamic rendering (a Vulkan 1.1 / 1.2 device, V.has_dynrender) the overlay draws in a render pass object over the swapchain image: one pass for the swapchain's
@@ -427,10 +427,16 @@ static const char *const *menu_segments(int item) {
 static float menu_segment_width(const char *const *segments, int scale, float pad) {
     return fmaxf(cv_text_w(segments[0], scale), cv_text_w(segments[1], scale)) + pad;
 }
-static void ov_menu_panel(const ov_canvas *cv, int st, int position) {
+static int checkpoint_saving(int st) {
+    return st >= 0 && !(st & (OVT_ST | OVE_ST | OVS_ST)) &&
+           (st >> OVM_CHECKPOINT_SHIFT & 7) == DM_CHECKPOINT_SAVING;
+}
+
+static void ov_menu_panel(const ov_canvas *cv, int st, int position, int checkpoint_phase) {
     float p[4] = {0, 0, (float)cv->w, (float)cv->h}, r[4]; ov_menu_view_rowrect(p, 0, r);
     float rh = r[3], rw = r[2], gap = rh * 0.35f, sh = rh * 0.40f, sw = sh * 1.85f;
     int tab = st >> 8 & 1, sel = (st >> 4 & 15) - 1, op = st >> 9 & 127;
+    int checkpoint = st >> OVM_CHECKPOINT_SHIFT & 7;
     float offset = fmaxf(0, fminf(ov_menu_scroll_rows(position), ov_menu_scroll_limit(tab)));
     int is = (int)fmaxf(1, roundf(rh * 0.30f / PF_CAP));
     for (; is > 1; is--) {   // the widest row: its label, a gap and its control
@@ -458,7 +464,7 @@ static void ov_menu_panel(const ov_canvas *cv, int st, int position) {
         float shift = in_body ? top : 0, slot = ov_menu_scroll_slot(tab, offset, row), paint_p[4] = {p[0], p[1] - shift, p[2], p[3]};
         r[1] -= shift; float cy = r[1] + rh / 2, x1 = r[0] + rw - rh * 0.15f;
         if (it < 0) continue;
-        if (row == sel) cv_rrect(target, r[0], r[1] + rh * 0.08f, r[0] + rw, r[1] + rh * 0.92f, rh * 0.14f, C_HI);
+        if (row == sel && (it != OVM_RESUME || !checkpoint)) cv_rrect(target, r[0], r[1] + rh * 0.08f, r[0] + rw, r[1] + rh * 0.92f, rh * 0.14f, C_HI);
         if (it == OVM_TAB) {   // the tabs: a segmented bar, the open one filled
             float th = rh * 0.62f, tw = rw / OVM_TABS;
             cv_rrect(target, r[0], cy - th / 2, r[0] + rw, cy + th / 2, th / 2, C_OFF);
@@ -467,7 +473,38 @@ static void ov_menu_panel(const ov_canvas *cv, int st, int position) {
             cv_rrect(target, r[0], r[1] + rh - 1, r[0] + rw, r[1] + rh, 0.5f, C_LINE);
             continue;
         }
-        if (it == OVM_RESUME) { cv_rrect(target, r[0], r[1], r[0] + rw, r[1] + 1, 0.5f, C_LINE); cv_text(target, r[0] + (rw - cv_text_w("Resume", is)) / 2, cy, "Resume", is, C_ACCENT); continue; }
+        if (it == OVM_RESUME) {
+            cv_rrect(target, r[0], r[1], r[0] + rw, r[1] + 1, 0.5f, C_LINE);
+            if (checkpoint) {
+                static const char *const words[8] = {
+                    [DM_CHECKPOINT_IDLE] = "Save checkpoint", [DM_CHECKPOINT_SAVING] = "Saving...",
+                    [DM_CHECKPOINT_SAVED] = "Checkpoint saved", [DM_CHECKPOINT_NO_SAVE] = "No save yet",
+                    [DM_CHECKPOINT_FAILED] = "Save failed",
+                };
+                int focus = st >> OVM_CHECKPOINT_FOCUS_BIT & 1;
+                float pad = rh * 0.12f, b[4] = {r[0] + pad, cy - rh * 0.30f, rw * 0.5f - 2 * pad, rh * 0.60f};
+                if (checkpoint_saving(st)) {
+                    float radius = b[3] * 0.18f, step = b[3] * 0.16f;
+                    int scale = (int)fmaxf(1, roundf(b[3] * 0.40f / PF_CAP));
+                    while (scale > 1 && cv_text_w(words[checkpoint], scale) + 2 * radius + step > b[2] * 0.90f) scale--;
+                    float width = cv_text_w(words[checkpoint], scale) + 2 * radius + step;
+                    float x = b[0] + (b[2] - width) / 2 + radius;
+                    for (int i = 0; i < 8; i++) {
+                        float angle = i * 0.785398163f;
+                        const uint8_t *color = i == checkpoint_phase ? C_ACCENT : C_OFF;
+                        cv_disc(target, x + radius * cosf(angle), cy + radius * sinf(angle), fmaxf(1, radius * 0.24f), color);
+                    }
+                    cv_text(target, x + radius + step, cy, words[checkpoint], scale, C_WHITE);
+                } else {
+                    cv_button(target, b, words[checkpoint] ? words[checkpoint] : "Save checkpoint", 0, row == sel && focus);
+                }
+                b[0] += rw * 0.5f;
+                cv_button(target, b, "Resume", checkpoint != DM_CHECKPOINT_SAVING, row == sel && !focus && checkpoint != DM_CHECKPOINT_SAVING);
+            } else {
+                cv_text(target, r[0] + (rw - cv_text_w("Resume", is)) / 2, cy, "Resume", is, C_ACCENT);
+            }
+            continue;
+        }
         cv_text(target, r[0] + rh * 0.15f, cy, OVM_LABELS[it], is, row == sel ? C_WHITE : C_DIM);
         if (it == OVM_OPACITY) {   // the slider: its track, filled to the value, the knob and the percent
             float t[3]; ov_menu_track(paint_p, slot, t); float f = (float)(op - OV_OPACITY_MIN) / (OV_OPACITY_MAX - OV_OPACITY_MIN), th = fmaxf(2, rh * 0.08f), kr = rh * 0.20f;
@@ -571,14 +608,16 @@ static void ov_save_panel(const ov_canvas *cv, int st) {
         if (q->style == OVS_TITLE) cv_rrect(cv, r[0], r[1] + rh - 1, r[0] + rw, r[1] + rh, 0.5f, C_LINE);
     }
 }
-static void ov_panel(int st, int position) {   // the pause menu, the text entry or the layout editor, for menu state st (dm_menu_state), into the panel's rows of the upload buffer
+static void ov_panel(int st, int position, int checkpoint_phase) {   // the pause menu, the text entry or the layout editor, for menu state st (dm_menu_state), into the panel's rows of the upload buffer
     ov_canvas cv = {g_ov.px, g_ov.w, 0, g_ov.h + g_ov.sh, g_ov.pw, g_ov.ph};
     for (uint32_t y = 0; y < g_ov.ph; y++) memset(g_ov.px + 4 * ((size_t)(cv.y0 + y) * g_ov.w), 0, (size_t)g_ov.pw * 4);
     if (st & OVT_ST) ov_text_panel(&cv);   // a text entry is open (dm_menu_state)
     else if (st & OVE_ST) ov_edit_panel(&cv, st, (float)g_sext.width, (float)g_sext.height);
     else if (st & OVS_ST) ov_save_panel(&cv, st);
-    else ov_menu_panel(&cv, st, position);
+    else ov_menu_panel(&cv, st, position, checkpoint_phase);
 }
+static uint64_t mono_ns(void);
+enum { CHECKPOINT_PHASE_NS = 125000000 };
 // The phone window uses the same menu raster as Vulkan, independently of the external swapchain.
 JNIEXPORT jint JNICALL Java_org_nx2a_ExternalActivity_externalMenuState(JNIEnv *env, jclass cls) { (void)env; (void)cls; return dm_menu_state(); }
 JNIEXPORT jint JNICALL Java_org_nx2a_ExternalActivity_externalMenuScroll(JNIEnv *env, jclass cls) { (void)env; (void)cls; return dm_menu_scroll_position(); }
@@ -594,7 +633,7 @@ JNIEXPORT jintArray JNICALL Java_org_nx2a_ExternalActivity_externalMenuPixels(JN
     if (st & 0x10000) ov_text_panel(&cv);
     else if (st & OVE_ST) ov_edit_panel(&cv, st, (float)W, (float)H);
     else if (st & OVS_ST) ov_save_panel(&cv, st);
-    else ov_menu_panel(&cv, st, position);
+    else ov_menu_panel(&cv, st, position, 0);
     size_t count = (size_t)w * h; jint *argb = malloc((count + 2) * sizeof *argb);
     if (!argb) { free(pixels); return NULL; }
     argb[0] = (jint)w; argb[1] = (jint)h;
@@ -901,13 +940,19 @@ static int overlay_ready(VkCommandBuffer cb, uint32_t k, int menu) {   // k: thi
         g_ov.uploaded = 0; g_ov.panel = -1;
     }
     int position = dm_menu_scroll_position(); uint64_t panel_key = ov_menu_raster_key(menu, position);
+    int phase = checkpoint_saving(menu) ? (int)(mono_ns() / CHECKPOINT_PHASE_NS % 8) : 0;
+    int panel_changed = panel_key != g_ov.panel || phase != g_ov.checkpoint_phase;
     uint32_t y0 = 0, rows = g_ov.h + g_ov.sh + g_ov.ph + g_ov.gh;   // the rows to upload
-    if (g_ov.uploaded && menu >= 0 && panel_key != g_ov.panel) {   // only the panel, after the last copy out of the buffer has run
+    if (g_ov.uploaded && menu >= 0 && panel_changed) {   // only the panel, after the last copy out of the buffer has run
         VkFence f[8]; uint32_t n = 0; for (uint32_t i = 0; i < 8; i++) if (i != k) f[n++] = g_pfence[i];
         vkWaitForFences(V.dev, n, f, 1, 1000000000ull);
         y0 = g_ov.h + g_ov.sh; rows = g_ov.ph; g_ov.uploaded = 0;
     }
-    if (menu >= 0 && panel_key != g_ov.panel) { ov_panel(menu, position); g_ov.panel = panel_key; }
+    if (menu >= 0 && panel_changed) {
+        ov_panel(menu, position, phase);
+        g_ov.panel = panel_key;
+        g_ov.checkpoint_phase = phase;
+    }
     if (!g_ov.uploaded) {
         VkImageMemoryBarrier b = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, NULL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, y0 ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, g_ov.img, {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
@@ -1173,6 +1218,8 @@ static enum present_result present_window(vkimg_t *im, const int crop[4], double
     if (V.has_dtiming && r >= 0) present_time_map(ptm.presentID, ticket, generated);
     pthread_mutex_unlock(&g_vk_queue_mu);
     if (r >= 0) {
+        static int first_game_frame;
+        if (ticket && !first_game_frame) { first_game_frame = 1; dm_checkpoint_frame_shown(); }
         if (generated) ++g_generated_presented; else if (ticket) ++g_real_presented;
         if (generated && !framegen_display_clock()) g_fg_cpu_present_ns = mono_ns();
     }
@@ -1382,10 +1429,16 @@ static void *present_thread(void *arg) {
     for (;;) {
         pthread_mutex_lock(&g_pq_mu);
         while (g_pq_tail == g_pq_head && !atomic_load(&g_redraw)) {
-            if (dm_menu_state() < 0) { pthread_cond_wait(&g_pq_cv, &g_pq_mu); continue; }
+            int menu = dm_menu_state();
+            if (menu < 0) { pthread_cond_wait(&g_pq_cv, &g_pq_mu); continue; }
             struct timespec deadline;
             clock_gettime(CLOCK_REALTIME, &deadline);
-            ++deadline.tv_sec;
+            if (checkpoint_saving(menu)) {
+                deadline.tv_nsec += CHECKPOINT_PHASE_NS;
+                if (deadline.tv_nsec >= 1000000000L) { ++deadline.tv_sec; deadline.tv_nsec -= 1000000000L; }
+            } else {
+                ++deadline.tv_sec;
+            }
             if (pthread_cond_timedwait(&g_pq_cv, &g_pq_mu, &deadline) == ETIMEDOUT) break;
         }
         int redraw = atomic_exchange(&g_redraw, 0);
@@ -1393,7 +1446,7 @@ static void *present_thread(void *arg) {
             pthread_mutex_unlock(&g_pq_mu);
             if (last.im) {
                 pthread_mutex_lock(&g_present_mu);
-                redraw |= vk_lsfg_poll(mono_ns());
+                redraw |= vk_lsfg_poll(mono_ns()) | checkpoint_saving(dm_menu_state());
                 if (dm_game_held() || !dm_framegen_enabled()) {
                     g_fg_cadence = (framegen_cadence){0};
                     g_fg_sample_ns = 0;

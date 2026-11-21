@@ -65,6 +65,8 @@ static void save_export(void) {}
 static void menu_audio(void) {}
 static int dll_imports;
 static void menu_lossless_import(void) { ++dll_imports; }
+void dm_checkpoint_request(void) {}
+int dm_checkpoint_state(void) { return DM_CHECKPOINT_DISABLED; }
 static void menu_close(void) {}
 static void dm_overlay_redraw(void) {}
 ''' + visible + hidden + hit + menu + r'''

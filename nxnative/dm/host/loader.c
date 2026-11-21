@@ -580,6 +580,15 @@ static void module_slack(module_t *m) { if (mprotect(m->base + m->size, MODULE_S
 static void module_slack(module_t *m) { (void)m; }
 #endif
 
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+#include "../android/checkpoint_modules.inc"
+#else
+static void *module_pages(module_t *m, size_t size, const void *raw, size_t len) {
+    (void)m; (void)raw; (void)len;
+    return mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+}
+#endif
+
 static void map_image(module_t *m, const char *dir) {
     char path[1024]; snprintf(path, sizeof path, "%s/%s.patched.bin", dir, m->name);
     size_t sz; uint8_t *raw = slurp(path, &sz);
@@ -589,7 +598,7 @@ static void map_image(module_t *m, const char *dir) {
         if (sz < fl) die("%s is shorter than FILE_IMAGE_LEN %#llx", path, (unsigned long long)fl);
         m->size = m->image_size; m->patch_len = (sz - fl + 0x3FFF) & ~0x3FFFull;
         if (m->patch_len > pre) die("%s patch area of %#llx bytes does not fit in the %#llx before the base", path, (unsigned long long)m->patch_len, (unsigned long long)pre);
-        uint8_t *a = mmap(NULL, pre + m->size + MODULE_SLACK, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+        uint8_t *a = module_pages(m, pre + m->size + MODULE_SLACK, raw, sz);
         if (a == MAP_FAILED) die("%s mmap %#llx", m->name, (unsigned long long)(pre + m->size));
         m->base = a + pre; module_slack(m);
         memcpy(m->base, raw, fl); memcpy(a, raw + fl, sz - fl); free(raw); install_key_page(m);
@@ -600,7 +609,7 @@ static void map_image(module_t *m, const char *dir) {
         return;
     }
     m->size = (sz + 0x3FFF) & ~0x3FFFull;
-    m->base = mmap(NULL, m->size + MODULE_SLACK, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+    m->base = module_pages(m, m->size + MODULE_SLACK, raw, sz);
     if (m->base == MAP_FAILED) die("%s mmap", m->name);
     module_slack(m);
     memcpy(m->base, raw, sz); free(raw); install_key_page(m);

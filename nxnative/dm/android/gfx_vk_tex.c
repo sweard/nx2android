@@ -1114,3 +1114,35 @@ void mtl_read_texels(const tex_t *t, unsigned level, unsigned layer0, const NVNc
     mtl_wait(mtl_sub_commit(), ~0ull);
     for (size_t z = 0; z < depth; z++) for (size_t y = 0; y < rows; y++) memcpy(dst + z * img + y * row, p + (z * rows + y) * pitch, pitch < row ? pitch : row);
 }
+
+#ifdef DM_MANUAL_CHECKPOINT
+// Called on the replay thread, where GPU writes and image lifetime are ordered.
+void dm_checkpoint_report_images(void) {
+    pthread_mutex_lock(&g_img_mu);
+    uint64_t live = g_img_n, bytes = g_img_bytes;
+    const nvn_hmap *tables[] = {&g_by_key, &g_by_serial};
+    unsigned written = 0, multisample = 0, unmanaged_view = 0, not_ready = 0;
+    for (unsigned k = 0; k < 2; ++k) {
+        const nvn_hmap *table = tables[k];
+        for (uint32_t i = 0; i < table->cap; ++i) {
+            const vkimg_t *image = table->vals[i];
+            if (image) {
+                written += !!image->gpu_w;
+                multisample += image->samples > 1;
+                unmanaged_view += !!(image->bc_of || image->bc_draw);
+                not_ready += image->layout != VK_IMAGE_LAYOUT_GENERAL;
+            }
+        }
+    }
+    pthread_mutex_unlock(&g_img_mu);
+    LOG("[snapshot] live images=%llu storage_mib=%.1f GPU-written entries=%u",
+        (unsigned long long)live, bytes / 1048576.0, written);
+    LOG("[snapshot] image entries: multisampled=%u BC attachment aliases=%u without defined layout=%u",
+        multisample, unmanaged_view, not_ready);
+}
+#endif
+
+#ifdef DM_MANUAL_CHECKPOINT
+#include "checkpoint_image.inc"
+#include "checkpoint_bindings.inc"
+#endif

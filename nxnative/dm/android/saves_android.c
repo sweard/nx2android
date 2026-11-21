@@ -98,6 +98,120 @@ void dm_saves_paths(const char *files_root) {
 }
 const char *dm_saves_dir(void) { return g_dir; }
 
+// A save commit atomically exchanges the committed directory. Its identity is sufficient to tell the
+// next launch whether the live save is still the checkpoint's commit, without copying anything back.
+typedef struct { uint64_t dev, ino; int64_t sec, nsec; } save_identity;
+
+static int checkpoint_identity(save_identity ids[2]) {
+    const char *const path[] = {g_save, g_dev};
+    memset(ids, 0, 2 * sizeof *ids);
+    for (int i = 0; i < 2; ++i) {
+        struct stat st;
+        if (lstat(path[i], &st)) {
+            if (i == 1 && errno == ENOENT) continue;
+            return -errno;
+        }
+        if (!S_ISDIR(st.st_mode)) return -ENOTDIR;
+        ids[i] = (save_identity){st.st_dev, st.st_ino, st.st_ctim.tv_sec, st.st_ctim.tv_nsec};
+    }
+    return 0;
+}
+
+static int sync_checkpoint_dirs(const char *path) {
+    DIR *dir = opendir(path);
+    if (!dir) return -errno;
+    struct dirent *entry;
+    int result = 0;
+    while (!result && (entry = readdir(dir))) {
+        if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..")) continue;
+        char child[1200];
+        struct stat st;
+        if (snprintf(child, sizeof child, "%s/%s", path, entry->d_name) >= (int)sizeof child) result = -ENAMETOOLONG;
+        else if (lstat(child, &st)) result = -errno;
+        else if (S_ISDIR(st.st_mode)) result = sync_checkpoint_dirs(child);
+    }
+    if (!result && fsync(dirfd(dir))) result = -errno;
+    closedir(dir);
+    return result;
+}
+
+static int checkpoint_record(const char *path, const void *data, size_t size) {
+    int fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+    if (fd < 0) return -errno;
+    int result = write(fd, data, size) == (ssize_t)size && !fsync(fd) ? 0 : -EIO;
+    if (close(fd) && !result) result = -errno;
+    return result;
+}
+
+int dm_saves_checkpoint_capture(const char *staging, const char *files_root) {
+    const char *const roots[] = {g_save, g_dev}, *const dirs[] = {"save", "device"};
+    save_identity before[2], after[2];
+    uint64_t commit = dm_fs_commit_count();
+    int result = checkpoint_identity(before);
+    if (result) return result;
+    if (!has_entries(g_save) && !has_entries(g_dev)) return -ENOENT;
+    if (mkdir(staging, 0700)) return -errno;
+
+    char from[1200], to[1200], error[600];
+    long count = 0;
+    long long bytes = 0;
+    for (int i = 0; !result && i < 2; ++i) {
+        if (!before[i].ino) continue;
+        snprintf(to, sizeof to, "%s/%s", staging, dirs[i]);
+        result = copy_tree(roots[i], to, &count, &bytes, error, sizeof error);
+    }
+    if (result) return result;
+    if (!count || checkpoint_identity(after) || memcmp(before, after, sizeof before) || commit != dm_fs_commit_count()) return -EAGAIN;
+
+    snprintf(from, sizeof from, "%s/nx2a-data.json", files_root);
+    snprintf(to, sizeof to, "%s/nx2a-data.json", staging);
+    result = copy_file(from, to);
+    if (result) return result;
+    snprintf(from, sizeof from, "%s/settings.txt", files_root);
+    snprintf(to, sizeof to, "%s/settings.txt", staging);
+    result = copy_file(from, to);
+    if (result == -ENOENT) result = checkpoint_record(to, "", 0);
+    if (result) return result;
+    snprintf(to, sizeof to, "%s/identity", staging);
+    result = checkpoint_record(to, before, sizeof before);
+    return result ? result : sync_checkpoint_dirs(staging);
+}
+
+static int same_manifest(const char *a, const char *b) {
+    FILE *left = fopen(a, "rb"), *right = fopen(b, "rb");
+    int equal = left && right;
+    if (equal) {
+        char x[4096], y[4096];
+        size_t n, m;
+        do {
+            n = fread(x, 1, sizeof x, left);
+            m = fread(y, 1, sizeof y, right);
+            equal = n == m && !memcmp(x, y, n) && !ferror(left) && !ferror(right);
+        } while (equal && n == sizeof x);
+    }
+    if (left) fclose(left);
+    if (right) fclose(right);
+    return equal;
+}
+
+int dm_saves_checkpoint_matches(const char *slot, const char *files_root) {
+    char path[1200], live[1200];
+    save_identity saved[2], actual[2];
+    snprintf(path, sizeof path, "%s/identity", slot);
+    FILE *record = fopen(path, "rb");
+    if (!record) return 0;
+    int good = fread(saved, sizeof saved, 1, record) == 1 && fgetc(record) == EOF && !ferror(record);
+    fclose(record);
+    if (!good || checkpoint_identity(actual) || memcmp(saved, actual, sizeof saved)) return 0;
+    snprintf(path, sizeof path, "%s/settings.txt", slot);
+    if (access(path, R_OK)) return 0;
+    snprintf(path, sizeof path, "%s/nx2a-data.json", slot);
+    snprintf(live, sizeof live, "%s/nx2a-data.json", files_root);
+    return same_manifest(path, live);
+}
+
+void dm_saves_checkpoint_remove(const char *path) { rm_tree(path); }
+
 int dm_saves_export(const char *suffix, char *name, int cap, char *err, int ecap) {
     err[0] = 0;
     if (!g_save[0]) { snprintf(err, (size_t)ecap, "DM_SAVE is not set"); return -EINVAL; }

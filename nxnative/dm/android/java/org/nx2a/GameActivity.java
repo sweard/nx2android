@@ -1,5 +1,6 @@
 package org.nx2a;
 
+import android.app.AlertDialog;
 import android.app.NativeActivity;
 import android.content.Intent;
 import java.nio.charset.StandardCharsets;
@@ -8,6 +9,18 @@ import java.nio.charset.StandardCharsets;
 public class GameActivity extends NativeActivity {
     private final GameKeyboard keyboard = new GameKeyboard(this);
     private final GameFiles files = new GameFiles(this);
+
+    private native void chooseCheckpoint(boolean restore);
+
+    private void offerCheckpoint() {
+        runOnUiThread(() -> new AlertDialog.Builder(this)
+                .setTitle("Game checkpoint")
+                .setMessage("Restore the settings saved with your checkpoint. Use Continue in the game to load your last in-game save.")
+                .setPositiveButton("Restore checkpoint", (dialog, which) -> chooseCheckpoint(true))
+                .setNegativeButton("Start normally", (dialog, which) -> chooseCheckpoint(false))
+                .setOnCancelListener(dialog -> chooseCheckpoint(false))
+                .show());
+    }
 
     public void importLosslessDll() { files.openLossless(); }
     @Override protected void onActivityResult(int request, int result, Intent data) {

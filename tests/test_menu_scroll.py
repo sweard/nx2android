@@ -48,8 +48,8 @@ int main(int argc,char **argv) {
         float p[4];ov_menu_rect(screens[k][0],screens[k][1],p);
         unsigned w=(unsigned)(p[2]/2)+1,h=(unsigned)(p[3]/2)+1;
         uint8_t *pixels=calloc((size_t)w*h,4);assert(pixels);
-        int state=(1<<8)|(60<<9);
-        ov_canvas cv={pixels,w,0,0,w,h};ov_menu_panel(&cv,state,0);
+        int state=(1<<8)|(60<<9)|(DM_CHECKPOINT_IDLE<<OVM_CHECKPOINT_SHIFT);
+        ov_canvas cv={pixels,w,0,0,w,h};ov_menu_panel(&cv,state,0,0);
         float r[4];ov_menu_view_rowrect((float[4]){0,0,w,h},1,r);
         int min=(int)h,max=-1;
         for(unsigned y=(unsigned)r[1];y<r[1]+r[3];y++) for(unsigned x=(unsigned)r[0];x<r[0]+r[2]*.36f;x++) {
@@ -63,11 +63,18 @@ int main(int argc,char **argv) {
         float first[4],last[4];ov_menu_view_rowrect((float[4]){0,0,w,h},1,first);ov_menu_view_rowrect((float[4]){0,0,w,h},OVM_VIEW_ROWS-1,last);
         unsigned top=(unsigned)ceilf(first[1]),bottom=(unsigned)floorf(last[1]);
         for(int position=1;position<=2*OVM_SCROLL_UNITS;position+=137) {
-            memset(pixels,0,(size_t)w*h*4);ov_menu_panel(&cv,state,position);
+            memset(pixels,0,(size_t)w*h*4);ov_menu_panel(&cv,state,position,0);
             assert(ov_menu_raster_key(state,position)!=ov_menu_raster_key(state,position-1));
             assert(memcmp(fixed,pixels,(size_t)top*w*4)==0); // partial rows and scrollbar never cover the tabs
             assert(memcmp(fixed+(size_t)bottom*w*4,pixels+(size_t)bottom*w*4,(size_t)(h-bottom)*w*4)==0); // Resume stays fixed
         }
+        int saving=(1<<8)|(60<<9)|(DM_CHECKPOINT_SAVING<<OVM_CHECKPOINT_SHIFT);
+        size_t footer=(size_t)bottom*w*4;
+        memset(pixels,0,(size_t)w*h*4);ov_menu_panel(&cv,saving,0,0);
+        memcpy(fixed,pixels,(size_t)w*h*4);
+        memset(pixels,0,(size_t)w*h*4);ov_menu_panel(&cv,saving,0,3);
+        assert(memcmp(fixed,pixels,footer)==0);
+        assert(memcmp(fixed+footer,pixels+footer,(size_t)w*h*4-footer)!=0);
         free(fixed);free(pixels);
     }
     free(font);return 0;
@@ -100,6 +107,8 @@ int dm_overlay_layout(void) { return 0; }
 int dm_overlay_custom(int l, int c, float *x, float *y, float *s) { (void)l; (void)c; (void)x; (void)y; *s=1; return 0; }
 int dm_menu_audio_available(void) { return 0; }
 int dm_menu_lossless_import_available(void) { return 1; }
+static int checkpoint_state = DM_CHECKPOINT_IDLE;
+int dm_checkpoint_state(void) { return checkpoint_state; }
 enum { AMOTION_EVENT_ACTION_DOWN, AMOTION_EVENT_ACTION_UP, AMOTION_EVENT_ACTION_MOVE,
        AMOTION_EVENT_ACTION_CANCEL, AMOTION_EVENT_ACTION_POINTER_DOWN, AMOTION_EVENT_ACTION_POINTER_UP };
 #define AMOTION_EVENT_ACTION_MASK 255
@@ -195,6 +204,29 @@ int main(void) {
         assert(ov_menu_scroll_slot(1,0,0)==0 && ov_menu_scroll_slot(1,2,0)==0);
         assert(ov_menu_scroll_slot(1,0,OVM_ROWS-1)==OVM_VIEW_ROWS-1);
         assert(ov_menu_scroll_slot(1,2,OVM_ROWS-1)==OVM_VIEW_ROWS-1);
+        ov_menu_view_rowrect(p,OVM_VIEW_ROWS-1,r);
+        float left=r[0]+r[2]*.25f, right=r[0]+r[2]*.75f; y=r[1]+r[3]/2;
+        int before=actions;
+        touch(AMOTION_EVENT_ACTION_DOWN,left,y,W,H); touch(AMOTION_EVENT_ACTION_UP,right,y,W,H);
+        assert(actions==before);
+        touch(AMOTION_EVENT_ACTION_DOWN,left,y,W,H); touch(AMOTION_EVENT_ACTION_UP,left,y,W,H);
+        assert(actions==before+1 && last_action==OVM_CHECKPOINT);
+        touch(AMOTION_EVENT_ACTION_DOWN,right,y,W,H); touch(AMOTION_EVENT_ACTION_UP,right,y,W,H);
+        assert(actions==before+2 && last_action==OVM_RESUME);
+        menu_key(DM_BTN_UP);
+        menu_key(DM_BTN_LEFT); menu_key(DM_BTN_A);
+        assert(actions==before+3 && last_action==OVM_CHECKPOINT);
+        menu_key(DM_BTN_RIGHT); menu_key(DM_BTN_A);
+        assert(actions==before+4 && last_action==OVM_RESUME);
+        checkpoint_state=DM_CHECKPOINT_SAVING;
+        touch(AMOTION_EVENT_ACTION_DOWN,left,y,W,H); touch(AMOTION_EVENT_ACTION_UP,left,y,W,H);
+        touch(AMOTION_EVENT_ACTION_DOWN,right,y,W,H); touch(AMOTION_EVENT_ACTION_UP,right,y,W,H);
+        menu_key(DM_BTN_LEFT); menu_key(DM_BTN_A);
+        assert(actions==before+4);
+        checkpoint_state=DM_CHECKPOINT_SAVED;
+        touch(AMOTION_EVENT_ACTION_DOWN,right,y,W,H); touch(AMOTION_EVENT_ACTION_UP,right,y,W,H);
+        assert(actions==before+5 && last_action==OVM_RESUME);
+        checkpoint_state=DM_CHECKPOINT_IDLE;
     }
     return 0;
 }

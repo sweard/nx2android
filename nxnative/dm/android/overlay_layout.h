@@ -3,6 +3,7 @@
 // or the right edge: a thumb reaches as far from the edge on any width) and y of the window's height down; its size is in window heights (round controls stay round)
 #pragma once
 #include <math.h>
+#include "checkpoint_android.h"
 #include "dm_input.h"
 enum { OV_STICK_L, OV_STICK_R, OV_BUTTON, OV_DPAD, OV_MENU };   // OV_MENU: the menu button (shown with the gamepad on or off, 70%; env.txt DM_MENU_BUTTON=0 leaves it out): pauses the game and opens the settings
 typedef struct { int kind; float ax, x, y, w, h; uint64_t btn; const char *label, *name; } ov_ctl;   // ax: the anchor, as a fraction of the window's width; name: the table's
@@ -162,7 +163,7 @@ void dm_overlay_theme_done(const ov_theme *t);   // the pixels are on the GPU: t
 
 // ---- the pause menu: a panel in the middle of the window: a row of tabs, the open tab's rows, and Resume. Everything is placed in a panel rectangle p
 // (x, y, width, height: the window's for touches, the raster's for drawing), so the touches and the drawing agree ----
-enum { OVM_OVERLAY, OVM_OPACITY, OVM_EDIT, OVM_RUMBLE, OVM_FPS, OVM_MODE, OVM_EXPORT, OVM_IMPORT, OVM_PAD, OVM_AUDIO, OVM_FRAMEGEN, OVM_FG_TARGET, OVM_FG_IMPORT, OVM_RESUME, OVM_TAB, OVM_N };   // OVM_TAB: the tabs' row;
+enum { OVM_OVERLAY, OVM_OPACITY, OVM_EDIT, OVM_RUMBLE, OVM_FPS, OVM_MODE, OVM_EXPORT, OVM_IMPORT, OVM_PAD, OVM_AUDIO, OVM_FRAMEGEN, OVM_FG_TARGET, OVM_FG_IMPORT, OVM_RESUME, OVM_TAB, OVM_CHECKPOINT, OVM_N };   // OVM_TAB: the tabs' row;
             // OVM_EDIT: the layout editor; OVM_MODE: handheld (performance) or docked (resolution); OVM_EXPORT, OVM_IMPORT: the save manager (saves_android.c);
             // OVM_PAD: a controller's face buttons by their position or by their label (front_android.c pad_labels)
 #define OVM_TABS 2
@@ -175,7 +176,6 @@ static const char *const OVM_TAB_NAMES[OVM_TABS] = {"Gamepad", "Game"};
 #define OVM_ROWS (OVM_PER_TAB + 2)   // logical row capacity: tabs, body actions, Resume
 #define OVM_VISIBLE 5              // fixed-size body viewport; extra items scroll instead of shrinking all text
 #define OVM_VIEW_ROWS (OVM_VISIBLE + 2)
-#define OVM_SCROLL_SHIFT 24
 #define OVM_SCROLL_UNITS 1024      // fixed-point rows for continuous dragging, with no row snapping
 int dm_menu_scroll_position(void);
 static inline float ov_menu_scroll_rows(int position) { return (float)position / OVM_SCROLL_UNITS; }
@@ -194,8 +194,10 @@ static inline int ov_menu_item(int tab, int row) {
 #define OV_OPACITY_MAX 80
 // what the menu shows (-1 = closed): bit 0 the gamepad is on, bit 1 rumble is on, bit 2 docked, bit 3 the frame rate shown, bits 4..7 the highlighted row + 1
 // (0 = none), bit 8 the open tab, bits 9..15 the opacity in percent, bits 20..22 the last export's outcome (OVX_*), bit 23 the export's edit parity,
-// bits 24..26 the coarse first visible body item; continuous position is dm_menu_scroll_position(), also part of the raster cache key.
+// bits 24..26 the manual checkpoint state. Continuous scroll position is part of the separate raster cache key.
 // Bit 16: text entry; bit 17: layout editor (OVE_ST_*); bit 18: save picker (OVS_ST)
+#define OVM_CHECKPOINT_FOCUS_BIT 19
+#define OVM_CHECKPOINT_SHIFT 24
 #define OVM_FRAMEGEN_BIT 29   // frame generation is enabled
 #define OVM_FG_AVAILABLE_BIT 30
 #define OVM_FG_UNCAPPED_BIT 27
@@ -222,6 +224,9 @@ static inline int ov_menu_row_at(float x, float y, float W, float H) {   // the 
 static inline void ov_menu_view_rowrect(const float p[4], float slot, float r[4]) {
     float u = p[3] / (OVM_VIEW_ROWS * OV_MENU_ROW + 2 * OV_MENU_PAD);
     r[0] = p[0] + OV_MENU_PAD * u; r[1] = p[1] + (OV_MENU_PAD + slot * OV_MENU_ROW) * u; r[2] = p[2] - 2 * OV_MENU_PAD * u; r[3] = OV_MENU_ROW * u;
+}
+static inline int ov_menu_footer_item(const float p[4], float x) {
+    return x < p[0] + p[2] * 0.5f ? OVM_CHECKPOINT : OVM_RESUME;
 }
 static inline int ov_menu_body_count(int tab) {
     int n = 0; for (int row = 1; row < OVM_ROWS - 1; row++) n += ov_menu_item(tab, row) >= 0; return n;

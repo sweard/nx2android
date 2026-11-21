@@ -56,6 +56,10 @@ typedef struct thr {
     pthread_t pt; pthread_cond_t cv;
     // Current wait: kind 0=none 1=lock 2=condition 3=address 4=synchronization object
     int wkind, woke; uint64_t waddr, wkey; uint32_t wtag; int64_t wres;
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+    uint64_t checkpoint_deadline, checkpoint_tls, checkpoint_tlr, checkpoint_tls_owner;
+    int checkpoint_guest_clock, checkpoint_installed;
+#endif
     _Atomic int sleeping;      // inside SleepThread's timed sleep (not runnable; used by dm_yield_to_core_peers)
     int yield_pending;         // this SVC woke a higher-priority thread pinned to this core: let it run before the SVC returns (svc_thread)
     _Atomic int *host_work;    // points at the thread's dm_host_work (registered when the thread starts)
@@ -212,6 +216,14 @@ static int64_t block(thr_t *t, int kind, int64_t ns) {
     uint64_t guest_deadline = det_wait ? guest_ns() + (uint64_t)ns : 0;
     if (ns > 0 && !det_wait) { clock_gettime(CLOCK_REALTIME, &dl); dl.tv_sec += ns / 1000000000; dl.tv_nsec += ns % 1000000000;
                   if (dl.tv_nsec >= 1000000000) { dl.tv_sec++; dl.tv_nsec -= 1000000000; } }
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+    extern uintptr_t dm_guest_tls_owner(void);
+    t->checkpoint_tls_owner = dm_guest_tls_owner();
+    t->checkpoint_tls = (uintptr_t)dm_tsd_get(g_keytls);
+    t->checkpoint_tlr = (uintptr_t)dm_tsd_get(g_keytlr);
+    t->checkpoint_guest_clock = det_wait;
+    t->checkpoint_deadline = det_wait ? guest_deadline : ns > 0 ? (uint64_t)dl.tv_sec * 1000000000 + dl.tv_nsec : 0;
+#endif
     // Spin before parking: the game's threads hand work to each other thousands of times a second (Pokémon Scarlet's job workers wait ~2,500 times a second each, a
     // quarter of a millisecond on average), and a parked thread waits for the wake to reach a sleeping core as well; a wake that comes within the spin costs neither.
     // G is let go while spinning, as the condition wait does; a thread whose spins keep ending with no wake spins again only every 16th wait, until one is woken in it
@@ -1079,3 +1091,24 @@ void hle_clear_system_event(void *ev) {   // Clear a bound service-layer SystemE
     }
     pthread_mutex_unlock(&G);
 }
+
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+void dm_checkpoint_report_threads(void) {
+    unsigned live = 0, waits[5] = {0}, svc = 0, helpers = 0, events = 0;
+    G_lock();
+    for (thr_t *t = g_all; t; t = t->all) if (t->started && !t->exited) {
+        ++live;
+        if (t->host_owned) ++helpers;
+        if (atomic_load(&t->svc_state) & 1) ++svc;
+        if (t->wkind >= 0 && t->wkind < 5) ++waits[t->wkind];
+    }
+    for (int i = 1; i < MAX_H; ++i) events += g_h[i].type == O_EVENT_R || g_h[i].type == O_EVENT_W;
+    pthread_mutex_unlock(&G);
+    LOG("[snapshot] threads live=%u host_helpers=%u in_svc=%u waits lock=%u condition=%u address=%u sync=%u event_handles=%u",
+        live, helpers, svc, waits[1], waits[2], waits[3], waits[4], events);
+}
+#endif
+
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+#include "../android/checkpoint_wait.inc"
+#endif

@@ -1818,3 +1818,7 @@ int mtl_wait(uint64_t fence, uint64_t timeout_ns) {
 }
 void mtl_finish(void) { mtl_wait(g_fence, ~0ull); }
 void mtl_drain(void) { mtl_finish(); vk_pipeline_cache_save(); }
+
+#ifdef DM_MANUAL_CHECKPOINT
+#include "checkpoint_pools.inc"
+#endif

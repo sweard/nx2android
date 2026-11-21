@@ -12,3 +12,9 @@ int dm_saves_start(const char *files_root);
 int dm_saves_export(const char *suffix, char *name, int cap, char *err, int ecap);
 int dm_saves_list(dm_save_entry *out, int max);   // the save folders in saves/, newest first
 int dm_saves_request_import(const char *name);    // name is imported at the next start: 0, or -1 when the request cannot be written
+
+// An experimental recovery point copies the committed trees and settings into a private staging directory.
+// It is usable only while the live save is still the same commit, so recovery never overwrites the game's save.
+int dm_saves_checkpoint_capture(const char *staging, const char *files_root);
+int dm_saves_checkpoint_matches(const char *slot, const char *files_root);
+void dm_saves_checkpoint_remove(const char *path);
