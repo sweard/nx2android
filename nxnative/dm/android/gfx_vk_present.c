@@ -1219,7 +1219,7 @@ static enum present_result present_window(vkimg_t *im, const int crop[4], double
     pthread_mutex_unlock(&g_vk_queue_mu);
     if (r >= 0) {
         static int first_game_frame;
-        if (ticket && !first_game_frame) { first_game_frame = 1; dm_checkpoint_frame_shown(); }
+        if (ticket && !generated && !first_game_frame) { first_game_frame = 1; dm_checkpoint_frame_shown(); }
         if (generated) ++g_generated_presented; else if (ticket) ++g_real_presented;
         if (generated && !framegen_display_clock()) g_fg_cpu_present_ns = mono_ns();
     }

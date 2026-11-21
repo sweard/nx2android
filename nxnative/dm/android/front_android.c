@@ -1574,12 +1574,14 @@ static void start_game(ANativeActivity *act) {
 #ifdef DM_MANUAL_CHECKPOINT
 enum { CHECKPOINT_WAIT_FRAME = 1, CHECKPOINT_WAIT_CHOICE, CHECKPOINT_WAIT_FIELD };
 static _Atomic int checkpoint_choice_pending;
-static jmethodID checkpoint_offer_method;
+static jmethodID checkpoint_offer_method, checkpoint_status_method;
+static _Atomic int awaiting_restored_frame;
 void dm_checkpoint_field_choose(int) __attribute__((weak));
 JNIEXPORT void JNICALL Java_org_nx2a_GameActivity_chooseCheckpoint(JNIEnv *env, jobject activity, jboolean restore) {
     if (!(*env)->IsSameObject(env, activity, g_act->clazz)) return;
     int expected = CHECKPOINT_WAIT_FIELD;
     if (dm_checkpoint_field_choose && atomic_compare_exchange_strong(&checkpoint_choice_pending, &expected, 0)) {
+        atomic_store(&awaiting_restored_frame, restore);
         dm_checkpoint_field_choose(restore);
         start_game(g_act);
         return;
@@ -1598,6 +1600,8 @@ JNIEXPORT void JNICALL Java_org_nx2a_GameActivity_chooseCheckpoint(JNIEnv *env, 
 static int prepare_checkpoint(ANativeActivity *act) {
     JNIEnv *env = act->env;
     jclass cls = (*env)->GetObjectClass(env, act->clazz);
+    checkpoint_status_method = cls ? (*env)->GetMethodID(env, cls, "checkpointStatus", "(I)V") : NULL;
+    if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
     checkpoint_offer_method = cls ? (*env)->GetMethodID(env, cls, "offerCheckpoint", "()V") : NULL;
     if (cls) (*env)->DeleteLocalRef(env, cls);
     if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); return 0; }
@@ -1621,8 +1625,29 @@ static int prepare_checkpoint(ANativeActivity *act) {
 }
 #endif
 
+int dm_checkpoint_notify(int status) {
+#ifdef DM_MANUAL_CHECKPOINT
+    ANativeActivity *act = g_act;
+    if (!act || !checkpoint_status_method) return 0;
+    JNIEnv *env = NULL;
+    int attached = (*act->vm)->GetEnv(act->vm, (void **)&env, JNI_VERSION_1_6) != JNI_OK;
+    if (attached && (*act->vm)->AttachCurrentThread(act->vm, &env, NULL) != JNI_OK) return 0;
+    (*env)->CallVoidMethod(env, act->clazz, checkpoint_status_method, (jint)status);
+    int ok = !jx(env);
+    if (attached) (*act->vm)->DetachCurrentThread(act->vm);
+    return ok;
+#else
+    (void)status;
+    return 0;
+#endif
+}
+
 void dm_checkpoint_frame_shown(void) {
 #ifdef DM_MANUAL_CHECKPOINT
+    if (atomic_exchange(&awaiting_restored_frame, 0)) {
+        dm_checkpoint_notify(DM_CHECKPOINT_RESTORED);
+        return;
+    }
     int expected = CHECKPOINT_WAIT_FRAME;
     if (!atomic_compare_exchange_strong(&checkpoint_choice_pending, &expected, CHECKPOINT_WAIT_CHOICE)) return;
     ANativeActivity *act = g_act;

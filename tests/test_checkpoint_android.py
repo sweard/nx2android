@@ -25,8 +25,17 @@ static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cv = PTHREAD_COND_INITIALIZER;
 static unsigned arrived, released, attempts;
 static int fail_attempt;
+static int notified;
 uint64_t dm_fs_commit_count(void) { return 0; }
 void dm_overlay_redraw(void) {}
+int dm_checkpoint_notify(int status) {
+    pthread_mutex_lock(&mu);
+    assert((status == DM_CHECKPOINT_SAVING) != (notified == DM_CHECKPOINT_SAVING));
+    notified = status;
+    pthread_cond_broadcast(&cv);
+    pthread_mutex_unlock(&mu);
+    return 1;
+}
 int capture_impl(const char *stage, const char *files);
 
 int dm_saves_checkpoint_capture(const char *stage, const char *files) {
@@ -59,6 +68,9 @@ static int exists(const char *root, const char *name) {
 }
 
 static void wait_state(int wanted) {
+    pthread_mutex_lock(&mu);
+    while (notified != wanted) pthread_cond_wait(&cv, &mu);
+    pthread_mutex_unlock(&mu);
     for (int tries = 0; tries < 1000; tries++) {
         if (dm_checkpoint_state() == wanted) return;
         usleep(1000);
@@ -93,6 +105,7 @@ int main(int argc, char **argv) {
     set_docked(files, 0);
     dm_checkpoint_request();
     wait_attempt(1);
+    assert(notified == DM_CHECKPOINT_SAVING);
     assert(dm_checkpoint_state() == DM_CHECKPOINT_SAVING && !exists(base, "ready"));
     dm_checkpoint_request();   // a tap while saving does not queue another save
     release(1);

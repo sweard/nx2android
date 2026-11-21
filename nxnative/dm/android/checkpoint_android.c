@@ -58,8 +58,9 @@ static void *save_worker(void *arg) {
     double ms = (end.tv_sec - start.tv_sec) * 1000.0 + (end.tv_nsec - start.tv_nsec) / 1e6;
     LOG("[resume] manual checkpoint %s in %.1f ms", result ? "unavailable" : "ready", ms);
     (void)ms;
-    atomic_store(&state, !result ? DM_CHECKPOINT_SAVED :
-                 result == -ENOENT ? DM_CHECKPOINT_NO_SAVE : DM_CHECKPOINT_FAILED);
+    int status = !result ? DM_CHECKPOINT_SAVED : result == -ENOENT ? DM_CHECKPOINT_NO_SAVE : DM_CHECKPOINT_FAILED;
+    atomic_store(&state, status);
+    dm_checkpoint_notify(status);
     dm_overlay_redraw();
     return NULL;
 }
@@ -89,9 +90,11 @@ void dm_checkpoint_request(void) {
     int previous = dm_checkpoint_state();
     if (previous == DM_CHECKPOINT_DISABLED || previous == DM_CHECKPOINT_SAVING ||
         !atomic_compare_exchange_strong(&state, &previous, DM_CHECKPOINT_SAVING)) return;
+    dm_checkpoint_notify(DM_CHECKPOINT_SAVING);
     pthread_t thread;
     if (clear_marker() || pthread_create(&thread, NULL, save_worker, NULL)) {
         atomic_store(&state, DM_CHECKPOINT_FAILED);
+        dm_checkpoint_notify(DM_CHECKPOINT_FAILED);
         LOG("[RED] [resume] could not start a manual checkpoint");
     } else {
         pthread_detach(thread);

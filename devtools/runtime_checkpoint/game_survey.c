@@ -217,7 +217,9 @@ static void *survey_threads(void *unused) {
     LOG("[snapshot] rendezvous released: result=%d", rc);
     // Sample one live resource on the replay thread after releasing the guest.
     atomic_store(&sample_image, diagnostic_samples);
-    atomic_store(&diagnostic_state, rc ? DM_CHECKPOINT_FAILED : DM_CHECKPOINT_SAVED);
+    int status = rc ? DM_CHECKPOINT_FAILED : DM_CHECKPOINT_SAVED;
+    atomic_store(&diagnostic_state, status);
+    dm_checkpoint_notify(status);
     dm_overlay_redraw();
     return NULL;
 }
@@ -225,9 +227,13 @@ static void *survey_threads(void *unused) {
 void __wrap_dm_checkpoint_request(void) {
     int previous = atomic_exchange(&diagnostic_state, DM_CHECKPOINT_SAVING);
     if (previous == DM_CHECKPOINT_SAVING) return;
+    dm_checkpoint_notify(DM_CHECKPOINT_SAVING);
     pthread_t worker;
     if (!pthread_create(&worker, NULL, survey_threads, NULL)) pthread_detach(worker);
-    else atomic_store(&diagnostic_state, DM_CHECKPOINT_FAILED);
+    else {
+        atomic_store(&diagnostic_state, DM_CHECKPOINT_FAILED);
+        dm_checkpoint_notify(DM_CHECKPOINT_FAILED);
+    }
     dm_overlay_redraw();
 }
 #include "checkpoint_modules.h"
@@ -241,10 +247,12 @@ void __wrap_load_modules(const char *dir, const char **mods, int count) {
     // some devices. Run the same read-only check in a fresh app process.
     char request[1024], scene[1024], basename[40] = {0};
     if (chosen_scene[0]) {
-        if (snprintf(scene, sizeof scene, "%s/%s", survey_private, chosen_scene) >= (int)sizeof scene) _exit(2);
+        int fits = snprintf(scene, sizeof scene, "%s/%s", survey_private, chosen_scene) < (int)sizeof scene;
         int svc_resume_private_scene(const char *, const char *, void (*)(const char *, const char **, int));
-        int rc = svc_resume_private_scene(dir, scene, __real_load_modules);
+        int rc = fits ? svc_resume_private_scene(dir, scene, __real_load_modules) : -ENAMETOOLONG;
         LOG("[snapshot] restored session ended, result=%d", rc);
+        // The failure dialog closes the activity. Never return to a partially restored guest.
+        if (rc && dm_checkpoint_notify(DM_CHECKPOINT_RESTORE_FAILED)) for (;;) pause();
         _exit(rc ? 1 : 0);
     }
     if (survey_files && snprintf(request, sizeof request, "%s/.runtime-survey-replay-once", survey_files) < (int)sizeof request) {
