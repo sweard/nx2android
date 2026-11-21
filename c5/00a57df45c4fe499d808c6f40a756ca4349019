@@ -1,0 +1,48 @@
+nxnative/dm/android/java/org/nx2a/GameActivity.java
+  s_926c68cc5bacfb::t_27656d91343880 10,36,48,50-54,67,89
+devtools/runtime_checkpoint/game_survey.c
+  s_926c68cc5bacfb::t_0f088e0f7d2e35 37,53,58,60,68-69,78-82,85,303-307,310,312,316-317,321-353
+nxnative/dm/host/main.c
+  s_926c68cc5bacfb::t_32b666f6a10e0c 101-102,104
+nxnative/dm/android/checkpoint_modules.inc
+  s_926c68cc5bacfb::t_32b666f6a10e0c 19-27,49-55
+nxnative/dm/android/build.py
+  s_926c68cc5bacfb::t_32b666f6a10e0c 87-105
+tests/test_checkpoint_android.py
+  s_926c68cc5bacfb::t_4bcbc3ff3ba843 15-17,26,94-98,151-156,169-226
+  s_926c68cc5bacfb::t_070810af51273f 227
+nxnative/dm/host/loader.c
+  s_926c68cc5bacfb::t_32b666f6a10e0c 595-602
+  s_926c68cc5bacfb::t_7e963d6310e577 603-604
+nxnative/dm/host/hle_uemalloc.c
+  s_926c68cc5bacfb::t_32b666f6a10e0c 97
+nxnative/dm/host/dm.h
+  s_926c68cc5bacfb::t_32b666f6a10e0c 11-14
+  s_926c68cc5bacfb::t_7e963d6310e577 15
+nxnative/dm/host/hle_svc.c
+  s_926c68cc5bacfb::t_32b666f6a10e0c 21-22,41,64
+nxnative/dm/android/checkpoint_memory.inc
+  s_926c68cc5bacfb::t_32b666f6a10e0c 215,325,327,330,347,412
+nxnative/dm/android/checkpoint_wait.inc
+  s_926c68cc5bacfb::t_d1de0fe13a64a7 107-114
+  s_926c68cc5bacfb::t_f1be0105d12154 15-23,28-31,33,36-38,69,73,91-94,282
+  s_926c68cc5bacfb::t_6cfbfed9a814ab 283-286,311-322
+nxnative/dm/games/01001300232F4000/checkpoint_heap.tsv
+  s_926c68cc5bacfb::t_32b666f6a10e0c 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c500a57df45c4fe499d808c6f40a756ca4349019",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
