@@ -96,7 +96,7 @@ int main(void) {
     audio_available = 1;
     assert(ov_menu_item(1, OVM_ROWS - 6) == OVM_AUDIO);
     assert(ov_menu_item(1, OVM_ROWS - 5) == OVM_FRAMEGEN && ov_menu_item(1, OVM_ROWS - 4) == OVM_FG_TARGET);
-    assert(ov_menu_item(1, OVM_ROWS - 3) == OVM_FG_ENGINE);
+    assert(ov_menu_item(1, OVM_ROWS - 3) == -1);
     assert(ov_menu_item(1, OVM_ROWS - 2) == -1);
     import_available = 1;
     assert(ov_menu_item(1, OVM_ROWS - 2) == OVM_FG_IMPORT);

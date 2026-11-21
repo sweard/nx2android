@@ -56,7 +56,7 @@ int main(int argc,char **argv) {
             const uint8_t *q=pixels+4*((size_t)y*w+x);
             if(q[0]==200 && q[1]==200 && q[2]==210) {if((int)y<min)min=y;if((int)y>max)max=y;}
         }
-        // The actual Show FPS ink has a nine-pixel cap: adding a long engine name must not silently shrink it.
+        // The disabled Frame generation control must leave the regular menu labels at their usual size.
         int target=PF_CAP*(int)fmaxf(1,roundf(r[3]*.30f/PF_CAP));
         if(max-min+1!=target) {fprintf(stderr,"%.0fx%.0f: label ink %d, expected %d\n",screens[k][0],screens[k][1],max-min+1,target);return 1;}
         uint8_t *fixed=malloc((size_t)w*h*4);assert(fixed);memcpy(fixed,pixels,(size_t)w*h*4);
@@ -111,17 +111,16 @@ typedef struct { int action; float x, y; } AInputEvent;
 #define AMotionEvent_getX(e,i) ((void)(i),(e)->x)
 #define AMotionEvent_getY(e,i) ((void)(i),(e)->y)
 static _Atomic int g_edit, g_sp_on, g_set_opacity = 60, g_set_fg_target = 60;
-static int actions, last_action = -1, engine = -1;
+static int actions, last_action = -1;
 static void dm_overlay_redraw(void) {}
 static void dm_haptics_android_tap(void) {}
 static void settings_save(void) {}
 static int ctl_at(float x,float y,float W,float H) { (void)x;(void)y;(void)W;(void)H;return -1; }
 static void menu_do(int item) { actions++; last_action=item; }
 static void menu_close(void) {}
-static void menu_set_engine(int value) { engine=value; }
 static void ed_key(uint64_t bit) { (void)bit; }
 static void sp_key(uint64_t bit) { (void)bit; }
-''' + state + csrc.function(front, 'static void menu_opacity(') + csrc.between(front, 'static void menu_tab(int t)', 'static void menu_set_engine(') + csrc.function(front, 'static void menu_set_fg_choice(') + csrc.function(front, 'static void menu_touch(') + csrc.function(front, 'static void menu_key(') + r'''
+''' + state + csrc.function(front, 'static void menu_opacity(') + csrc.between(front, 'static void menu_tab(int t)', 'static void menu_set_fg_choice(') + csrc.function(front, 'static void menu_set_fg_choice(') + csrc.function(front, 'static void menu_touch(') + csrc.function(front, 'static void menu_key(') + r'''
 static void touch(int action, float x, float y, float W, float H) {
     AInputEvent e={action,x,y}; menu_touch(&e,W,H);
 }
@@ -131,9 +130,9 @@ int main(void) {
         float W=screens[n][0], H=screens[n][1], p[4], r[4]; ov_menu_rect(W,H,p);
         assert(p[0]>=0 && p[1]>=0 && p[2]<=W && p[3]<=H);
         atomic_store(&g_menu_tab,1); atomic_store(&g_menu_scroll,0); g_menu_ptr=-1; actions=0;
-        assert(ov_menu_body_count(1)==8 && ov_menu_scroll_limit(1)==3);
+        assert(ov_menu_body_count(1)==7 && ov_menu_scroll_limit(1)==2);
         assert(ov_menu_scroll_limit(0)==0);
-        for (int offset=0;offset<=3;offset++) for (int slot=0;slot<OVM_VIEW_ROWS;slot++) {
+        for (int offset=0;offset<=2;offset++) for (int slot=0;slot<OVM_VIEW_ROWS;slot++) {
             ov_menu_view_rowrect(p,slot,r);
             int row=slot==0?0:slot==OVM_VIEW_ROWS-1?OVM_ROWS-1:ov_menu_body_row(1,offset+slot-1);
             assert(ov_menu_scroll_row_at(r[0]+r[2]/2,r[1]+r[3]/2,W,H,1,offset)==row);
@@ -161,9 +160,9 @@ int main(void) {
         touch(AMOTION_EVENT_ACTION_DOWN,x,y,W,H);
         touch(AMOTION_EVENT_ACTION_MOVE,x,y-3.3f*rh,W,H);
         touch(AMOTION_EVENT_ACTION_UP,x,y-3.3f*rh,W,H);
-        assert(atomic_load(&g_menu_scroll)==3*OVM_SCROLL_UNITS && actions==0); // no accidental export on swipe
+        assert(atomic_load(&g_menu_scroll)==2*OVM_SCROLL_UNITS && actions==0); // no accidental export on swipe
         int goal_row = ov_menu_body_row(1, 5);
-        assert(ov_menu_item(1,goal_row)==OVM_FG_TARGET && ov_menu_scroll_rowrect(p,1,3,goal_row,r));
+        assert(ov_menu_item(1,goal_row)==OVM_FG_TARGET && ov_menu_scroll_rowrect(p,1,2,goal_row,r));
         x=r[0]+r[2]-r[3]*.15f-ov_menu_fg_choice_width(r)*.5f; y=r[1]+r[3]/2;
         touch(AMOTION_EVENT_ACTION_DOWN,x,y,W,H); touch(AMOTION_EVENT_ACTION_UP,x,y,W,H);
         assert(atomic_load(&g_set_fg_target)==0 && actions==0);
@@ -184,7 +183,7 @@ int main(void) {
             assert(ov_menu_item(1,hi)>=0 && ov_menu_scroll_rowrect(p,1,offset,hi,r));
             if(hi>0 && hi<OVM_ROWS-1) {float slot=ov_menu_scroll_slot(1,offset,hi);assert(slot>=1 && slot+1<=OVM_VIEW_ROWS-1);}
         }
-        atomic_store(&g_menu_scroll,3*OVM_SCROLL_UNITS); atomic_store(&g_menu_hi,OVM_ROWS-2); menu_key(DM_BTN_A);
+        atomic_store(&g_menu_scroll,2*OVM_SCROLL_UNITS); atomic_store(&g_menu_hi,OVM_ROWS-2); menu_key(DM_BTN_A);
         assert(last_action==OVM_FG_IMPORT);
         menu_tab(0); assert(atomic_load(&g_menu_scroll)==0);
         ov_menu_view_rowrect(p,2,r); float track[3]; ov_menu_track(p,2,track);

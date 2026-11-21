@@ -1,7 +1,7 @@
 #pragma once
-#include <stddef.h>
+#include "gfx_vk.h"
+
 int vk_lsfg_validate_dll(const void *data, size_t size);
-#include "gfx_vk_framegen.h"
 
 // Poll and record on the present thread. The front end reads availability atomically.
 int vk_lsfg_poll(uint64_t now_ns);

@@ -162,14 +162,14 @@ void dm_overlay_theme_done(const ov_theme *t);   // the pixels are on the GPU: t
 
 // ---- the pause menu: a panel in the middle of the window: a row of tabs, the open tab's rows, and Resume. Everything is placed in a panel rectangle p
 // (x, y, width, height: the window's for touches, the raster's for drawing), so the touches and the drawing agree ----
-enum { OVM_OVERLAY, OVM_OPACITY, OVM_EDIT, OVM_RUMBLE, OVM_FPS, OVM_MODE, OVM_EXPORT, OVM_IMPORT, OVM_PAD, OVM_AUDIO, OVM_FRAMEGEN, OVM_FG_TARGET, OVM_FG_ENGINE, OVM_FG_IMPORT, OVM_RESUME, OVM_TAB, OVM_N };   // OVM_TAB: the tabs' row;
+enum { OVM_OVERLAY, OVM_OPACITY, OVM_EDIT, OVM_RUMBLE, OVM_FPS, OVM_MODE, OVM_EXPORT, OVM_IMPORT, OVM_PAD, OVM_AUDIO, OVM_FRAMEGEN, OVM_FG_TARGET, OVM_FG_IMPORT, OVM_RESUME, OVM_TAB, OVM_N };   // OVM_TAB: the tabs' row;
             // OVM_EDIT: the layout editor; OVM_MODE: handheld (performance) or docked (resolution); OVM_EXPORT, OVM_IMPORT: the save manager (saves_android.c);
             // OVM_PAD: a controller's face buttons by their position or by their label (front_android.c pad_labels)
 #define OVM_TABS 2
-#define OVM_PER_TAB 9
+#define OVM_PER_TAB 9   // the save picker also uses this row capacity
 static const int OVM_TAB_ITEMS[OVM_TABS][OVM_PER_TAB] = {
     {OVM_OVERLAY, OVM_OPACITY, OVM_EDIT, OVM_RUMBLE, OVM_PAD, -1, -1, -1, -1},
-    {OVM_FPS, OVM_MODE, OVM_EXPORT, OVM_IMPORT, OVM_AUDIO, OVM_FRAMEGEN, OVM_FG_TARGET, OVM_FG_ENGINE, OVM_FG_IMPORT},
+    {OVM_FPS, OVM_MODE, OVM_EXPORT, OVM_IMPORT, OVM_AUDIO, OVM_FRAMEGEN, OVM_FG_TARGET, -1, OVM_FG_IMPORT},
 };
 static const char *const OVM_TAB_NAMES[OVM_TABS] = {"Gamepad", "Game"};
 #define OVM_ROWS (OVM_PER_TAB + 2)   // logical row capacity: tabs, body actions, Resume
@@ -180,7 +180,6 @@ static const char *const OVM_TAB_NAMES[OVM_TABS] = {"Gamepad", "Game"};
 int dm_menu_scroll_position(void);
 static inline float ov_menu_scroll_rows(int position) { return (float)position / OVM_SCROLL_UNITS; }
 static inline uint64_t ov_menu_raster_key(int state, int position) { return state < 0 ? UINT64_MAX : (uint64_t)(uint32_t)state << 32 | (uint32_t)position; }
-static const char *const OVM_ENGINES[2] = {"Lemon FG", "Lossless"};
 int dm_menu_audio_available(void);
 int dm_menu_lossless_import_available(void);
 static inline int ov_menu_item(int tab, int row) {
@@ -199,7 +198,6 @@ static inline int ov_menu_item(int tab, int row) {
 // Bit 16: text entry; bit 17: layout editor (OVE_ST_*); bit 18: save picker (OVS_ST)
 #define OVM_FRAMEGEN_BIT 29   // frame generation is enabled
 #define OVM_FG_AVAILABLE_BIT 30
-#define OVM_FG_LOSSLESS_BIT 19
 #define OVM_FG_UNCAPPED_BIT 27
 #define OVT_ST 0x10000   // the mode bits of dm_menu_state, one each: OVT_ST the text entry, OVE_ST the layout editor, OVS_ST the save picker (tests/test_menu_bits.py)
 int dm_menu_state(void);
@@ -265,7 +263,7 @@ static inline int ov_menu_scroll_drag(int tab, int start, float delta_rows) {
     return value < 0 ? 0 : value > limit ? limit : value;
 }
 static inline int ov_menu_tab_at(float x, const float p[4]) { float r[4]; ov_menu_view_rowrect(p, 0, r); int t = (int)((x - r[0]) / (r[2] / OVM_TABS)); return t < 0 ? 0 : t >= OVM_TABS ? OVM_TABS - 1 : t; }
-static inline int ov_menu_fg_choice(int item) { return item == OVM_FG_ENGINE || item == OVM_FG_TARGET; }
+static inline int ov_menu_fg_choice(int item) { return item == OVM_FG_TARGET; }
 static inline float ov_menu_fg_choice_width(const float row[4]) { return row[2] * 0.30f; }
 static inline int ov_menu_fg_choice_at(float x, const float panel[4], float index) {
     float row[4]; ov_menu_view_rowrect(panel, index, row);

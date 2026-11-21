@@ -36,6 +36,12 @@ typedef struct {
     uint32_t padding[3];
 } lsfg_constants;
 
+typedef struct {
+    VkImage image;
+    VkDeviceMemory memory;
+    VkImageView view;
+} frame_image;
+
 static const VkImageSubresourceRange color_range = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
 static const VkImageSubresourceLayers color_layers = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
 static const VkImageUsageFlags work_usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
@@ -190,6 +196,12 @@ int vk_lsfg_validate_dll(const void *data, size_t size) {
     return shader_set(data, size, shaders);
 }
 
+static int format_supports(VkFormat format, VkFormatFeatureFlags features) {
+    VkFormatProperties properties;
+    vkGetPhysicalDeviceFormatProperties(V.pd, format, &properties);
+    return (properties.optimalTilingFeatures & features) == features;
+}
+
 static int supported(void) {
     const VkPhysicalDeviceLimits *limits = &V.props.limits;
     const VkFormatFeatureFlags sampled = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
@@ -197,8 +209,8 @@ static int supported(void) {
     return V.has_dtiming && V.has_robust2 && V.has_storage_image_extended_formats &&
            V.has_storage_image_write_without_format && limits->maxComputeWorkGroupInvocations >= 1024 &&
            limits->maxComputeWorkGroupSize[0] >= 32 && limits->maxComputeWorkGroupSize[1] >= 32 &&
-           vk_fg_format_supports(work_format, sampled | storage | VK_FORMAT_FEATURE_BLIT_DST_BIT | VK_FORMAT_FEATURE_BLIT_SRC_BIT) &&
-           vk_fg_format_supports(flow_format, sampled | storage) && vk_fg_format_supports(vector_format, sampled | storage);
+           format_supports(work_format, sampled | storage | VK_FORMAT_FEATURE_BLIT_DST_BIT | VK_FORMAT_FEATURE_BLIT_SRC_BIT) &&
+           format_supports(flow_format, sampled | storage) && format_supports(vector_format, sampled | storage);
 }
 
 int vk_lsfg_poll(uint64_t now_ns) {
@@ -257,7 +269,12 @@ void vk_lsfg_destroy(void) {
     if (fg.pool) vkDestroyDescriptorPool(V.dev, fg.pool, NULL);
     for (unsigned i = 0; i < SAMPLERS; ++i)
         if (fg.samplers[i]) vkDestroySampler(V.dev, fg.samplers[i], NULL);
-    for (unsigned i = 0; i < fg.images_used; ++i) vk_fg_image_destroy(&fg.images[i]);
+    for (unsigned i = 0; i < fg.images_used; ++i) {
+        frame_image *image = &fg.images[i];
+        if (image->view) vkDestroyImageView(V.dev, image->view, NULL);
+        if (image->image) vkDestroyImage(V.dev, image->image, NULL);
+        if (image->memory) vkFreeMemory(V.dev, image->memory, NULL);
+    }
     if (fg.constants) vkDestroyBuffer(V.dev, fg.constants, NULL);
     if (fg.constant_memory) vkFreeMemory(V.dev, fg.constant_memory, NULL);
     memset(&fg, 0, sizeof fg);
@@ -383,6 +400,33 @@ typedef struct {
     VkResult error;
 } lsfg_graph;
 
+static VkResult image_create(frame_image *image, VkExtent2D size, VkFormat format, VkImageUsageFlags usage) {
+    VkImageCreateInfo ci = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D,
+        .format = format, .extent = {size.width, size.height, 1}, .mipLevels = 1, .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL, .usage = usage,
+    };
+    VkResult result = vkCreateImage(V.dev, &ci, NULL, &image->image);
+    if (result) return result;
+
+    VkMemoryRequirements requirements;
+    vkGetImageMemoryRequirements(V.dev, image->image, &requirements);
+    uint32_t type = vk_mem_type(requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0);
+    if (type == UINT32_MAX) return VK_ERROR_FEATURE_NOT_PRESENT;
+    VkMemoryAllocateInfo ai = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = requirements.size, .memoryTypeIndex = type,
+    };
+    result = vkAllocateMemory(V.dev, &ai, NULL, &image->memory);
+    if (result) return result;
+    result = vkBindImageMemory(V.dev, image->image, image->memory, 0);
+    if (result) return result;
+    VkImageViewCreateInfo vi = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = image->image,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = format, .subresourceRange = color_range,
+    };
+    return vkCreateImageView(V.dev, &vi, NULL, &image->view);
+}
+
 static frame_image *graph_image(lsfg_graph *graph, VkExtent2D size, VkFormat format, VkImageUsageFlags usage) {
     if (graph->error) return NULL;
     if (fg.images_used == MAX_IMAGES) {
@@ -390,7 +434,7 @@ static frame_image *graph_image(lsfg_graph *graph, VkExtent2D size, VkFormat for
         return NULL;
     }
     frame_image *image = &fg.images[fg.images_used++];
-    graph->error = vk_fg_image_create(image, size, format, usage);
+    graph->error = image_create(image, size, format, usage);
     return image;
 }
 
@@ -609,7 +653,7 @@ int vk_lsfg_prepare(VkExtent2D size, const VkOffset3D offsets[2]) {
         destroy_programs();
         VkResult result = create_programs();
         if (result) {
-            VKLOG("[RED] Lossless Scaling pipelines failed (%d); using built-in frame generation", result);
+            VKLOG("[RED] Lossless Scaling pipelines failed (%d); frame generation unavailable", result);
             atomic_store(&available, 0);
             return 0;
         }
@@ -617,7 +661,7 @@ int vk_lsfg_prepare(VkExtent2D size, const VkOffset3D offsets[2]) {
     fg.size = size;
     VkResult result = create_graph();
     if (result) {
-        VKLOG("[RED] Lossless Scaling resources failed at %ux%u (%d); using built-in frame generation",
+        VKLOG("[RED] Lossless Scaling resources failed at %ux%u (%d); frame generation unavailable",
               size.width, size.height, result);
         vk_lsfg_destroy();
     }

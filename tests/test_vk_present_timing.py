@@ -18,6 +18,7 @@ class PresentTiming(unittest.TestCase):
         cc = shutil.which('cc') or shutil.which('clang')
         if not cc: self.skipTest('a C compiler is required')
         src = SOURCE.read_text(encoding='utf-8')
+        front = SOURCE.with_name('front_android.c').read_text(encoding='utf-8')
         start = src.index('enum framegen_outcome {')
         cadence = src[start:src.index('static framegen_cadence g_fg_cadence;', start)]
         harness = r'''
@@ -32,16 +33,18 @@ static struct { int has_dtiming; } V;
 static uint64_t g_pace_anchor, g_refresh_ns, g_fg_sample_ns, g_fg_cpu_present_ns;
 static uint64_t platform_refresh = 16666667;
 static double window_vote, real_period;
-static int g_pace_on = 1, enabled = 1, held, menu = -1, captures, followups, histories, forgets, goal, usable_rate, fail_setup;
+static int g_pace_on = 1, held, menu = -1, captures, followups, histories, forgets, goal, usable_rate, fail_setup;
+static _Atomic int g_set_framegen = 1;
+static int available;
+static int vk_lsfg_available(void) { return available; }
 uint8_t *dm_fps_state;
-''' + csrc.between(src, 'enum { PRESENT_REAL, PRESENT_CAPTURE', 'static enum present_result present_window(') + cadence + r'''
+''' + csrc.function(front, 'int dm_framegen_enabled(void)') + csrc.between(src, 'enum { PRESENT_REAL, PRESENT_CAPTURE', 'static enum present_result present_window(') + cadence + r'''
 static framegen_cadence g_fg_cadence;
 static enum framegen_outcome last_outcome;
 static uint64_t mono_ns(void) { return 1; }
 static uint64_t dm_display_refresh_ns(void) { return platform_refresh; }
 static int dm_opmode(void) { return 0; }
 static int dm_external_active(void) { return 0; }
-static int dm_framegen_enabled(void) { return enabled; }
 static int dm_framegen_target(void) { return goal; }
 static void dm_perf_framegen_rate(int fps) { usable_rate = fps; }
 static int dm_game_held(void) { return held; }
@@ -50,7 +53,7 @@ static int vk_lsfg_poll(uint64_t n) { (void)n; return 0; }
 static int dm_pacing_window_game_rate(void) { return 0; }
 int nvn_game_fps(void) { return 30; }
 static void window_rate(double p, uint64_t n) { window_vote = p; (void)n; }
-static void vk_framegen_forget(void) { forgets++; }
+static void vk_lsfg_forget(void) { forgets++; }
 static int swap_make(void) { return 1; }
 static void log_framegen_rate(uint64_t n, enum framegen_outcome outcome, uint64_t refresh, uint64_t pair) {
     g_fg_sample_ns = n; last_outcome = outcome; (void)refresh; (void)pair;
@@ -58,7 +61,10 @@ static void log_framegen_rate(uint64_t n, enum framegen_outcome outcome, uint64_
 static enum present_result present_window(vkimg_t *im, const int c[4], double p, uint64_t t, int m) {
     (void)im; (void)c; (void)t;
     if (m == PRESENT_REAL) real_period = p;
-    if ((m == PRESENT_CAPTURE || m == PRESENT_HISTORY) && fail_setup) return PRESENT_SETUP_FAILED;
+    if ((m == PRESENT_CAPTURE || m == PRESENT_HISTORY) && fail_setup) {
+        if (fail_setup == 2) available = 0;
+        return PRESENT_SETUP_FAILED;
+    }
     if (m == PRESENT_CAPTURE) { captures++; return PRESENT_GENERATED; }
     if (m == PRESENT_HISTORY) histories++;
     if (m == PRESENT_AFTER_MIDPOINT) followups++;
@@ -66,20 +72,24 @@ static enum present_result present_window(vkimg_t *im, const int c[4], double p,
 }
 ''' + csrc.between(src, 'static int framegen_display_clock(void) {', 'static void framegen_wait_followup(') + csrc.function(src, 'static void present_game_frame(') + r'''
 static void run_frames(void) {
-    g_fg_cadence = (framegen_cadence){0}; captures = followups = 0;
+    g_fg_cadence = (framegen_cadence){0}; captures = followups = histories = 0;
     for (int i = 1; i <= 8; ++i) present_game_frame(NULL, NULL, 1.0/30, i, 1000000000ull + i * 33333333ull, 0);
 }
 int main(void) {
     unsetenv("DM_VK_PACE");
-    run_frames(); assert(captures > 0 && captures == followups);  // no timing extension
+    V.has_dtiming = 1; goal = 60;
+    run_frames(); assert(captures == 0 && histories == 0 && usable_rate == 0 && real_period == 1.0/30);
+    assert(fabs(window_vote - 1.0/30) < 1e-9);  // Missing DLL retains ordinary presentation pacing.
+    available = 1; run_frames(); assert(captures > 0 && captures == followups); // extension with no feedback
     assert(fabs(window_vote - 1.0/60) < 1e-9);
-    V.has_dtiming = 1; run_frames(); assert(captures > 0);        // extension with no feedback
+    available = 0; run_frames(); assert(captures == 0 && histories == 0 && usable_rate == 0);
+    available = 1;
     g_pace_anchor = 1; g_refresh_ns = 16666667; platform_refresh = 0;
     run_frames(); assert(captures > 0 && captures == followups);  // actual driver timing
-    V.has_dtiming = 0; run_frames(); assert(captures == 0);       // unknown refresh: no guess
+    g_pace_anchor = 0; run_frames(); assert(captures == 0);       // unknown refresh: no guess
     assert(last_outcome == FG_NO_REFRESH);
-    platform_refresh = 16666667; enabled = 0; run_frames(); assert(captures == 0);
-    enabled = 1; held = 1; run_frames(); assert(captures == 0);
+    platform_refresh = 16666667; g_set_framegen = 0; run_frames(); assert(captures == 0 && usable_rate == 0);
+    g_set_framegen = 1; goal = 0; held = 1; run_frames(); assert(captures == 0);
     held = 0; menu = 0; run_frames(); assert(captures == 0);
     menu = -1; setenv("DM_VK_PACE", "0", 1); run_frames(); assert(captures == 0);
     unsetenv("DM_VK_PACE"); run_frames(); assert(captures > 0);
@@ -108,8 +118,10 @@ int main(void) {
     fail_setup = 1; goal = 60; platform_refresh = 16666667;
     for (int i = 1; i <= 12; ++i) present_game_frame(NULL, NULL, 1.0/30, i, 5000000000ull + i * 33333334ull, 0);
     assert(last_outcome == FG_SETUP_FAILED && usable_rate == 0);
-    fail_setup = 0; enabled = 0; run_frames();
+    fail_setup = 0; g_set_framegen = 0; run_frames();
     assert(usable_rate == 0 && captures == 0);
+    fail_setup = 2; g_set_framegen = 1; run_frames();
+    assert(!available && usable_rate == 0 && captures == 0 && histories == 0);
     assert(framegen_followup_deadline(1000000000ull, .025) == 1025000000ull);
     assert(forgets > 0);
     return 0;
