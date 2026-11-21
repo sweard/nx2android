@@ -1,0 +1,221 @@
+nxnative/dm/android/checkpoint_pools.inc
+  s_926c68cc5bacfb::t_ab43cd494f781f 150-166
+  s_926c68cc5bacfb::t_bf5227d6f99905 1-139,145-149
+  s_926c68cc5bacfb::t_f30d9b19af4f56 140-144
+nxnative/dm/host/hle_thread.c
+  s_db1760f56a9c1f::t_997c45b526cd90 60
+  s_926c68cc5bacfb::t_ab43cd494f781f 1094-1109,1114
+  s_926c68cc5bacfb::t_2104d6a7ed9c42 59,61-62,219,224-226,1110-1113
+  s_926c68cc5bacfb::t_8db32db8f3d04f 220-223
+devtools/runtime_checkpoint/probe_gpu.h
+  s_926c68cc5bacfb::t_765c3d172fa21c 3-4,8,18-19,23
+  s_926c68cc5bacfb::t_629f5f5809c867 1-2,5-7,9-17,20-22,24-27
+nxnative/dm/android/checkpoint_wait.h
+  s_926c68cc5bacfb::t_2104d6a7ed9c42 1-16
+tests/test_checkpoint_android.py
+  s_926c68cc5bacfb::t_83d15222f2214b 1-169
+nxnative/dm/android/gfx_vk_lsfg.c
+  s_926c68cc5bacfb::t_8adf764600dc30 39-44,199-204,212-213,272-277,656,664
+  s_926c68cc5bacfb::t_06dde6a7336fae 403-429,437
+devtools/runtime_checkpoint/sdk_worker.c
+  s_926c68cc5bacfb::t_b619df7ec52feb 1-30,33-75,77-131
+  s_db1760f56a9c1f::t_6a0e1d29b20019 31-32,76
+devtools/runtime_checkpoint/svc_image.c
+  s_926c68cc5bacfb::t_60338d4dff9df2 3-4
+  s_db1760f56a9c1f::t_a5255995e4b3fe 1-2,5,7-14,21-31,42-43,45-47,49-68
+  s_db1760f56a9c1f::t_9c429e7bfd5085 6,15-20,32-41
+  s_db1760f56a9c1f::t_472d0f2c4053e2 69-89
+  s_926c68cc5bacfb::t_3f319ec82bbce2 44,48
+nxnative/dm/android/gfx_vk_tex.c
+  s_db1760f56a9c1f::t_9c429e7bfd5085 1147
+  s_926c68cc5bacfb::t_ab43cd494f781f 1117-1123,1125-1128,1135-1139,1142-1143,1145,1148
+  s_926c68cc5bacfb::t_4846621a2e3ed5 1124,1129-1134,1140-1141
+  s_926c68cc5bacfb::t_6c67bbf250cb4d 1144,1146
+nxnative/dm/android/checkpoint_image.inc
+  s_db1760f56a9c1f::t_472d0f2c4053e2 5
+  s_926c68cc5bacfb::t_5922c0f5a2f095 132
+  s_db1760f56a9c1f::t_50229ee45c26c4 40,42,69,115,121-131,133-134,141-151
+  s_926c68cc5bacfb::t_8db32db8f3d04f 64
+  s_926c68cc5bacfb::t_4594dba555307a 1-4,6-39,41,43-63,65-68,70-114,116-120,135-140
+devtools/runtime_checkpoint/probe.c
+  s_926c68cc5bacfb::t_e2d99dd862fed6 1,4,6-26,28-37,40-44,47-54,56-60,62-65,67-86,88-90,92-99,103-144,146-175,178-213,215-234,236-240,244-258,261-266,268-274,278,280-293,295-308,310-316
+  s_926c68cc5bacfb::t_b619df7ec52feb 5,55,61,87,100-102
+  s_926c68cc5bacfb::t_8e66c32a21e089 27,176-177,259-260
+  s_926c68cc5bacfb::t_f99fc4d04df489 2-3,38-39,45-46,66,91,145,214,235,241-243,267,275-277,279,294,309
+nxnative/dm/android/overlay_layout.h
+  s_926c68cc5bacfb::t_5c19c94cec3b6d 6
+  s_926c68cc5bacfb::t_b5e39db850016b 271
+  s_926c68cc5bacfb::t_2388e761983552 170,173
+  s_926c68cc5bacfb::t_6a5346d3d796cb 166,197,199-200,228-229
+  s_926c68cc5bacfb::t_a83060947a7acf 230
+nxnative/dm/android/checkpoint_memory.h
+  s_db1760f56a9c1f::t_dc0ca782d20a9b 1-6,10-11
+  s_db1760f56a9c1f::t_a1e31d07fe9d7f 7-9
+  s_db1760f56a9c1f::t_e73c38b6ec9d7e 12-20
+nxnative/dm/android/checkpoint_memory.inc
+  s_db1760f56a9c1f::t_997c45b526cd90 46-99,102,118,151-157,182,188-189,221-231,233,239-241,261-263
+  s_db1760f56a9c1f::t_a1e31d07fe9d7f 37-45,100-101,103-117,119-122,124-129,131,133-135,141-146,167-168,236
+  s_db1760f56a9c1f::t_dc0ca782d20a9b 1-4,7-22,24-29,31-36,170-172,174-180,183-185,187,190-208,211-220,232,234-235,237-238,242-253,255-260,264-278
+  s_db1760f56a9c1f::t_e73c38b6ec9d7e 5,23,30,123,130,132,136-140,147-149,161-166,169,173,181,186,209-210,254,279-281
+  s_db1760f56a9c1f::t_34f3ac2046bd59 6
+  s_926c68cc5bacfb::t_8dff261db4413f 150,158-160
+nxnative/dm/android/saves_android.c
+  s_926c68cc5bacfb::t_c7b832025c1335 101-214
+nxnative/dm/android/checkpoint_io.h
+  s_db1760f56a9c1f::t_34f3ac2046bd59 1-6,8,10-22
+  s_db1760f56a9c1f::t_e73c38b6ec9d7e 7,9
+nxnative/dm/android/front_android.c
+  s_926c68cc5bacfb::t_6a5346d3d796cb 630,646,654,733,746-747,754-755,771,783,795,800-803,809-812,1532,1536,1612
+  s_926c68cc5bacfb::t_fef24207b2afa1 228
+  s_926c68cc5bacfb::t_7b525da3293a4a 114-115,226-227,229,1517-1531,1547-1548,1550-1551,1553,1559,1577,1614
+  s_926c68cc5bacfb::t_b5e39db850016b 99,155,173,647-648,681,718-723,780,799
+  s_926c68cc5bacfb::t_787fc78381fd3a 170-172
+  s_926c68cc5bacfb::t_7d20a89f9951b3 117-123,128-131,147,230,1515-1516,1533-1535,1537-1546,1549,1552,1554-1558,1560-1576,1613,1615
+  s_926c68cc5bacfb::t_c5c795d1fd16fb 667,714,738,790
+tests/test_vk_present_timing.py
+  s_926c68cc5bacfb::t_646fb586a354c1 21,36-39,41,56,64-67,75,80-83,85-86,89,91-92,121,123-124
+nxnative/dm/android/checkpoint_wait.inc
+  s_db1760f56a9c1f::t_50229ee45c26c4 36-43,45,62,189
+  s_db1760f56a9c1f::t_997c45b526cd90 3,229,253
+  s_926c68cc5bacfb::t_07e3d28e719a72 119-188,190-206,260
+  s_926c68cc5bacfb::t_2104d6a7ed9c42 1,4-35,44,46-61,63-118
+  s_db1760f56a9c1f::t_9772b183ccc2c9 2,207-219,225-228,230-232,234-241,244-245,254-259
+  s_926c68cc5bacfb::t_4846621a2e3ed5 242-243,246-252
+  s_926c68cc5bacfb::t_f037350fc4d28b 220-224,233
+tests/test_overlay_visibility.py
+  s_926c68cc5bacfb::t_ea7feda3277f52 29-30,43,420-421,423-433
+  s_926c68cc5bacfb::t_b99c9dbf3418d7 68
+  s_926c68cc5bacfb::t_255b1e7e32bb79 69
+nxnative/dm/android/checkpoint_modules.h
+  s_db1760f56a9c1f::t_34f3ac2046bd59 1-8
+nxnative/dm/android/checkpoint_wait_cpu.h
+  s_926c68cc5bacfb::t_4846621a2e3ed5 13
+  s_db1760f56a9c1f::t_9772b183ccc2c9 1-6,8-12,14
+  s_db1760f56a9c1f::t_997c45b526cd90 7
+nxnative/dm/android/checkpoint_pools.h
+  s_926c68cc5bacfb::t_bf5227d6f99905 1-6
+nxnative/dm/host/thread.c
+  s_db1760f56a9c1f::t_997c45b526cd90 10-34,43-57
+devtools/runtime_checkpoint/probe_gpu.c
+  s_926c68cc5bacfb::t_765c3d172fa21c 6-8,15,17-24,26,33,35-40,42-66,68-70,73-80,82-84,86-89,91-98,100-102,104-107,109-122,152-155,170-171,215-216,237-238
+  s_926c68cc5bacfb::t_629f5f5809c867 1,3-5,10-13,27-31,34,123-135,137-150,157-169,172-181,183,186-190,193-201,203-214,217-236,239-240
+devtools/runtime_checkpoint/svc_gpu.c
+  s_db1760f56a9c1f::t_69a28b98f220c5 57-58
+  s_db1760f56a9c1f::t_a7934308d8864f 1-4,6-18,25-56,59
+  s_db1760f56a9c1f::t_eeb8370266a157 5,19-24
+nxnative/dm/android/gfx_vk_present.c
+  s_926c68cc5bacfb::t_7d20a89f9951b3 1221-1222
+  s_926c68cc5bacfb::t_eeff6f33f92b96 619-620,943-944,946,951-955,1432-1433,1436-1441,1449
+  s_926c68cc5bacfb::t_7e9f2d1c606668 439,467,476-485,501,503-507
+  s_926c68cc5bacfb::t_06dde6a7336fae 542-544,1306,1308
+  s_926c68cc5bacfb::t_df641824173a0d 132,414,424,525,533,536-537,540-541,1134,1139-1140,1150,1211-1212,1227,1384,1397,1453-1454,1468
+  s_926c68cc5bacfb::t_8b494590dce55f 255,430-435,486-500,502,611,617,636
+nxnative/dm/android/gfx_vk_lsfg.h
+  s_926c68cc5bacfb::t_8adf764600dc30 2-3
+nxnative/dm/android/checkpoint_bindings.inc
+  s_db1760f56a9c1f::t_9c429e7bfd5085 1-17,19-24,27-32,35-52,54,56-59,61-64,66-100,103-124,126-129,131
+nxnative/dm/android/checkpoint_android.h
+  s_926c68cc5bacfb::t_0d754ce0b69b8c 1-9
+  s_926c68cc5bacfb::t_7d20a89f9951b3 10
+nxnative/dm/android/checkpoint_modules.inc
+  s_db1760f56a9c1f::t_e73c38b6ec9d7e 57-58,111,113,128,133,148,150,154
+  s_db1760f56a9c1f::t_34f3ac2046bd59 1-56,59-110,112,114-127,129-132,134-147,149,151-153,155-163
+nxnative/dm/android/build.py
+  s_926c68cc5bacfb::t_0d754ce0b69b8c 24,81
+tests/test_overlay_layout.py
+  s_926c68cc5bacfb::t_2388e761983552 99
+nxnative/dm/android/java/org/nx2a/GameActivity.java
+  s_926c68cc5bacfb::t_6a5346d3d796cb 13,15,17-21
+  s_926c68cc5bacfb::t_7b525da3293a4a 3,14,23
+  s_926c68cc5bacfb::t_7d20a89f9951b3 16,22
+  s_926c68cc5bacfb::t_c83df09bf5cb3d 24
+nxnative/dm/host/loader.c
+  s_db1760f56a9c1f::t_34f3ac2046bd59 583-591,601,612
+devtools/runtime_checkpoint/game_survey.c
+  s_926c68cc5bacfb::t_ab43cd494f781f 1-4,42-60,70-78,80-81
+  s_db1760f56a9c1f::t_50229ee45c26c4 5-6,8-11,13-25,35-41,61-62,64-65,67-69,79
+  s_926c68cc5bacfb::t_4846621a2e3ed5 7,26-34
+  s_926c68cc5bacfb::t_5922c0f5a2f095 12,63,66
+devtools/runtime_checkpoint/verify_runtime.py
+  s_db1760f56a9c1f::t_472d0f2c4053e2 12-13,64-83,104-111,133
+  s_db1760f56a9c1f::t_eeb8370266a157 1-11,14-22,24-47,49-50,52-63,84-102,113-132,134-140
+  s_db1760f56a9c1f::t_a5255995e4b3fe 23
+  s_db1760f56a9c1f::t_9c429e7bfd5085 48,51,103
+  s_926c68cc5bacfb::t_9566c737c3d88c 112
+nxnative/dm/android/checkpoint_tls.h
+  s_db1760f56a9c1f::t_997c45b526cd90 1-9
+nxnative/dm/android/checkpoint_image.h
+  s_db1760f56a9c1f::t_472d0f2c4053e2 7-13
+  s_db1760f56a9c1f::t_9c429e7bfd5085 19-20
+  s_926c68cc5bacfb::t_78afac22323feb 14-16
+  s_926c68cc5bacfb::t_9b62dce2327767 1-3,17
+nxnative/dm/android/gfx_vk_core.c
+  s_926c68cc5bacfb::t_bf5227d6f99905 1821-1824
+devtools/runtime_checkpoint/svc_probe.c
+  s_db1760f56a9c1f::t_a1e31d07fe9d7f 70
+  s_926c68cc5bacfb::t_d8d1a50d116088 1-4,6-7,9-12,17-27,34-37,42,51,56-69,71-82,84-94,108-111,120,125-135,139,142-143
+  s_926c68cc5bacfb::t_b619df7ec52feb 16,83,98-99,122
+  s_db1760f56a9c1f::t_a5255995e4b3fe 52-53,102-103
+  s_db1760f56a9c1f::t_9c429e7bfd5085 14,33,54-55,104,124,136
+  s_926c68cc5bacfb::t_b34cfde3531169 5,38-41,43-48,95-97,105,112-119,138
+  s_db1760f56a9c1f::t_1f9fa17ae76977 8,140-141
+  s_db1760f56a9c1f::t_6a0e1d29b20019 13,100-101,123
+  s_db1760f56a9c1f::t_472d0f2c4053e2 28-32
+  s_db1760f56a9c1f::t_a7934308d8864f 15,49-50,106-107,121,137
+devtools/runtime_checkpoint/svc_wait.c
+  s_926c68cc5bacfb::t_9ee7a072203c4a 115-123
+  s_db1760f56a9c1f::t_6a0e1d29b20019 5-6,14-15,19-20,22-43,52-55,59-60,63-66,87-89,92-93,95,97-102,132,138,141-145,165,167
+  s_db1760f56a9c1f::t_a5255995e4b3fe 1-4,7-13,16-18,44-51,67-86,90-91,94,96,103-111,114,124-131,133-137,139-140,146-164,168-169
+  s_db1760f56a9c1f::t_997c45b526cd90 21,56-58,61-62,166
+  s_926c68cc5bacfb::t_b9c493969e5fee 112-113
+tests/test_menu_scroll.py
+  s_926c68cc5bacfb::t_3ca812f5e7fc58 123
+  s_926c68cc5bacfb::t_180bcbf53d4e8a 52,66,71-77,110-111,221-229
+  s_926c68cc5bacfb::t_b99c9dbf3418d7 51,207-220
+  s_926c68cc5bacfb::t_ea7feda3277f52 59,142,144,172,174,195
+  s_926c68cc5bacfb::t_2388e761983552 132
+README.md
+  s_926c68cc5bacfb::t_a70b6f75c1977a 75-77,81
+devtools/runtime_checkpoint/probe_guest.S
+  s_926c68cc5bacfb::t_629f5f5809c867 1-26,28-42,45-52
+  s_926c68cc5bacfb::t_f99fc4d04df489 27,43-44
+nxnative/dm/android/saves_android.h
+  s_926c68cc5bacfb::t_c7b832025c1335 15-20
+docs/ARCHITECTURE.md
+  s_926c68cc5bacfb::t_e242b54f8c1712 186,378,380
+  s_db1760f56a9c1f::t_8fa15d60c434f0 376
+nxnative/dm/host/hle_svc.c
+  s_db1760f56a9c1f::t_dc0ca782d20a9b 30-41,60-61,343-346
+nxnative/dm/android/checkpoint_android.c
+  s_926c68cc5bacfb::t_0d754ce0b69b8c 1-9,11-49,52-56,61-100
+  s_926c68cc5bacfb::t_4c562093c70719 10,50-51,57-60
+devtools/runtime_checkpoint/sdk_worker.S
+  s_db1760f56a9c1f::t_6a0e1d29b20019 23-35
+  s_926c68cc5bacfb::t_b619df7ec52feb 1-22,36-37
+nxnative/dm/android/checkpoint_cpu.h
+  s_926c68cc5bacfb::t_b619df7ec52feb 1-39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ffc3df352779cb2792f86da84ed3a3452df2016d",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    },
+    "s_db1760f56a9c1f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "unknown"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
