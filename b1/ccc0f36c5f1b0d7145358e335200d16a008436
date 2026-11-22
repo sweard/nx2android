@@ -1,0 +1,52 @@
+nxnative/dm/android/checkpoint/save_commit.h
+  s_db1760f56a9c1f::t_47e65f48ee3ebc 1-7
+docs/ARCHITECTURE.md
+  s_db1760f56a9c1f::t_6d6c0a3e3d80d8 378
+devtools/runtime_checkpoint/verify_runtime.py
+  s_db1760f56a9c1f::t_d957c547ddd4a1 25-28,33,71-76
+nxnative/dm/android/checkpoint/runtime.c
+  s_926c68cc5bacfb::t_57df11c9026fc3 14,186-187
+nxnative/dm/android/java/org/nx2a/GameCheckpoint.java
+  s_926c68cc5bacfb::t_57df11c9026fc3 23,63-69,91
+nxnative/dm/host/hle_fs.c
+  s_926c68cc5bacfb::t_57df11c9026fc3 10-15,49,55-66,649,659-674,677
+  s_926c68cc5bacfb::t_23fa2f9f37743d 816,849
+devtools/runtime_checkpoint/svc_save.c
+  s_db1760f56a9c1f::t_6d6c0a3e3d80d8 6,10,49-50,63,70,72-73,88-96,104-105
+  s_db1760f56a9c1f::t_d957c547ddd4a1 1-5,7-9,11-48,51-62,64-69,71,74-87,97-103,106-109
+nxnative/dm/android/checkpoint_android.h
+  s_926c68cc5bacfb::t_57df11c9026fc3 6-7
+nxnative/dm/android/checkpoint_files.inc
+  s_926c68cc5bacfb::t_57df11c9026fc3 177
+nxnative/dm/android/saves_android.c
+  s_926c68cc5bacfb::t_befe91db64e897 40-44
+nxnative/dm/android/checkpoint/save_commit.c
+  s_926c68cc5bacfb::t_befe91db64e897 31,102-103,115,145-146,164
+  s_db1760f56a9c1f::t_47e65f48ee3ebc 1-30,32-101,104-114,116-144,147-163,165-175
+devtools/runtime_checkpoint/svc_probe.c
+  s_db1760f56a9c1f::t_d957c547ddd4a1 53-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b1ccc0f36c5f1b0d7145358e335200d16a008436",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    },
+    "s_db1760f56a9c1f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "unknown"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
