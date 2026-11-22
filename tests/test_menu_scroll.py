@@ -31,6 +31,7 @@ class MenuScroll(unittest.TestCase):
 #include "overlay_layout.h"
 #include "pixel_font.h"
 static uint8_t *font;
+int dm_fps_opts(void) { return FPSO_DEFAULT; }
 const uint8_t *dm_overlay_font(void) { return font; }
 float dm_overlay_scale(void) { return 1; }
 int dm_overlay_custom(int l,int c,float*x,float*y,float*s) {(void)l;(void)c;(void)x;(void)y;*s=1;return 0;}
@@ -48,7 +49,7 @@ int main(int argc,char **argv) {
         float p[4];ov_menu_rect(screens[k][0],screens[k][1],p);
         unsigned w=(unsigned)(p[2]/2)+1,h=(unsigned)(p[3]/2)+1;
         uint8_t *pixels=calloc((size_t)w*h,4);assert(pixels);
-        int state=(1<<8)|(60<<9);
+        int state=(1<<8)|((60-OV_OPACITY_MIN)<<9);
         ov_canvas cv={pixels,w,0,0,w,h};ov_menu_panel(&cv,state,0);
         float r[4];ov_menu_view_rowrect((float[4]){0,0,w,h},1,r);
         int min=(int)h,max=-1;
