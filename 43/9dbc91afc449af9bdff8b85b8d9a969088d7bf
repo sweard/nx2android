@@ -1,0 +1,391 @@
+porter/pipeline.py
+  s_926c68cc5bacfb::t_f971ac612039de 6,218,518-523,679-744,796
+nxnative/dm/games/01008E0019388000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-45
+nxnative/dm/android/gfx_vk_exec_draws.inc
+  s_926c68cc5bacfb::t_f971ac612039de 54
+nxnative/dm/android/gfx_vk_exec_state.inc
+  s_926c68cc5bacfb::t_f971ac612039de 151-152,157-158
+nxnative/dm/games/010038C00EC34000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-38
+nxnative/dm/games/01002B30028F6000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-38
+nxnative/dm/games/01008B101B87A000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-47
+nxnative/dm/games/01001300232F4000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-42
+nxnative/dm/games/010055D009F78000/patches.py
+  s_926c68cc5bacfb::t_f971ac612039de 18-29
+tests/test_provisional_patch_warning.py
+  s_926c68cc5bacfb::t_f971ac612039de 1-76
+nxnative/dm/games/010082400BCC6000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-38
+nxnative/dm/games/010040801A4C8000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-38
+nxnative/dm/android/overlay_layout.h
+  s_926c68cc5bacfb::t_c2b0684ce236c6 185
+  s_926c68cc5bacfb::t_f971ac612039de 164-182,188-189,193-194,196,204-219,223,233
+nxnative/dm/games/010028600EBDA000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-41
+nxnative/dm/games/01008D7016438000/game.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 3
+nxnative/dm/games/0100F2C0115B6000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-48
+nxnative/dm/android/gfx_vk_tex.c
+  s_926c68cc5bacfb::t_f971ac612039de 732-733
+nxnative/dm/games/01005270232F2000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-41
+nxnative/dm/games/010055D009F78000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-50
+nxnative/dm/games/0100000011D90000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-44,48,56,60,67,74,80,84,96,98-104,106
+tests/test_uepak_v8.py
+  s_926c68cc5bacfb::t_f971ac612039de 1-188
+nxnative/dm/gfx/nvn/dmsh_chain.h
+  s_926c68cc5bacfb::t_f971ac612039de 3
+nxnative/dm/games/01003FD01F22E000/pso_manifest.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 1-2
+README.md
+  s_926c68cc5bacfb::t_f971ac612039de 14,17-40,43,45,58,78
+  s_926c68cc5bacfb::t_0995ac614c8950 79
+docs/PORT_STATUS.md
+  s_926c68cc5bacfb::t_f971ac612039de 3
+nxnative/dm/games/0100606026F12000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-40
+tests/test_shader_eabig.py
+  s_926c68cc5bacfb::t_f971ac612039de 1-131
+nxnative/dm/games/0100000000010000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-38
+nxnative/dm/games/01009D901BC56000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-2,4-44,48,53,60,62,67,74,82,88,95,97
+nxnative/dm/games/0100BA4026E94000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-38
+nxnative/dm/games/0100D9F01D474000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-41
+.claude/skills/switch-android-port/references/playbook.md
+  s_926c68cc5bacfb::t_f971ac612039de 25,28-29
+nxnative/dm/games/0100F43008C44000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-49
+nxnative/dm/games/0100300012F2A000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-38
+tests/test_vk_vertex_format_support.py
+  s_926c68cc5bacfb::t_f971ac612039de 1-154
+nxnative/dm/games/010038E016264000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-53
+nxnative/dm/android/tools/shader_vk.py
+  s_926c68cc5bacfb::t_f971ac612039de 119
+nxnative/dm/games/01000A001171A000/shader_facts.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 1-13
+nxnative/dm/games/01003FD01F22E000/android.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 1-14
+tests/test_make_shared_font.py
+  s_926c68cc5bacfb::t_f971ac612039de 1-90
+nxnative/dm/games/010043B013C5C000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-47
+nxnative/dm/games/0100D7B01AE58000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-50
+nxnative/dm/games/010013C00E930000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-38
+nxnative/dm/games/01000A001171A000/android.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 1-8
+nxnative/dm/android/gfx_vk_exec_descriptors.inc
+  s_926c68cc5bacfb::t_f971ac612039de 183-192,269-271,442-448
+nxnative/dm/games/0100A00019DE0000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-38
+tests/test_nvn_api_semantics.py
+  s_926c68cc5bacfb::t_f971ac612039de 1-68
+nxnative/dm/android/tools/android_profile.py
+  s_926c68cc5bacfb::t_f971ac612039de 4,31-33,45,141-142,144-147
+.claude/skills/switch-android-port/references/switches.md
+  s_926c68cc5bacfb::t_f971ac612039de 137
+nxnative/dm/games/01003FD01F22E000/bf_want.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 1
+nxnative/dm/android/gfx_vk_quirks.c
+  s_926c68cc5bacfb::t_f971ac612039de 42-49,53,55-56,65
+nxnative/dm/games/0100B6F01DAF6000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-40
+nxnative/dm/gfx/tex/nvn_deswizzle.c
+  s_926c68cc5bacfb::t_f971ac612039de 8,51,55-66
+nxnative/dm/games/01000A001171A000/shader_map.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 1-389
+nxnative/dm/games/01008D7016438000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-78
+nxnative/dm/games/0100FF500E34A000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-53
+tests/test_fps_counter_options.py
+  s_926c68cc5bacfb::t_f971ac612039de 1-121
+nxnative/dm/games/0100A6301214E000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-40
+nxnative/dm/games/01007AB012872000/pso_manifest.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 1-2
+nxnative/dm/games/01003FD01F22E000/shader_pairs.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 1-5743
+devtools/make_shared_font.py
+  s_926c68cc5bacfb::t_f971ac612039de 1-96
+nxnative/dm/games/010043600B6A6000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-38
+tests/test_porter.py
+  s_926c68cc5bacfb::t_f971ac612039de 211-230
+nxnative/dm/games/01004D300C5AE000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-41
+nxnative/dm/games/010055D009F78000/shader_facts.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 2-11,13-17,19,21-27,30-41,43-59,61,63-67,70-84,86-89,92-94,96-100,102-103,105-110,112-117,119-124,127-129,132,134-136,138-140,142-146,148-152,154-158,160,162-166,168-176,178-180,182-186,188-191,193,195-208,210,212-218,220,222-223,225-230,232-234,236,238-243,245,247-248,250-251,254-257,259-264,266,268-270,272,274-276,278-279,281,283,285-287,289,291-299,301-305,307-308,310,312-313,315-318,320-321,323-325,327-332,334-340,342,345-348,351,353-356,359,361-364,366-368,370-372,374-376,378-380,382-383,385-386,389-392,394-402,404-408,410,412-413
+.claude/skills/nx2android-dev/references/new-game-profile.md
+  s_926c68cc5bacfb::t_f971ac612039de 9,70-78
+nxnative/dm/games/01003FD01F22E000/shader_facts.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 1-45
+nxnative/dm/games/01009BF0072D4000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-44
+nxnative/dm/games/0100A3900C3E2000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-38
+nxnative/dm/android/gfx_vk_exec_walker.inc
+  s_926c68cc5bacfb::t_f971ac612039de 122
+nxnative/dm/gfx/tools/dmsh_xlate/Program.cs
+  s_926c68cc5bacfb::t_f971ac612039de 144-146
+nxnative/dm/games/01006B601380E000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-42
+nxnative/dm/games/0100BD401D18A000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-38
+nxnative/dm/games/010051F0207B2000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-44
+nxnative/dm/host/hle_oe.c
+  s_926c68cc5bacfb::t_f971ac612039de 103-106
+nxnative/dm/games/01008DB008C2C000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-44
+.claude/skills/nx2android-dev/SKILL.md
+  s_926c68cc5bacfb::t_f971ac612039de 35-36
+nxnative/dm/games/01003D200BAA2000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-40
+docs/ARCHITECTURE.md
+  s_926c68cc5bacfb::t_f971ac612039de 29,120-127,178-184,195,205,212-219,224-230,267-270,336,338-342,352-353,374-375,396
+  s_926c68cc5bacfb::t_c2b0684ce236c6 201
+nxnative/dm/games/01003FD01F22E000/shader_map.tsv.conflicts.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 1-2
+nxnative/dm/games/01000A001171A000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-65
+nxnative/dm/games/01007AB012872000/game.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 1-45
+nxnative/dm/android/gfx_vk_exec_copies.inc
+  s_926c68cc5bacfb::t_f971ac612039de 29-47
+nxnative/dm/third_party/ryujinx/src/Ryujinx.Graphics.Shader/Translation/Transforms/TexturePass.cs
+  s_926c68cc5bacfb::t_f971ac612039de 19-24,46-47,62,101-102,114,210
+tests/test_shader_source_order.py
+  s_926c68cc5bacfb::t_f971ac612039de 1-91
+nxnative/dm/gfx/nvn/hle_nvn.c
+  s_926c68cc5bacfb::t_f971ac612039de 629-631,634-639,649-651,653-654,656-658,795-800,2677-2680,2714-2724
+nxnative/dm/gfx/tools/shader_split.py
+  s_926c68cc5bacfb::t_f971ac612039de 47,49,1220-1223,1225-1231,1234,1236,1238-1246,1250,1259-1262,1594,1598-1606,1792-1801,1901-1907,1916,1919-1920,1922-1924,1951,1966-1967
+nxnative/dm/games/010055D009F78000/shader_facts_manual.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 1-329
+nxnative/dm/host/hle_audio.c
+  s_926c68cc5bacfb::t_f971ac612039de 33,318,370-387,439-442
+tests/test_rewrite_jobs.py
+  s_926c68cc5bacfb::t_f971ac612039de 1-110
+nxnative/dm/android/gfx_vk_exec_xfb.inc
+  s_926c68cc5bacfb::t_f971ac612039de 248-301,315-316,330,335-339,523
+nxnative/dm/games/01007AB012872000/shader_map.tsv.conflicts.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 1-2
+nxnative/dm/games/0100005027A18000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-38
+nxnative/dm/games/0100701015846000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-45
+nxnative/dm/games/01006C5015E84000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-46
+nxnative/dm/games/010074F013262000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-44
+nxnative/dm/games/01007EF00011E000/android.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 56-60,70
+nxnative/dm/games/0100A0C00E0DE000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-44
+nxnative/dm/gfx/tools/eabig.py
+  s_926c68cc5bacfb::t_f971ac612039de 1-105
+nxnative/dm/host/hle_audren.c
+  s_926c68cc5bacfb::t_f971ac612039de 159-164,491-496
+tests/test_overlay_visibility.py
+  s_926c68cc5bacfb::t_f971ac612039de 62
+nxnative/dm/games/01004AB00A260000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-38
+docs/DEVELOPMENT_GUIDE.md
+  s_926c68cc5bacfb::t_f971ac612039de 43-48,96
+nxnative/dm/android/gfx_vk_core.c
+  s_926c68cc5bacfb::t_f971ac612039de 28,135-148,202,290-291,337-339,342,463,868-871,903,967,1002-1006,1010-1011,1359-1361,1391-1392
+nxnative/dm/games/profile_guess.py
+  s_926c68cc5bacfb::t_f971ac612039de 170-175,185,192,204,243
+nxnative/dm/android/gfx_vk_quirks.h
+  s_926c68cc5bacfb::t_f971ac612039de 17,19
+nxnative/dm/android/gfx_vk_exec_passes.inc
+  s_926c68cc5bacfb::t_f971ac612039de 335,347
+nxnative/dm/games/010027400CDC6000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-42
+docs/PORT_CHECKLIST.md
+  s_926c68cc5bacfb::t_f971ac612039de 9,48,71,108
+nxnative/dm/games/01003FC01670C000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-39
+nxnative/dm/tools/patch_nso.py
+  s_926c68cc5bacfb::t_f971ac612039de 1032-1036
+docs/gen_tables.py
+  s_926c68cc5bacfb::t_f971ac612039de 2-6,8-9,16-17,21-39,43,47-50,54-59,61-108,121-123,125-137
+nxnative/dm/games/010038E016264000/android.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 25-31,38-39
+nxnative/dm/games/01003FD01F22E000/patches.py
+  s_926c68cc5bacfb::t_f971ac612039de 1-137
+nxnative/dm/games/01008CF01BAAC000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-40
+nxnative/dm/games/01000A001171A000/game.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 1-38
+nxnative/dm/games/010093801237C000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-38
+nxnative/dm/games/0100D4A023450000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-48
+tests/test_deswizzle_fast.py
+  s_926c68cc5bacfb::t_f971ac612039de 1-154
+nxnative/dm/games/01000A001171A000/bf_want.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 1
+nxnative/dm/games/01007AB012872000/shader_pairs.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 1-299
+nxnative/dm/android/shaders/quadind.comp
+  s_926c68cc5bacfb::t_f971ac612039de 1-17
+nxnative/dm/games/0100CD4012DCA000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-42,46,55,61,70,76,91,99
+tests/test_rewrite_spin_memory.py
+  s_926c68cc5bacfb::t_f971ac612039de 1-99
+nxnative/dm/games/01007AB012872000/bf_want.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 1
+nxnative/dm/games/01007AB012872000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-52
+nxnative/dm/games/010006E0230AC000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-38
+nxnative/dm/games/01003FD01F22E000/game.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 1-37
+nxnative/dm/games/01007AB012872000/shader_facts.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 1-71
+nxnative/dm/games/01007AB012872000/shader_map.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 1-952
+tests/test_docs_tables.py
+  s_926c68cc5bacfb::t_f971ac612039de 1-4,8-9,18-33
+nxnative/dm/games/0100ECD018EBE000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-38
+nxnative/dm/android/perf_android.c
+  s_926c68cc5bacfb::t_f971ac612039de 257-261
+nxnative/dm/games/0100A6301214E000/game.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 37-44
+.claude/skills/nx2android-dev/references/device-loop.md
+  s_926c68cc5bacfb::t_f971ac612039de 46
+nxnative/dm/tools/tests/test_patches.py
+  s_926c68cc5bacfb::t_f971ac612039de 80-85
+nxnative/dm/games/010055D009F78000/android.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 1-24
+nxnative/dm/games/0100C1500B82E000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-46
+nxnative/dm/games/010055D009F78000/game.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 44-45
+nxnative/dm/games/0100FD501F95A000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-38
+nxnative/dm/gfx/tools/uepak.py
+  s_926c68cc5bacfb::t_f971ac612039de 29-31,160-161,168-171,173-175,184,187-188,190-191,234-236,243,245-247,250,283,291-311,451,500-501
+nxnative/dm/games/01003FD01F22E000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-39
+nxnative/dm/games/0100ABF008968000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-44
+nxnative/dm/android/gfx_vk_present.c
+  s_926c68cc5bacfb::t_f971ac612039de 96,254-255,285-296,302-304,312-314,316-318,449-455,465,474,481,499-502,551-555,699,727-731,734-751,753,755-761,765-800,817-826,828-839,841-851,886,889,1019-1020,1026,1040,1192-1196,1198-1201,1205-1208,1214-1219,1237-1240,1297,1340-1341,1715,1761
+  s_926c68cc5bacfb::t_c2b0684ce236c6 257,433,456,572
+nxnative/dm/games/0100A3D008C5C000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-53
+nxnative/dm/games/010069401ADB8000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-51
+nxnative/dm/games/0100734016266000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-52
+nxnative/dm/android/compat/audiotoolbox_aaudio.c
+  s_926c68cc5bacfb::t_f971ac612039de 16-20,100,139,148-151
+nxnative/scripts/build_ipa_from_nsp.py
+  s_926c68cc5bacfb::t_f971ac612039de 893,897-900,910-913,921,925,933-934
+CLAUDE.md
+  s_926c68cc5bacfb::t_f971ac612039de 23
+nxnative/dm/games/01000A001171A000/shader_map.tsv.conflicts.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 1-2
+nxnative/dm/games/01007AB012872000/android.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 1-22
+nxnative/dm/third_party/ryujinx/src/Ryujinx.Graphics.Shader/IGpuAccessor.cs
+  s_926c68cc5bacfb::t_f971ac612039de 378-385
+  s_926c68cc5bacfb::t_d29ede7ab035c8 377
+nxnative/dm/android/gfx_vk_exec_pipelines.inc
+  s_926c68cc5bacfb::t_f971ac612039de 195-209
+nxnative/dm/games/01006F8002326000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-47
+nxnative/dm/android/movie_avc.c
+  s_926c68cc5bacfb::t_f971ac612039de 14-16,230-234,237-261
+tests/arch_rules.py
+  s_926c68cc5bacfb::t_f971ac612039de 58,66,68-76
+  s_db1760f56a9c1f::t_263509a9de9dd8 67
+tests/test_avc_frame_layout.py
+  s_926c68cc5bacfb::t_f971ac612039de 37-39,146-166,168-169,212-220
+  s_926c68cc5bacfb::t_12f11e1c6f3706 221
+tests/test_menu_scroll.py
+  s_926c68cc5bacfb::t_f971ac612039de 34
+  s_926c68cc5bacfb::t_c2b0684ce236c6 52
+  s_db1760f56a9c1f::t_263509a9de9dd8 72
+devtools/pcm_glitches.py
+  s_926c68cc5bacfb::t_f971ac612039de 1-59
+nxnative/dm/android/gfx_vk.h
+  s_926c68cc5bacfb::t_f971ac612039de 66,76
+docs/GAME_README_TEMPLATE.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-33
+nxnative/dm/games/01000A001171A000/shader_pairs.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 1-188
+nxnative/dm/games/010015100B514000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-38
+nxnative/dm/games/01001F5010DFA000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-40
+nxnative/dm/games/0100734016266000/android.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 17-21,27-28
+tests/audio_out_stop.c
+  s_926c68cc5bacfb::t_f971ac612039de 1-124
+nxnative/dm/games/0100B99019412000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-44
+nxnative/dm/games/01007EF00011E000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-56
+tests/test_nvn_sampler_builder_modes.py
+  s_926c68cc5bacfb::t_f971ac612039de 1-54
+tests/test_audio_out_stop.py
+  s_926c68cc5bacfb::t_f971ac612039de 1-50
+tests/test_nvn_sampler_cache.py
+  s_926c68cc5bacfb::t_f971ac612039de 13-27,39,106-153,155,162,172-178
+nxnative/dm/android/front_android.c
+  s_926c68cc5bacfb::t_c2b0684ce236c6 184,717
+  s_926c68cc5bacfb::t_f971ac612039de 144-169,211,715,722-723,746-747,797
+nxnative/dm/settings.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 15-16,73,249,256,258,277,296,310,319,354
+nxnative/dm/games/01006BB00C6F0000/README.md
+  s_926c68cc5bacfb::t_f971ac612039de 1-41
+tests/test_iostore_detection.py
+  s_926c68cc5bacfb::t_f971ac612039de 1-108
+nxnative/dm/games/01003FD01F22E000/shader_map.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 1-11530
+nxnative/dm/games/01000A001171A000/pso_manifest.tsv
+  s_926c68cc5bacfb::t_f971ac612039de 1-2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "439dbc91afc449af9bdff8b85b8d9a969088d7bf",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    },
+    "s_db1760f56a9c1f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "unknown"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
