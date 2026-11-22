@@ -62,9 +62,13 @@ static int copy_tree(const char *src, const char *dst, long *files, long long *b
     if (mkdir(dst, 0770) && errno != EEXIST) { int e = errno; snprintf(err, (size_t)ecap, "%s", dst); return -e; }
     DIR *d = opendir(src); if (!d) { int e = errno; snprintf(err, (size_t)ecap, "%s", src); return -e; }
     struct dirent *e; int r = 0;
-    while (!r && (e = readdir(d))) {
+    while (!r) {
+        errno = 0; e = readdir(d);
+        if (!e) { r = -errno; break; }
         if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")) continue;
-        char a[1200], b[1200]; struct stat st; snprintf(a, sizeof a, "%s/%s", src, e->d_name); snprintf(b, sizeof b, "%s/%s", dst, e->d_name);
+        char a[1200], b[1200]; struct stat st;
+        if (snprintf(a, sizeof a, "%s/%s", src, e->d_name) >= (int)sizeof a ||
+            snprintf(b, sizeof b, "%s/%s", dst, e->d_name) >= (int)sizeof b) { r = -ENAMETOOLONG; break; }
         if (lstat(a, &st)) { r = -errno; snprintf(err, (size_t)ecap, "%s", a); }
         else if (S_ISDIR(st.st_mode)) r = copy_tree(a, b, files, bytes, err, ecap);
         else if (S_ISREG(st.st_mode)) { if ((r = copy_file(a, b))) snprintf(err, (size_t)ecap, "%s", b); else { ++*files; *bytes += st.st_size; } }
@@ -216,22 +220,32 @@ int dm_saves_checkpoint_matches(const char *slot, const char *files_root) {
 
 void dm_saves_checkpoint_remove(const char *path) { rm_tree(path); }
 
-int dm_saves_export(const char *suffix, char *name, int cap, char *err, int ecap) {
+static int export_save(const char *suffix, char *name, int cap, char *err, int ecap, dm_save_verify_copy verify) {
     err[0] = 0;
     if (!g_save[0]) { snprintf(err, (size_t)ecap, "DM_SAVE is not set"); return -EINVAL; }
     int dev = is_dir(g_dev) && has_entries(g_dev);
-    if (!has_entries(g_save) && !dev) { snprintf(err, (size_t)ecap, "the game has not saved yet"); return -ENOENT; }
+    if (verify) {
+        struct stat st;
+        if (!lstat(g_dev, &st)) {
+            if (!S_ISDIR(st.st_mode)) return -ENOTDIR;
+            dev = 1; // A complete backup includes even an empty device save.
+        } else if (errno != ENOENT) return -errno;
+    }
+    if (!verify && !has_entries(g_save) && !dev) { snprintf(err, (size_t)ecap, "the game has not saved yet"); return -ENOENT; }
     mkdir(g_dir, 0770);
     char stamp[64], fin[700]; time_t t = time(NULL); struct tm tm; localtime_r(&t, &tm); strftime(stamp, sizeof stamp, "%Y%m%d-%H%M%S", &tm);
     snprintf(name, (size_t)cap, "%s%s", stamp, suffix);
     for (int k = 2; snprintf(fin, sizeof fin, "%s/%s", g_dir, name), is_dir(fin) && k < 100; k++) snprintf(name, (size_t)cap, "%s%s-%d", stamp, suffix, k);
     char part[700], partd[720], find[720]; snprintf(part, sizeof part, "%s/.%s.part", g_dir, name); snprintf(partd, sizeof partd, "%s.device", part); snprintf(find, sizeof find, "%s.device", fin);
+    if (verify && (!access(fin, F_OK) || !access(find, F_OK))) return -EEXIST;
     long files = 0; long long bytes = 0; int r = -EAGAIN;
     for (int attempt = 0; attempt < 3 && r == -EAGAIN; attempt++) {   // a commit swaps the tree being copied: copy it again
         uint64_t c0 = dm_fs_commit_count(); files = 0; bytes = 0; err[0] = 0;
         rm_tree(part); rm_tree(partd);
         r = copy_tree(g_save, part, &files, &bytes, err, ecap);
         if (!r && dev) r = copy_tree(g_dev, partd, &files, &bytes, err, ecap);
+        if (!r && verify) r = verify(g_save, part);
+        if (!r && verify && dev) r = verify(g_dev, partd);
         if (dm_fs_commit_count() != c0) r = -EAGAIN;
     }
     if (!r && dev && rename(partd, find)) { r = -errno; snprintf(err, (size_t)ecap, "%s", find); }
@@ -242,6 +256,15 @@ int dm_saves_export(const char *suffix, char *name, int cap, char *err, int ecap
         LOG("[RED] [saves] export failed: %s", err); return r; }
     LOG("[saves] exported the save to %s: %ld files, %lld bytes%s", fin, files, bytes, dev ? " (with the device save)" : "");
     return 0;
+}
+
+int dm_saves_export(const char *suffix, char *name, int cap, char *err, int ecap) {
+    return export_save(suffix, name, cap, err, ecap, NULL);
+}
+
+int dm_saves_backup_before_overwrite(dm_save_verify_copy verify) {
+    char name[64], err[600];
+    return export_save("-before-overwrite", name, sizeof name, err, sizeof err, verify);
 }
 
 static int by_newest(const void *a, const void *b) {

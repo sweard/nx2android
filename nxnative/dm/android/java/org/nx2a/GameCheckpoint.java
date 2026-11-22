@@ -20,10 +20,19 @@ final class GameCheckpoint {
 
     // Status values shared with checkpoint_android.h.
     private static final int SAVING = 2, SAVED = 3, NO_SAVE = 4, SAVE_FAILED = 5,
-            RESTORED = 6, RESTORE_FAILED = 7, SAVE_CONFLICT = 8, WRITE_FAILED = 9;
+            RESTORED = 6, RESTORE_FAILED = 7, SAVE_CONFLICT = 8, WRITE_FAILED = 9, CONFLICT_EXPIRED = 10;
     private AlertDialog checkpointProgress;
+    private AlertDialog saveConflict;
+    private boolean saveOnFocus;
+    private boolean savingCheckpoint;
 
-    void hideCheckpointProgress() {
+    void close() {
+        saveOnFocus = false;
+        if (saveConflict != null) saveConflict.dismiss();
+        hideCheckpointProgress();
+    }
+
+    private void hideCheckpointProgress() {
         if (checkpointProgress != null) {
             checkpointProgress.dismiss();
             checkpointProgress = null;
@@ -57,20 +66,79 @@ final class GameCheckpoint {
         window.setLayout(row.getMeasuredWidth() + insets, ViewGroup.LayoutParams.WRAP_CONTENT);
     }
 
+    private void resolveConflict(long ticket, boolean overwrite) {
+        if (ticket == 0) return;
+        new Thread(() -> {
+            int result = activity.resolveSaveConflict(ticket, overwrite);
+            if (!overwrite) return;
+            activity.runOnUiThread(() -> {
+                if (activity.isFinishing() || activity.isDestroyed()) return;
+                String message = result == 0 ? "Game save updated. The previous save is under Import save (before-overwrite)."
+                        : result == 1 ? "This confirmation expired. No files were overwritten."
+                        : "Backup or overwrite failed. Your existing game saves are safe.";
+                Toast.makeText(activity, message, Toast.LENGTH_LONG).show();
+            });
+        }, "game-save-conflict").start();
+    }
+
+    private void offerSaveAfterConflict(long ticket) {
+        if (saveConflict != null || saveOnFocus || savingCheckpoint) return;
+        String message = "The game couldn’t save because the same file changed in normal play. "
+                + "Save checkpoint replaces your previous checkpoint. Wait for “Checkpoint saved” before quitting.";
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity)
+                .setTitle("Game save conflict")
+                .setPositiveButton("Save checkpoint", (dialog, which) -> {
+                    resolveConflict(ticket, false);
+                    saveOnFocus = true;
+                })
+                .setNegativeButton("Keep playing", (dialog, which) -> resolveConflict(ticket, false))
+                .setOnCancelListener(dialog -> resolveConflict(ticket, false));
+        if (ticket != 0) {
+            message += "\n\nOverwrite backs up your normal save first. Replacing a shared file can affect more than one slot.";
+            builder.setNeutralButton("Overwrite conflicting files", (dialog, which) -> resolveConflict(ticket, true));
+        }
+        saveConflict = builder.setMessage(message).setOnDismissListener(dialog -> {
+            if (dialog == saveConflict) saveConflict = null;
+            saveWhenReady();
+        }).show();
+    }
+
+    // A focus change wakes guest threads. Start capture after the choice dialog
+    // is dismissed and NativeActivity has delivered focus back to the game.
+    void saveWhenReady() {
+        if (!saveOnFocus || saveConflict != null || !activity.hasWindowFocus()
+                || activity.isFinishing() || activity.isDestroyed()) return;
+        saveOnFocus = false;
+        activity.requestCheckpoint();
+    }
+
     void checkpointStatus(int state) {
+        // Bind the button to the originating commit, before posting to the main thread.
+        final long ticket = state == SAVE_CONFLICT ? activity.saveConflictId() : 0;
         activity.runOnUiThread(() -> {
             if (activity.isFinishing() || activity.isDestroyed()) return;
-            if (state == SAVE_CONFLICT || state == WRITE_FAILED) {
-                String message = state == SAVE_CONFLICT
-                        ? "Game save failed. The same save file changed in normal play. Your existing saves are safe."
-                        : "Game save failed. Your existing saves are safe.";
-                Toast.makeText(activity, message, Toast.LENGTH_LONG).show();
+            if (state == CONFLICT_EXPIRED) {
+                if (saveConflict != null) {
+                    saveConflict.dismiss();
+                    saveConflict = null;
+                }
+                return;
+            }
+            if (state == SAVE_CONFLICT) {
+                if (ticket == 0 || ticket == activity.saveConflictId()) offerSaveAfterConflict(ticket);
+                return;
+            }
+            if (state == WRITE_FAILED) {
+                Toast.makeText(activity, "Game save failed. Your existing saves are safe.", Toast.LENGTH_LONG).show();
                 return;
             }
             if (state == SAVING) {
+                savingCheckpoint = true;
                 showCheckpointProgress("Saving checkpoint…", true);
                 return;
             }
+            if (state == RESTORED && savingCheckpoint) return;
+            savingCheckpoint = false;
             hideCheckpointProgress();
             if (state == RESTORED) return;
             if (state == RESTORE_FAILED) {

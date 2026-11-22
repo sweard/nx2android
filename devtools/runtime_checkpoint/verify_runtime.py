@@ -71,7 +71,7 @@ def verify(args, exe):
         if (args.build / 'obj/android_checkpoint_save_commit.c.o').exists():
             save_test = path('save-test')
             shell('mkdir', save_test)
-            for phase in ('capture', 'normal', 'restore', 'restart'):
+            for phase in ('capture', 'normal', 'restore', 'restart', 'overwrite', 'overwrite-restart'):
                 shell(path('probe'), 'save-test', save_test, phase)
             print('Restored game saves survive normal startup and preserve independent slots.', flush=True)
         if args.scene_core:

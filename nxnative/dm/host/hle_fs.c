@@ -55,9 +55,13 @@ static _Atomic uint64_t g_txn_first_ns;     // time of this transaction's first 
 #ifdef DM_FIELD_CHECKPOINT
 // Path operations already take g_path_lock. Serialize writes on open save handles
 // with the restored session's three-way commit as well.
+static void expire_save_conflict(void) {
+    if (dm_checkpoint_discard_conflict()) dm_checkpoint_notify(DM_CHECKPOINT_CONFLICT_EXPIRED);
+}
 static pthread_mutex_t *lock_restored_write(uint64_t fd) {
     if (!g_fsave[fd & 0xffff] || !dm_checkpoint_save_mount(getenv("DM_SAVE"))) return NULL;
     pthread_mutex_lock(&g_path_lock);
+    expire_save_conflict();
     return &g_path_lock;
 }
 #define RESTORED_WRITE_LOCK(fd) pthread_mutex_t *guard __attribute__((cleanup(path_unlock))) = lock_restored_write(fd)
@@ -420,9 +424,16 @@ static Result err_res(const char *op, const char *path) {
 // Name resolution shares one lock with create/rename/enumerate, aliases and xattr are published to the guest together.
 #define HP_EX(path, create) PATH_LOCK(); char hp[1024]; int ro = 0; if (!host_path_ex(path, hp, sizeof hp, &ro, create)) return err_res("path", path)
 #define HP(path) HP_EX(path, 0)
-#define RW() if (ro) { LOG("fs write to a read-only mount: %s", hp); return RES_FAIL; }
-// Create directory / create file: if the target exists, answer "already exists" as a writable mount would -- that is the only failure the game understands (the original save storage never fails to write); with a generic failure it carries on with a null handle
-#define RW_CREATE() if (ro) { if (!access(hp, F_OK)) return RES_PATH_EXISTS; LOG("fs write to a read-only mount: %s", hp); return RES_FAIL; }
+#ifdef DM_FIELD_CHECKPOINT
+static void check_pending_save(const char *path) {
+    if (dm_checkpoint_conflict_id() && in_txn_dir(path)) expire_save_conflict();
+}
+#else
+#define check_pending_save(path) ((void)0)
+#endif
+#define RW() do { if (ro) { LOG("fs write to a read-only mount: %s", hp); return RES_FAIL; } check_pending_save(hp); } while (0)
+// Answer "already exists" on a read-only mount the same way a writable mount would.
+#define RW_CREATE() do { if (ro && !access(hp, F_OK)) return RES_PATH_EXISTS; RW(); } while (0)
 
 // ---------- Mount ----------
 HLE_FORCE("_ZN2nn2fs22QueryMountRomCacheSizeEPm", "fsp-srv; rom reads the host directory directly, the cache gets only the minimum size", Result, h_fs_QueryRomCache, size_t *out) { *out = 0x1000; return RES_OK; }
@@ -625,10 +636,23 @@ HLE_FORCE("_ZN2nn2fs20ExtendDeviceSaveDataEll", "fsp-srv; extend device save dat
 HLE_FORCE("_ZN2nn2fs22GetSaveDataRestoreFlagEPbPKc", "fsp-srv; save data restored from a backup: never", Result, h_fs_RestoreFlag, uint8_t *out, const char *name) { (void)name; *out = 0; return RES_OK; }
 static _Atomic uint64_t g_save_commits;   // number of successful commits (used by the front end when going to background to wait for "the game's current save has been committed")
 uint64_t dm_fs_commit_count(void) { return atomic_load(&g_save_commits); }
+#ifdef DM_FIELD_CHECKPOINT
+int dm_fs_resolve_checkpoint_conflict(uint64_t ticket, int overwrite) {
+    PATH_LOCK();
+    pthread_mutex_lock(&g_lock);
+    int rc = dm_checkpoint_resolve_conflict(ticket, overwrite);
+    if (!rc && overwrite) atomic_fetch_add(&g_save_commits, 1);
+    pthread_mutex_unlock(&g_lock);
+    return rc;
+}
+#endif
 // Both Commit overloads share this transaction engine. Caller holds the path
 // and mount locks; front-end failure notification is delivered after unlocking.
 static Result commit_mount_locked(int i, int *notify_error) {
     uint64_t tc1 = clock_gettime_nsec_np(CLOCK_MONOTONIC), tw0 = atomic_exchange(&g_txn_first_ns, 0);
+#ifdef DM_FIELD_CHECKPOINT
+    expire_save_conflict(); // Includes poisoned, empty and failed commits, on either save mount.
+#endif
     int perr = atomic_exchange(&g_save_poison, 0);
     if (perr) {                                                         // a write failed in this transaction: refuse the commit, discard the working directory
         char torn[512] = ""; size_t tl = 0; DIR *d0 = opendir(g_mnt[i].dir); struct dirent *e0;   // record files truncated to 0 bytes (the damage that would enter the save if committed as usual)

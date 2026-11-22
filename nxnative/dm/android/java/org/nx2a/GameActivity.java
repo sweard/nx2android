@@ -11,6 +11,9 @@ public class GameActivity extends NativeActivity {
 
     private final GameCheckpoint checkpoint = new GameCheckpoint(this);
     native void chooseCheckpoint(int choice);
+    native void requestCheckpoint();
+    native long saveConflictId();
+    native int resolveSaveConflict(long ticket, boolean overwrite);
 
     // Called from the native checkpoint coordinator.
     private void checkpointStatus(int state) { checkpoint.checkpointStatus(state); }
@@ -33,5 +36,9 @@ public class GameActivity extends NativeActivity {
 
     @Override protected void onResume() { super.onResume(); keyboard.pause(false); }
     @Override protected void onPause() { keyboard.pause(true); super.onPause(); }
-    @Override protected void onDestroy() { checkpoint.hideCheckpointProgress(); files.close(); keyboard.pause(true); super.onDestroy(); }
+    @Override public void onWindowFocusChanged(boolean focused) {
+        super.onWindowFocusChanged(focused);
+        if (focused) checkpoint.saveWhenReady();
+    }
+    @Override protected void onDestroy() { checkpoint.close(); files.close(); keyboard.pause(true); super.onDestroy(); }
 }

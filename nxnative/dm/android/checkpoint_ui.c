@@ -7,6 +7,24 @@ enum { CHECKPOINT_WAIT_FRAME = 1, CHECKPOINT_WAIT_CHOICE, CHECKPOINT_WAIT_FIELD 
 static _Atomic int checkpoint_choice_pending;
 static jmethodID checkpoint_offer_method, checkpoint_status_method;
 static _Atomic int awaiting_restored_frame;
+#ifdef DM_FIELD_CHECKPOINT
+#include "checkpoint/save_commit.h"
+#include <errno.h>
+JNIEXPORT jlong JNICALL Java_org_nx2a_GameActivity_saveConflictId(JNIEnv *env, jobject activity) {
+    ANativeActivity *act = dm_checkpoint_activity();
+    return act && (*env)->IsSameObject(env, activity, act->clazz) ? (jlong)dm_checkpoint_conflict_id() : 0;
+}
+JNIEXPORT jint JNICALL Java_org_nx2a_GameActivity_resolveSaveConflict(JNIEnv *env, jobject activity, jlong ticket, jboolean overwrite) {
+    ANativeActivity *act = dm_checkpoint_activity();
+    if (!act || !(*env)->IsSameObject(env, activity, act->clazz)) return 1;
+    int rc = dm_fs_resolve_checkpoint_conflict((uint64_t)ticket, overwrite);
+    return !rc ? 0 : rc == -ESTALE ? 1 : 2;
+}
+JNIEXPORT void JNICALL Java_org_nx2a_GameActivity_requestCheckpoint(JNIEnv *env, jobject activity) {
+    ANativeActivity *act = dm_checkpoint_activity();
+    if (act && (*env)->IsSameObject(env, activity, act->clazz)) dm_checkpoint_request();
+}
+#endif
 JNIEXPORT void JNICALL Java_org_nx2a_GameActivity_chooseCheckpoint(JNIEnv *env, jobject activity, jint choice) {
     if (!(*env)->IsSameObject(env, activity, dm_checkpoint_activity()->clazz)) return;
 #ifdef DM_FIELD_CHECKPOINT

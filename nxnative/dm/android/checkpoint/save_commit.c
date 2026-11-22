@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <stdio.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/clonefile.h>
@@ -16,11 +17,16 @@
 
 static char live_save[1024], staging[1100], baseline[2][1100];
 static unsigned active;
+static char observed[1100], work_path[1100];
+static uint64_t generation;
+static _Atomic uint64_t pending;
 
 int dm_checkpoint_save_session(const char *live, const char *scene) {
     if (!live || !*live || !scene) return -EINVAL;
     if (snprintf(live_save, sizeof live_save, "%s", live) >= (int)sizeof live_save ||
         snprintf(staging, sizeof staging, "%s.new", live) >= (int)sizeof staging ||
+        snprintf(observed, sizeof observed, "%s/conflict-original", scene) >= (int)sizeof observed ||
+        snprintf(work_path, sizeof work_path, "%s/trial-save.work", scene) >= (int)sizeof work_path ||
         snprintf(baseline[0], sizeof baseline[0], "%s/trial-save", scene) >= (int)sizeof baseline[0] ||
         snprintf(baseline[1], sizeof baseline[1], "%s/trial-save.next", scene) >= (int)sizeof baseline[1]) return -ENAMETOOLONG;
     active = 0;
@@ -78,6 +84,17 @@ static int by_path(const void *a, const void *b) {
     return strcmp(((const save_entry *)a)->relative, ((const save_entry *)b)->relative);
 }
 
+static int read_tree(save_tree *tree, const char *root) {
+    int rc = index_tree(tree, root, strlen(root) + 1);
+    if (!rc && tree->count) qsort(tree->entries, tree->count, sizeof(save_entry), by_path);
+    return rc;
+}
+
+static void free_tree(save_tree *tree) {
+    for (size_t i = 0; i < tree->count; i++) free(tree->entries[i].path);
+    free(tree->entries);
+}
+
 // 1 = equal, 0 = different, negative errno = cannot safely compare.
 static int equal_entry(const save_entry *a, const save_entry *b) {
     if (!a || !b) return a == b;
@@ -99,6 +116,21 @@ static int equal_entry(const save_entry *a, const save_entry *b) {
     return result;
 }
 
+static int verify_copy(const char *original, const char *copy) {
+    save_tree a = {0}, b = {0};
+    int rc = read_tree(&a, original);
+    if (!rc) rc = read_tree(&b, copy);
+    if (!rc && a.count != b.count) rc = -ESTALE;
+    for (size_t i = 0; !rc && i < a.count; i++) {
+        int equal = !strcmp(a.entries[i].relative, b.entries[i].relative)
+            ? equal_entry(&a.entries[i], &b.entries[i]) : 0;
+        if (equal != 1) rc = equal ? equal : -ESTALE;
+    }
+    free_tree(&a);
+    free_tree(&b);
+    return rc;
+}
+
 // Android storage policies may prohibit hard links even within one filesystem.
 static int write_entry(const char *dir, const save_entry *e) {
     if (!e) return 0;
@@ -112,7 +144,7 @@ static int write_entry(const char *dir, const save_entry *e) {
     return rc;
 }
 
-static int stage_merge(save_tree trees[3], const char *next, int *changed) {
+static int stage_merge(save_tree trees[3], const char *next, int *changed, int *conflict) {
     for (;;) {
         const char *name = NULL;
         const save_entry *entry[3] = {0};
@@ -137,7 +169,8 @@ static int stage_merge(save_tree trees[3], const char *next, int *changed) {
             if (same < 0) return same;
             if (!same) {
                 int safe = equal_entry(base, live);
-                if (safe <= 0) return safe ? safe : -ESTALE;
+                if (safe < 0) return safe;
+                if (!safe) *conflict = 1;
                 *changed = 1;
                 chosen = work;
             }
@@ -149,27 +182,59 @@ static int stage_merge(save_tree trees[3], const char *next, int *changed) {
     }
 }
 
+static void clear_candidate(void) {
+    dm_saves_checkpoint_remove(baseline[1 - active]);
+    dm_saves_checkpoint_remove(staging);
+    dm_saves_checkpoint_remove(observed);
+}
+
+uint64_t dm_checkpoint_conflict_id(void) { return atomic_load(&pending); }
+
+int dm_checkpoint_discard_conflict(void) {
+    if (!atomic_exchange(&pending, 0)) return 0;
+    clear_candidate();
+    return 1;
+}
+
+int dm_checkpoint_resolve_conflict(uint64_t ticket, int overwrite) {
+    if (!ticket || ticket != dm_checkpoint_conflict_id()) return -ESTALE;
+    atomic_store(&pending, 0);
+    int rc = 0;
+    if (overwrite) {
+        rc = verify_copy(observed, live_save);
+        if (!rc) rc = verify_copy(baseline[1 - active], work_path);
+        if (!rc) {
+            rc = dm_saves_backup_before_overwrite(verify_copy);
+            if (rc == -ESTALE) rc = -EIO; // The backup failed verification.
+        }
+        if (!rc) rc = verify_copy(observed, live_save);
+        if (!rc && renamex_np(staging, live_save, RENAME_SWAP)) rc = -errno;
+        if (!rc) active = 1 - active;
+    }
+    clear_candidate();
+    return rc;
+}
+
 int dm_checkpoint_save_commit(const char *work) {
     const char *next = baseline[1 - active];
     const char *roots[] = {baseline[active], work, live_save};
     save_tree trees[3] = {0};
-    int rc = 0, changed = 0;
-    for (int i = 0; !rc && i < 3; i++) {
-        rc = index_tree(&trees[i], roots[i], strlen(roots[i]) + 1);
-        if (!rc && trees[i].count) qsort(trees[i].entries, trees[i].count, sizeof(save_entry), by_path);
-    }
-    dm_saves_checkpoint_remove(next);
-    dm_saves_checkpoint_remove(staging);
+    int rc = 0, changed = 0, conflict = 0;
+    for (int i = 0; !rc && i < 3; i++) rc = read_tree(&trees[i], roots[i]);
+    clear_candidate();
     if (!rc && (mkdir(next, 0700) || mkdir(staging, 0700))) rc = -errno;
-    if (!rc) rc = stage_merge(trees, next, &changed);
-    if (!rc && changed && renamex_np(staging, live_save, RENAME_SWAP)) rc = -errno;
-    // After the one irreversible operation, advancing the guest baseline cannot fail.
-    if (!rc) active = 1 - active;
-    dm_saves_checkpoint_remove(baseline[1 - active]);
-    dm_saves_checkpoint_remove(staging);
-    for (int i = 0; i < 3; i++) {
-        for (size_t k = 0; k < trees[i].count; k++) free(trees[i].entries[k].path);
-        free(trees[i].entries);
+    if (!rc) rc = stage_merge(trees, next, &changed, &conflict);
+    for (int i = 0; i < 3; i++) free_tree(&trees[i]);
+    if (!rc && conflict) {
+        // Keep both outputs immutable while the game continues using its work tree.
+        if (!clonefile(live_save, observed, CLONE_NOFOLLOW)) {
+            atomic_store(&pending, ++generation);
+            return -ESTALE;
+        }
+        rc = -errno;
     }
+    if (!rc && changed && renamex_np(staging, live_save, RENAME_SWAP)) rc = -errno;
+    if (!rc) active = 1 - active;
+    clear_candidate();
     return rc;
 }

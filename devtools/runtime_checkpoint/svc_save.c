@@ -2,6 +2,8 @@
 #include "checkpoint/save_commit.h"
 #include "checkpoint/services.h"
 #include <assert.h>
+#include <errno.h>
+#include "saves_android.h"
 #include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
@@ -104,6 +106,61 @@ int svc_save_test(const char *root, const char *phase) {
         assert(access("live.work/slots/deleted", F_OK) && access("live.work/slots/obsolete", F_OK));
         expect("live.work/slots/new", "created");
         expect("live.work/C", "new"); expect("live.work/index", "C added");
+    } else if (!strcmp(phase, "overwrite")) {
+        assert(!mkdir("external", 0700) && !mkdir("live_device", 0700));
+        put("live_device/settings", "device");
+        dm_saves_paths("external");
+        assert(!dm_checkpoint_save_session("live", "old"));
+        mounts("old", 1);
+        save_a("15");
+        assert(h_fs_Commit_bs("save"));
+        uint64_t first = dm_checkpoint_conflict_id();
+        assert(first);
+        save_a("16");
+        assert(!dm_checkpoint_conflict_id());
+        assert(dm_fs_resolve_checkpoint_conflict(first, 1) == -ESTALE);
+        assert(h_fs_Commit_bs("save"));
+        first = dm_checkpoint_conflict_id();
+        assert(h_fs_Commit_bs("save")); // Even an identical later save supersedes the prompt.
+        uint64_t second = dm_checkpoint_conflict_id();
+        assert(first && second && first != second);
+        assert(dm_fs_resolve_checkpoint_conflict(first, 1) == -ESTALE);
+        assert(!dm_fs_resolve_checkpoint_conflict(second, 0)); // Keep playing.
+        assert(dm_fs_resolve_checkpoint_conflict(second, 1) == -ESTALE);
+        expect("live/A", "12");
+        assert(h_fs_Commit_bs("save"));
+        put("live/B", "22"); // A live change after capture must not be overwritten.
+        assert(dm_fs_resolve_checkpoint_conflict(dm_checkpoint_conflict_id(), 1) == -ESTALE);
+        assert(!rename("external/saves", "external/exports"));
+        put("external/saves", "unavailable");
+        assert(h_fs_Commit_bs("save"));
+        assert(dm_fs_resolve_checkpoint_conflict(dm_checkpoint_conflict_id(), 1));
+        expect("live/A", "12"); expect("live/B", "22"); expect("live/C", "new");
+        assert(!unlink("external/saves") && !rename("external/exports", "external/saves"));
+        dm_save_entry backups[3];
+        assert(dm_saves_list(backups, 3) == 0);
+        put("old/trial-save.work/D", "new slot");
+        put("old/trial-save.work/index", "new index");
+        assert(h_fs_Commit_bs("save"));
+        first = dm_checkpoint_conflict_id();
+        assert(!dm_fs_resolve_checkpoint_conflict(first, 1));
+        assert(dm_fs_resolve_checkpoint_conflict(first, 1) == -ESTALE);
+        assert(dm_saves_list(backups, 3) == 1 && backups[0].device);
+        assert(strstr(backups[0].name, "-before-overwrite"));
+        char exported[160];
+        snprintf(exported, sizeof exported, "external/saves/%s", backups[0].name);
+        assert(!chdir(exported));
+        expect("A", "12"); expect("B", "22"); expect("C", "new"); expect("index", "C added");
+        expect("slots/new", "created"); assert(access("D", F_OK));
+        assert(!chdir(root));
+        snprintf(exported, sizeof exported, "external/saves/%s.device/settings", backups[0].name);
+        expect(exported, "device");
+        save_a("17"); assert(!h_fs_Commit_bs("save")); // Against the new private baseline.
+    } else if (!strcmp(phase, "overwrite-restart")) {
+        assert(!h_fs_MountSave_bs("save", NULL));
+        expect("live.work/A", "17"); expect("live.work/B", "22"); expect("live.work/C", "new");
+        expect("live.work/D", "new slot"); expect("live.work/index", "new index");
+        expect("live.work/slots/new", "created"); expect("live_device/settings", "device");
     } else return 2;
     return 0;
 }
