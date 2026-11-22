@@ -18,6 +18,10 @@ void *objmap_get(const void *guest);
 void objmap_put(const void *guest, void *host);
 void *objmap_del(const void *guest);
 uint64_t now_ns(void);
+uint64_t dm_program_active_ns(void);
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+void dm_checkpoint_restore_active_time(uint64_t elapsed);
+#endif
 // This thread is doing the host's own heavy work (NVN submit / present: encoding Metal commands; on hardware that is the GPU's business and does not occupy a guest core). The same-core preemption approximation (hle_thread.c) does not count it as "running"
 extern __thread _Atomic int dm_host_work;
 uint64_t guest_ns(void);              // Guest clock (hle_os.c; does not advance while frozen, guest_clock_freeze)

@@ -446,7 +446,7 @@ int dm_checkpoint_handles_restore(int fd) {
         const snapshot_thread_handle *r = &records[i];
         unsigned slot = r->handle - 0x1000;
         if (!slot || slot >= MAX_H || g_h[slot].type || (i ? r->handle <= records[i-1].handle : slot != 1) ||
-            r->id < 0x51 || r->id >= h.next_id || r->exited > r->started || r->started > 1 || r->host > 1 ||
+            r->id < 0x51 || r->id >= h.next_id || r->exited > 1 || r->started > 1 || r->host > 1 ||
             r->cancelled > 1 || r->priority < 0 || r->priority > 63 || r->core < 0 || r->core > 63 || r->reserved ||
             (i && !r->exited && (!checkpoint_guest_pc(r->entry) || !r->stack_top || (r->stack_top & 15) ||
              !dm_checkpoint_memory_committed(r->stack_top - 16, 16)))) { rc = -EBADMSG; break; }
@@ -458,6 +458,9 @@ int dm_checkpoint_handles_restore(int fd) {
         if (pthread_cond_init(&t->pcv, NULL)) { pthread_cond_destroy(&t->cv); free(t); rc = -ENOMEM; break; }
         t->handle = r->handle; t->id = r->id; t->entry = r->entry; t->arg = r->arg; t->stack_top = r->stack_top;
         t->mask = r->mask; t->core = r->core; t->prio = r->priority; t->host_owned = r->host;
+        // An exited thread needs no host attachment. Older recaptures stored
+        // started=0 for these handles after their first cold restore.
+        t->started = r->exited;
         t->exited = r->exited; t->cancel = r->cancelled; t->checkpoint_was_started = r->started;
         threads[i] = t;
     }

@@ -25,8 +25,22 @@ HLE_FORCE("_ZN2nn2oe17GetDisplayVersionEPNS0_14DisplayVersionE", "display versio
 }
 HLE_FORCE("_ZN2nn2oe24GetExpectedVolumeBalanceEPfS1_", "system / application volume balance; the host always reports 1:1", void, h_oe_GetVolBal, float *sys, float *app) { *sys = 1.0f; *app = 1.0f; }
 HLE_FORCE("_ZN2nn2oe24SetExpectedVolumeBalanceEff", "volume balance; the host ignores it", void, h_oe_SetVolBal, float sys, float app) { (void)sys; (void)app; }
-// Program total active time (nn::TimeSpan, nanoseconds): the host's monotonic time since startup
-HLE_FORCE("_ZN2nn2oe25GetProgramTotalActiveTimeEv", "total active time → time since the host started", int64_t, h_oe_ActiveTime, void) { return (int64_t)(now_ns() - g_t0_ns); }
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+// Set before releasing any restored guest threads. A different boot can have
+// a smaller monotonic clock, so store the elapsed duration separately.
+static uint64_t active_at_restore, restore_time;
+void dm_checkpoint_restore_active_time(uint64_t elapsed) {
+    active_at_restore = elapsed;
+    restore_time = now_ns();
+}
+#endif
+uint64_t dm_program_active_ns(void) {
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+    if (restore_time) return active_at_restore + (now_ns() - restore_time);
+#endif
+    return now_ns() - g_t0_ns;
+}
+HLE_FORCE("_ZN2nn2oe25GetProgramTotalActiveTimeEv", "program active time in nanoseconds", int64_t, h_oe_ActiveTime, void) { return (int64_t)dm_program_active_ns(); }
 HLE_FORCE("_ZN2nn2oe31EnterExitRequestHandlingSectionEv", "exit request critical section; the host exits through SIGTERM / the lifecycle", void, h_oe_EnterExit, void) {}
 HLE_FORCE("_ZN2nn2oe31LeaveExitRequestHandlingSectionEv", "exit request critical section; the host ignores it", void, h_oe_LeaveExit, void) {}
 HLE_FORCE("_ZN2nn2oe38SetUserInactivityDetectionTimeExtendedEb", "extended auto-sleep delay; the host ignores it", void, h_oe_Inactivity, unsigned on) { (void)on; }

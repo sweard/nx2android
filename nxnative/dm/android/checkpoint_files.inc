@@ -142,7 +142,8 @@ int dm_checkpoint_mounts(int fd, const char *scene, int restore) {
         char magic[8];
         unsigned count, poisoned;
         uint64_t game_ns, frame;
-    } h = {.magic = "NX2AMT1"};
+    } h = {.magic = "NX2AMT2"};
+    uint64_t active_ns = 0;
     checkpoint_stream io = {.fd = fd, .loading = restore};
     checkpoint_mount entries[MAX_MOUNT] = {0};
     unsigned save_count = 0;
@@ -153,6 +154,7 @@ int dm_checkpoint_mounts(int fd, const char *scene, int restore) {
         h.count = g_nmnt;
         h.poisoned = atomic_load(&g_save_poison);
         h.game_ns = guest_ns();
+        active_ns = dm_program_active_ns();
         h.frame = dm_guest_frame();
         for (unsigned i = 0; i < h.count; ++i) {
             mount_t *m = &g_mnt[i];
@@ -177,8 +179,13 @@ int dm_checkpoint_mounts(int fd, const char *scene, int restore) {
         }
     }
     int rc = checkpoint_io(&io, &h, sizeof h);
-    if (rc || memcmp(h.magic, "NX2AMT1", 8) || !h.count || h.count > MAX_MOUNT || h.poisoned || !h.game_ns)
+    int has_active_time = !memcmp(h.magic, "NX2AMT2", 8);
+    if (rc || (!has_active_time && memcmp(h.magic, "NX2AMT1", 8)) || !h.count || h.count > MAX_MOUNT || h.poisoned || !h.game_ns)
         return rc ? rc : -ENOTSUP;
+    if (has_active_time) {
+        rc = checkpoint_io(&io, &active_ns, sizeof active_ns);
+        if (rc || active_ns > INT64_MAX) return rc ? rc : -EBADMSG;
+    }
     rc = checkpoint_io(&io, entries, h.count * sizeof *entries);
     uint32_t sum = io.crc, footer = sum;
     if (!rc) rc = checkpoint_io(&io, &footer, sizeof footer);
@@ -207,6 +214,7 @@ int dm_checkpoint_mounts(int fd, const char *scene, int restore) {
     if (save_count != 1) return -EBADMSG;
     int dm_checkpoint_clock_rebase(uint64_t ns, uint64_t frame);
     rc = dm_checkpoint_clock_rebase(h.game_ns, h.frame);
+    if (!rc && has_active_time) dm_checkpoint_restore_active_time(active_ns);
     if (!rc) LOG("[snapshot] rebuilt %u mounts, isolated save transaction, guest clock at frame %llu", h.count,
                  (unsigned long long)h.frame);
     return rc;
