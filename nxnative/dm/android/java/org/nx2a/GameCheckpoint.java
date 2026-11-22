@@ -20,7 +20,7 @@ final class GameCheckpoint {
 
     // Status values shared with checkpoint_android.h.
     private static final int SAVING = 2, SAVED = 3, NO_SAVE = 4, SAVE_FAILED = 5,
-            RESTORED = 6, RESTORE_FAILED = 7;
+            RESTORED = 6, RESTORE_FAILED = 7, SAVE_CONFLICT = 8, WRITE_FAILED = 9;
     private AlertDialog checkpointProgress;
 
     void hideCheckpointProgress() {
@@ -60,6 +60,13 @@ final class GameCheckpoint {
     void checkpointStatus(int state) {
         activity.runOnUiThread(() -> {
             if (activity.isFinishing() || activity.isDestroyed()) return;
+            if (state == SAVE_CONFLICT || state == WRITE_FAILED) {
+                String message = state == SAVE_CONFLICT
+                        ? "Game save failed. The same save file changed in normal play. Your existing saves are safe."
+                        : "Game save failed. Your existing saves are safe.";
+                Toast.makeText(activity, message, Toast.LENGTH_LONG).show();
+                return;
+            }
             if (state == SAVING) {
                 showCheckpointProgress("Saving checkpoint…", true);
                 return;
@@ -81,7 +88,7 @@ final class GameCheckpoint {
     void offerRuntimeCheckpoint() {
         activity.getWindow().getDecorView().post(() -> new AlertDialog.Builder(activity)
                 .setTitle("Restore checkpoint?")
-                .setMessage("Restoring uses a separate copy of your save data. Start normally deletes this checkpoint.")
+                .setMessage("Restoring resumes this moment. New in-game saves carry over to normal play. Start normally deletes this checkpoint.")
                 .setPositiveButton("Restore checkpoint", (dialog, which) -> {
                     showCheckpointProgress("Restoring checkpoint…", false);
                     activity.chooseCheckpoint(RESTORE);

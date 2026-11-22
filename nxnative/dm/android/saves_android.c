@@ -37,7 +37,11 @@ static void rm_tree(const char *p) {
     struct stat st; if (lstat(p, &st)) return;
     if (S_ISDIR(st.st_mode)) {
         DIR *d = opendir(p); struct dirent *e;
-        while (d && (e = readdir(d))) { if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")) continue; char c[1200]; snprintf(c, sizeof c, "%s/%s", p, e->d_name); rm_tree(c); }
+        while (d && (e = readdir(d))) {
+            if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")) continue;
+            char *child;
+            if (asprintf(&child, "%s/%s", p, e->d_name) >= 0) { rm_tree(child); free(child); }
+        }
         if (d) closedir(d);
         rmdir(p);
     } else unlink(p);

@@ -174,7 +174,7 @@ int dm_checkpoint_mounts(int fd, const char *scene, int restore) {
                        snprintf(work, sizeof work, "%s.work", save) < (int)sizeof work && !strcmp(m->dir, work)) {
                 if (++save_count > 1) return -ENOTSUP;
                 r->kind = field_save;
-                if (clonefile(save, committed, CLONE_NOFOLLOW) || clonefile(work, working, CLONE_NOFOLLOW)) return -errno;
+                if (clonefile(dm_checkpoint_save_baseline(save), committed, CLONE_NOFOLLOW) || clonefile(work, working, CLONE_NOFOLLOW)) return -errno;
             } else return -ENOTSUP;
         }
     }

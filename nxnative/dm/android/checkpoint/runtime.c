@@ -11,6 +11,7 @@
 #include <dlfcn.h>
 #include "survey_threads.h"
 #include "slot.h"
+#include "save_commit.h"
 #include "sections.h"
 #include "checkpoint_pools.h"
 #include "checkpoint_modules.h"
@@ -182,7 +183,8 @@ void dm_checkpoint_load_modules(const char *dir, const char **mods, int count) {
     const char *chosen_scene = dm_checkpoint_slot_name();
     if (chosen_scene[0]) {
         int fits = snprintf(scene, sizeof scene, "%s/%s", survey_private, chosen_scene) < (int)sizeof scene;
-        int rc = fits ? dm_checkpoint_replay_scene(dir, scene, load_modules, CHECKPOINT_PLAY, NULL) : -ENAMETOOLONG;
+        int rc = fits ? dm_checkpoint_save_session(getenv("DM_SAVE"), scene) : -ENAMETOOLONG;
+        if (!rc) rc = dm_checkpoint_replay_scene(dir, scene, load_modules, CHECKPOINT_PLAY, NULL);
         LOG("[snapshot] restored session ended, result=%d", rc);
         // The failure dialog closes the activity. Never return to a partially restored guest.
         if (rc && dm_checkpoint_notify(DM_CHECKPOINT_RESTORE_FAILED)) for (;;) pause();

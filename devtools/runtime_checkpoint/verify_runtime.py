@@ -22,11 +22,15 @@ def link(args, exe):
                 DM / 'gfx/nvn/include', DM / 'gfx/tex', DM / 'third_party/vulkan-headers/include']
     src = [HERE / name for name in ('svc_probe.c', 'sdk_worker.c', 'sdk_worker.S', 'svc_gpu.c', 'svc_wait.c', 'svc_image.c', 'svc_scene.c')]
     objects = sorted((args.build / 'obj').glob('*.o'))
+    flags = []
+    if (args.build / 'obj/android_checkpoint_save_commit.c.o').exists():
+        src.append(HERE / 'svc_save.c')
+        flags.append('-DDM_TEST_CHECKPOINT_SAVE')
     if not (args.build / 'obj/android_checkpoint_restore.c.o').exists():
         src.append(DM / 'android/checkpoint/restore.c')
     if not objects or not (gen / 'game_profile.h').is_file():
         raise ValueError('Expected an Android host build directory for this title')
-    subprocess.run([args.cc, '-O2', '-ffixed-x18', '-DDM_MANUAL_CHECKPOINT', '-Wall', '-Werror', '-Wno-format',
+    subprocess.run([args.cc, '-O2', '-ffixed-x18', '-DDM_MANUAL_CHECKPOINT', *flags, '-Wall', '-Werror', '-Wno-format',
                     *['-I' + str(p) for p in includes], *src, *objects,
                     '-Wl,--wrap=main', '-Wl,-z,max-page-size=16384', '-Wl,-z,nostart-stop-gc',
                     '-landroid', '-llog', '-lvulkan', '-laaudio', '-lnativewindow', '-lmediandk',
@@ -64,6 +68,12 @@ def verify(args, exe):
             subprocess.run([*adb, 'push', str(src), path(name)], check=True, capture_output=True)
         shell('chmod', '700', path('probe'))
         print(shell(path('probe'), 'pause-test').stdout.strip(), flush=True)
+        if (args.build / 'obj/android_checkpoint_save_commit.c.o').exists():
+            save_test = path('save-test')
+            shell('mkdir', save_test)
+            for phase in ('capture', 'normal', 'restore', 'restart'):
+                shell(path('probe'), 'save-test', save_test, phase)
+            print('Restored game saves survive normal startup and preserve independent slots.', flush=True)
         if args.scene_core:
             data = PurePosixPath(args.mods).parent
             res = shell('env', 'LD_LIBRARY_PATH=' + scratch, 'DM_ROOT=' + scratch,

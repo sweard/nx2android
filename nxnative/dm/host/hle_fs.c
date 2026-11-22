@@ -7,6 +7,12 @@
 #include "hle.h"
 #include <mach/mach.h>
 #include "front.h"
+#ifdef DM_FIELD_CHECKPOINT
+#include "checkpoint/save_commit.h"
+#include "checkpoint_android.h"
+#else
+#define dm_checkpoint_save_baseline(commit) (commit)
+#endif
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -40,12 +46,24 @@ static mount_t g_mnt[MAX_MOUNT];   // commit non-empty = transactional save moun
 static int g_nmnt;
 static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t g_path_lock = PTHREAD_MUTEX_INITIALIZER;
-static void path_unlock(pthread_mutex_t **m) { pthread_mutex_unlock(*m); }
+static void path_unlock(pthread_mutex_t **m) { if (*m) pthread_mutex_unlock(*m); }
 #define PATH_LOCK() pthread_mutex_t *path_guard __attribute__((cleanup(path_unlock))) = &g_path_lock; pthread_mutex_lock(path_guard)
 static uint8_t g_fmode[65536];              // fd → open mode
 static uint8_t g_fsave[65536];              // fd → whether it is on a transactional save mount (the save write injection point only counts these)
 static _Atomic int g_save_writes;           // number of writes on the save mount (shared by the injection point and the commit log)
 static _Atomic uint64_t g_txn_first_ns;     // time of this transaction's first save write (used by the commit log to report timing; cleared to 0 at commit)
+#ifdef DM_FIELD_CHECKPOINT
+// Path operations already take g_path_lock. Serialize writes on open save handles
+// with the restored session's three-way commit as well.
+static pthread_mutex_t *lock_restored_write(uint64_t fd) {
+    if (!g_fsave[fd & 0xffff] || !dm_checkpoint_save_mount(getenv("DM_SAVE"))) return NULL;
+    pthread_mutex_lock(&g_path_lock);
+    return &g_path_lock;
+}
+#define RESTORED_WRITE_LOCK(fd) pthread_mutex_t *guard __attribute__((cleanup(path_unlock))) = lock_restored_write(fd)
+#else
+#define RESTORED_WRITE_LOCK(fd) ((void)0)
+#endif
 // Write failures are refused per transaction: on the real device save space is reserved when the save is created, overwrites cannot fail, and the game does not check the return values of WriteFile / SetFileSize either, it Commits as usual after a failure
 // (after injecting a failure on the 1st write, the committed save file was 0 bytes). When a host write fails (disk full etc., really possible on iOS):
 // if any save write / set-size failed between the last Commit and this Commit, this Commit is refused -- the committed version is unchanged, the working directory is discarded and re-cloned from the committed version,
@@ -628,7 +646,7 @@ static Result commit_mount_locked(int i, int *notify_error) {
         // (the next commit is refused again and recloning is retried); the committed version is unchanged (before, the work directory was deleted first and then recloned, and a failed clone called die, so with a full disk the process exited and the work directory was gone)
         char re[1100]; snprintf(re, sizeof re, "%s.re", g_mnt[i].dir); int rerr = 0;
         if (!access(re, F_OK) && rm_tree(re)) rerr = errno ? errno : EIO;
-        else if (dm_fs_test_fail("reclone") || clonefile(g_mnt[i].commit, re, 0)) { rerr = errno ? errno : EIO; rm_tree(re); }
+        else if (dm_fs_test_fail("reclone") || clonefile(dm_checkpoint_save_baseline(g_mnt[i].commit), re, 0)) { rerr = errno ? errno : EIO; rm_tree(re); }
         else if (renamex_np(re, g_mnt[i].dir, RENAME_SWAP)) { rerr = errno ? errno : EIO; rm_tree(re); }
         else rm_tree(re);                                               // the swapped-out tainted work directory
         if (rerr) { save_poison(perr); LOG("[RED] save transaction: recloning the work directory failed errno=%d -- the work directory is left as it is and stays tainted (the next commit is refused again and retries), the committed version is unchanged", rerr); }
@@ -638,13 +656,25 @@ static Result commit_mount_locked(int i, int *notify_error) {
     }
     char neu[1100]; snprintf(neu, sizeof neu, "%s.new", g_mnt[i].commit);
     Result r = RES_OK;
-    if (!access(neu, F_OK)) rm_tree(neu);
-    if (clonefile(g_mnt[i].dir, neu, 0)) { LOG("[RED] save commit: clonefile %s failed errno=%d (committed version unchanged)", neu, errno); r = RES_FAIL; }
-    else if (renamex_np(neu, g_mnt[i].commit, RENAME_SWAP)) { LOG("[RED] save commit: atomic swap failed errno=%d (committed version unchanged)", errno); rm_tree(neu); r = RES_FAIL; }
-    else rm_tree(neu);                                                  // the old version that was swapped out
+#ifdef DM_FIELD_CHECKPOINT
+    if (dm_checkpoint_save_mount(g_mnt[i].commit)) {
+        int rc = dm_checkpoint_save_commit(g_mnt[i].dir);
+        if (rc) {
+            LOG("[snapshot] game save commit refused (%d)", rc);
+            dm_checkpoint_notify(rc == -ESTALE ? DM_CHECKPOINT_SAVE_CONFLICT : DM_CHECKPOINT_WRITE_FAILED);
+            return RES_FAIL;
+        }
+    } else
+#endif
+    {
+        if (!access(neu, F_OK)) rm_tree(neu);
+        if (clonefile(g_mnt[i].dir, neu, 0)) { LOG("[RED] save commit: clonefile %s failed errno=%d (committed version unchanged)", neu, errno); r = RES_FAIL; }
+        else if (renamex_np(neu, g_mnt[i].commit, RENAME_SWAP)) { LOG("[RED] save commit: atomic swap failed errno=%d (committed version unchanged)", errno); rm_tree(neu); r = RES_FAIL; }
+        else rm_tree(neu);                                              // the old version that was swapped out
+    }
     // Timing readouts (integer microseconds, no floating point): how long the clone + atomic swap took; how long in total from this transaction's first save write to the end of the commit (the game writing files + the commit; 0 = no save write in this transaction)
     static int n; if (r == RES_OK) { uint64_t tc2 = clock_gettime_nsec_np(CLOCK_MONOTONIC);
-        LOG("save commit #%d: %s swapped atomically into %s (%d save writes so far) (clone + swap %llu us, since this transaction's first write %llu us)", ++n, g_mnt[i].dir, g_mnt[i].commit, atomic_load(&g_save_writes),
+        LOG("save commit #%d: %s committed (mount %s) (%d save writes so far) (clone + swap %llu us, since this transaction's first write %llu us)", ++n, g_mnt[i].dir, g_mnt[i].commit, atomic_load(&g_save_writes),
             (unsigned long long)((tc2 - tc1) / 1000), (unsigned long long)(tw0 ? (tc2 - tw0) / 1000 : 0)); atomic_fetch_add(&g_save_commits, 1);
     }
     return r;
@@ -783,6 +813,7 @@ HLE_FORCE("_ZN2nn2fs8ReadFileEPmNS0_10FileHandleElPvm", "fsp-srv → pread(2)", 
 HLE_FORCE("_ZN2nn2fs9WriteFileENS0_10FileHandleElPKvmRKNS0_11WriteOptionE", "fsp-srv → pwrite(2)", Result, h_fs_WriteFile, uint64_t h, int64_t off, const void *buf, size_t sz, const void *opt) {
     h = fs_fd(h);
     if (!h) return RES_FAIL;
+    RESTORED_WRITE_LOCK(h);
     (void)opt; size_t put = 0;
     if (g_fsave[(int)h & 0xffff]) {                                     // Save write injection point (for deterministic regression; only writes on the save mount are counted)
         static int cfg = -1, kill_n, fail_n, fail_e;
@@ -815,6 +846,7 @@ HLE_FORCE("_ZN2nn2fs11GetFileSizeEPlNS0_10FileHandleE", "fsp-srv → fstat(2)", 
 HLE_FORCE("_ZN2nn2fs11SetFileSizeENS0_10FileHandleEl", "fsp-srv → ftruncate(2)", Result, h_fs_SetFileSize, uint64_t h, int64_t sz) {
     h = fs_fd(h);
     if (!h) return RES_FAIL;
+    RESTORED_WRITE_LOCK(h);
     if (!ftruncate((int)h, sz)) return RES_OK;
     if (g_fsave[(int)h & 0xffff]) save_poison(errno);
     return err_res("ftruncate", "fd");

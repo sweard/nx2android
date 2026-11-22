@@ -50,6 +50,12 @@ static uint64_t svc(int num, uint64_t a, uint64_t b, uint64_t c) {
 }
 
 int __wrap_main(int argc, char **argv) {
+#ifdef DM_TEST_CHECKPOINT_SAVE
+    if (argc == 4 && !strcmp(argv[1], "save-test")) {
+        int svc_save_test(const char *, const char *);
+        return svc_save_test(argv[2], argv[3]);
+    }
+#endif
     if (argc == 4 && !strcmp(argv[1], "replay-core")) {
         int svc_replay_scene_core(const char *, const char *, void (*)(const char *, const char **, int));
         return svc_replay_scene_core(argv[2], argv[3], load_modules);
