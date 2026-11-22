@@ -1,0 +1,58 @@
+nxnative/dm/android/java/org/nx2a/GameActivity.java
+  s_926c68cc5bacfb::t_ba59fb17cca631 14-16,39-43
+nxnative/dm/android/checkpoint_android.h
+  s_db1760f56a9c1f::t_9af55fd2ecd6d2 7
+nxnative/dm/android/saves_android.c
+  s_db1760f56a9c1f::t_9af55fd2ecd6d2 65-67,71,261,263-264,268
+  s_926c68cc5bacfb::t_8c83835700759f 223,227-234,240,247-248,262,265-267
+  s_db1760f56a9c1f::t_7408cd3a77ab1f 69-70
+  s_db1760f56a9c1f::t_5cbf99e61843e3 269
+docs/ARCHITECTURE.md
+  s_db1760f56a9c1f::t_7408cd3a77ab1f 378
+devtools/runtime_checkpoint/svc_save.c
+  s_926c68cc5bacfb::t_a66f20b16ba44e 5-6,109-163
+nxnative/dm/android/checkpoint_files.inc
+  s_db1760f56a9c1f::t_9af55fd2ecd6d2 176
+nxnative/dm/host/hle_fs.c
+  s_926c68cc5bacfb::t_7a6bcaf746b9ac 427-436
+  s_db1760f56a9c1f::t_9af55fd2ecd6d2 58-60,64,639-648,653-655
+nxnative/dm/android/checkpoint/save_commit.h
+  s_db1760f56a9c1f::t_9af55fd2ecd6d2 2,9-14
+nxnative/dm/android/java/org/nx2a/GameCheckpoint.java
+  s_926c68cc5bacfb::t_a091d5ca9547d4 27,70,107-112
+  s_926c68cc5bacfb::t_ba59fb17cca631 25-26,29-35,69,71-103,121,123,136
+  s_db1760f56a9c1f::t_c47028f786e82b 23,104-106,113-114,116-117,120,122,124-132,140-141
+devtools/runtime_checkpoint/verify_runtime.py
+  s_926c68cc5bacfb::t_a66f20b16ba44e 74
+nxnative/dm/android/checkpoint_ui.c
+  s_926c68cc5bacfb::t_ba59fb17cca631 10-27
+nxnative/dm/android/saves_android.h
+  s_926c68cc5bacfb::t_8c83835700759f 13-14
+nxnative/dm/android/checkpoint/save_commit.c
+  s_db1760f56a9c1f::t_9af55fd2ecd6d2 11,20-22,28-29,87-97,119-133,147,172-173,185-205,210-217,222-224,226-235,238
+  s_926c68cc5bacfb::t_8c83835700759f 206-209
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9a35dfe7491795fd2a13cb112fa88385593e79b5",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    },
+    "s_db1760f56a9c1f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "unknown"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
