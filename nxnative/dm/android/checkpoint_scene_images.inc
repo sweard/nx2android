@@ -34,7 +34,7 @@ static int scene_buffer_fit(scene_copy *c, size_t size) {
     if (c->capacity >= size) return 0;
     scene_buffer_free(c);
     VkBufferCreateInfo bi = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = size,
-        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT};
+        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT};
     if (vkCreateBuffer(V.dev, &bi, NULL, &c->buffer)) return -ENOMEM;
     VkMemoryRequirements req; vkGetBufferMemoryRequirements(V.dev, c->buffer, &req);
     VkMemoryPropertyFlags need = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
@@ -50,7 +50,10 @@ static int scene_buffer_fit(scene_copy *c, size_t size) {
     return 0;
 }
 
+#include "checkpoint_multisample.inc"
+
 static int scene_copy_pixels(scene_copy *c, vkimg_t *im, VkBufferImageCopy *regions, unsigned n, int upload) {
+    if (im->samples > 1) return scene_ms_pixels(c, im, upload);
     if (vkResetCommandPool(V.dev, c->pool, 0) || vkResetFences(V.dev, 1, &c->fence)) return -EIO;
     VkCommandBufferBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
@@ -89,7 +92,7 @@ static int scene_one(checkpoint_stream *io, scene_copy *c, scene_image_record *r
     if (r->key.pool && !checkpoint_binding_range(r->key.pool, sizeof(pool_t))) return -ENOTSUP;
     unsigned n; uint64_t size;
     VkBufferImageCopy regions[64];
-    int rc = checkpoint_image_regions(&t, regions, &n, &size);
+    int rc = scene_image_layout(&t, regions, &n, &size);
     if (rc || size != r->bytes) return rc ? rc : -EBADMSG;
     if ((rc = scene_buffer_fit(c, size))) return rc;
     if (!io->loading) {
@@ -157,7 +160,11 @@ int dm_checkpoint_scene_images(int fd, int restore) {
             r.storage_size = im->size; r.used = im->used; r.wseq = im->wseq; r.rseen = im->rseen;
             r.family_formats = im->family_formats; r.family_closed = im->family_closed;
             tex_t t = {.d = r.desc}; VkBufferImageCopy regions[64]; unsigned n;
-            if ((rc = checkpoint_image_regions(&t, regions, &n, &r.bytes))) break;
+            if ((rc = scene_image_layout(&t, regions, &n, &r.bytes))) {
+                LOG("[snapshot] cannot capture image %u: %ux%ux%u format %#x, target %u, samples %u, GPU-written %u (%d)",
+                    index, r.desc.width, r.desc.height, r.desc.depth, r.desc.format, r.desc.target, im->samples, r.written, rc);
+                break;
+            }
         }
         if (!(rc = checkpoint_io(&io, &r, sizeof r))) rc = scene_one(&io, &c, &r, im);
     }

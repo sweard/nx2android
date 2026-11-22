@@ -31,7 +31,7 @@ void dm_checkpoint_audio_end(void);
 static const char *survey_files, *survey_private;
 static int diagnostic_samples;
 int dm_checkpoint_mounts(int fd, const char *scene, int restore);
-static char chosen_scene[64];
+static char chosen_scene[64], discarded_scene[sizeof chosen_scene];
 static int private_dir = -1;
 static const char current[] = "runtime-checkpoint.current";
 static const char pending[] = "runtime-checkpoint.pending";
@@ -61,8 +61,25 @@ static int publish_scene(const char *dir) {
     return rc;
 }
 
-void dm_checkpoint_field_choose(int restore) {
-    if (!restore) chosen_scene[0] = 0;
+void dm_checkpoint_field_choose(int choice) {
+    if (choice == DM_CHECKPOINT_RESTORE) return;
+    if (choice == DM_CHECKPOINT_DISCARD && is_trial(chosen_scene)) {
+        // Retire the marker before starting the guest. A cold start can finish
+        // the cleanup if the process dies before the host thread removes the files.
+        if (!unlinkat(private_dir, current, 0)) {
+            if (fsync(private_dir)) LOG("[snapshot] could not sync discarded checkpoint: %s", strerror(errno));
+            memcpy(discarded_scene, chosen_scene, sizeof discarded_scene);
+        } else LOG("[snapshot] could not discard current checkpoint: %s", strerror(errno));
+    }
+    chosen_scene[0] = 0;
+}
+
+static void remove_discarded_scene(void) {
+    if (!discarded_scene[0]) return;
+    char path[1024];
+    if (snprintf(path, sizeof path, "%s/%s", survey_private, discarded_scene) < (int)sizeof path)
+        dm_saves_checkpoint_remove(path);
+    discarded_scene[0] = 0;
 }
 
 // These private mkdtemp directories belong to checkpoint capture even if the
@@ -241,6 +258,7 @@ void __wrap_load_modules(const char *dir, const char **mods, int count) {
     // An adb-shell process cannot enter the app-private capture directory on
     // some devices. Run the same read-only check in a fresh app process.
     char request[1024], scene[1024], basename[40] = {0};
+    remove_discarded_scene();
     if (chosen_scene[0]) {
         int fits = snprintf(scene, sizeof scene, "%s/%s", survey_private, chosen_scene) < (int)sizeof scene;
         int svc_resume_private_scene(const char *, const char *, void (*)(const char *, const char **, int));

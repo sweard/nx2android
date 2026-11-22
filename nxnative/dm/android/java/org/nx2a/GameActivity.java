@@ -19,7 +19,8 @@ public class GameActivity extends NativeActivity {
     private final GameKeyboard keyboard = new GameKeyboard(this);
     private final GameFiles files = new GameFiles(this);
 
-    private native void chooseCheckpoint(boolean restore);
+    private static final int SKIP = 0, RESTORE = 1, DISCARD = 2;
+    private native void chooseCheckpoint(int choice);
 
     // Status values shared with checkpoint_android.h.
     private static final int SAVING = 2, SAVED = 3, NO_SAVE = 4, SAVE_FAILED = 5,
@@ -84,13 +85,13 @@ public class GameActivity extends NativeActivity {
     private void offerRuntimeCheckpoint() {
         getWindow().getDecorView().post(() -> new AlertDialog.Builder(this)
                 .setTitle("Restore checkpoint?")
-                .setMessage("Resume where you saved the checkpoint. This test version uses a separate copy of your save data.")
+                .setMessage("Restoring uses a separate copy of your save data. Start normally deletes this checkpoint.")
                 .setPositiveButton("Restore checkpoint", (dialog, which) -> {
                     showCheckpointProgress("Restoring checkpoint…", false);
-                    chooseCheckpoint(true);
+                    chooseCheckpoint(RESTORE);
                 })
-                .setNegativeButton("Start normally", (dialog, which) -> chooseCheckpoint(false))
-                .setOnCancelListener(dialog -> chooseCheckpoint(false))
+                .setNegativeButton("Start normally", (dialog, which) -> chooseCheckpoint(DISCARD))
+                .setOnCancelListener(dialog -> chooseCheckpoint(SKIP))
                 .show());
     }
 
@@ -98,9 +99,9 @@ public class GameActivity extends NativeActivity {
         runOnUiThread(() -> new AlertDialog.Builder(this)
                 .setTitle("Game checkpoint")
                 .setMessage("Restore the settings saved with your checkpoint. Use Continue in the game to load your last in-game save.")
-                .setPositiveButton("Restore checkpoint", (dialog, which) -> chooseCheckpoint(true))
-                .setNegativeButton("Start normally", (dialog, which) -> chooseCheckpoint(false))
-                .setOnCancelListener(dialog -> chooseCheckpoint(false))
+                .setPositiveButton("Restore checkpoint", (dialog, which) -> chooseCheckpoint(RESTORE))
+                .setNegativeButton("Start normally", (dialog, which) -> chooseCheckpoint(SKIP))
+                .setOnCancelListener(dialog -> chooseCheckpoint(SKIP))
                 .show());
     }
 

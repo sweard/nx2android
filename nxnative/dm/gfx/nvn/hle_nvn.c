@@ -78,7 +78,8 @@ typedef struct { const char *name; void *fn; } nvn_impl;
     static ret h_##name(__VA_ARGS__)
 
 static int g_log;
-uint64_t nvn_new_serial(void) { static _Atomic uint64_t n; return ++n; }
+static _Atomic uint64_t g_nvn_serial;
+uint64_t nvn_new_serial(void) { return ++g_nvn_serial; }
 static unsigned g_nsem;                          // Number of semantic implementations (filled by nvn_init_slots)
 #define OLOG(...) do { if (g_log) LOG("[nvn] " __VA_ARGS__); } while (0)
 
@@ -1392,23 +1393,71 @@ int dm_checkpoint_present_begin(int report_busy);
 void dm_checkpoint_present_end(void);
 int dm_checkpoint_present_ticket(uint64_t *value, int restore);
 
+// ProgramSetShaders owns the only reliable lifetime for the control section.
+// Persist keys captured at registration, plus the allocator high-water mark
+// so later programs and textures cannot collide with restored serials.
+static int checkpoint_program_keys(checkpoint_stream *io) {
+    uint64_t serial = g_nvn_serial;
+    int rc = checkpoint_io(io, &serial, sizeof serial);
+    if (rc || serial == UINT64_MAX) return rc ? rc : -EBADMSG;
+    uint64_t count = g_pk ? CFDictionaryGetCount(g_pk) : 0;
+    if (io->loading && count) return -EBUSY;
+    if ((rc = checkpoint_io(io, &count, sizeof count))) return rc;
+    if (count > 1048576) return -EFBIG;
+    const void **programs = NULL;
+    if (!io->loading && count) {
+        programs = calloc(count, sizeof *programs);
+        if (!programs) return -ENOMEM;
+        CFDictionaryGetKeysAndValues(g_pk, programs, NULL);
+    }
+    for (uint64_t i = 0; !rc && i < count; ++i) {
+        uintptr_t addr = programs ? (uintptr_t)programs[i] : 0;
+        prog_keys_t keys = {0};
+        if (programs) keys = *(const prog_keys_t *)CFDictionaryGetValue(g_pk, programs[i]);
+        if ((rc = checkpoint_io(io, &addr, sizeof addr)) ||
+            (rc = checkpoint_io(io, &keys, sizeof keys))) break;
+        // The address is an opaque dictionary key, never dereferenced here.
+        if (!addr || (keys.ok & ~63u)) { rc = -EBADMSG; break; }
+        if (io->loading) {
+            if (g_pk && CFDictionaryGetValue(g_pk, (void *)addr)) { rc = -EBADMSG; break; }
+            prog_keys_t *slot = pk_get((void *)addr, 1);
+            if (!slot) { rc = -ENOMEM; break; }
+            *slot = keys;
+        }
+    }
+    free(programs);
+    if (!rc && io->loading) g_nvn_serial = serial;
+    if (!rc) LOG("[snapshot] %s shader keys for %llu programs", io->loading ? "restored" : "captured", (unsigned long long)count);
+    return rc;
+}
+
 // The capture gate has drained all jobs, Vulkan completions and presents.
 // Keep their guest-visible numbering while using fresh physical Vulkan fences.
 int dm_checkpoint_graphics_timeline(int fd, int restore) {
     struct { char magic[8]; uint64_t frame, jobs, device, ticket; } t = {
-        .magic = "NX2AGT1", .frame = g_frame, .jobs = g_job_done,
+        .magic = "NX2AGT3", .frame = g_frame, .jobs = g_job_done,
         .device = NVN_FENCE_BASE + mtl_last_fence()
     };
     checkpoint_stream io = {.fd = fd, .loading = restore};
     int rc = restore ? 0 : dm_checkpoint_present_ticket(&t.ticket, 0);
     if (!rc) rc = checkpoint_io(&io, &t, sizeof t);
+    int has_modes = !memcmp(t.magic, "NX2AGT3", 8);
+    uint32_t dm_checkpoint_clip_modes(void);
+    uint32_t modes = dm_checkpoint_clip_modes();
+    if (!rc && has_modes) rc = checkpoint_io(&io, &modes, sizeof modes);
+    if (!rc && (has_modes || !memcmp(t.magic, "NX2AGT2", 8))) rc = checkpoint_program_keys(&io);
+    else if (!rc && memcmp(t.magic, "NX2AGT1", 8)) rc = -EBADMSG;
     uint32_t expected = io.crc, sum = expected;
     if (!rc) rc = checkpoint_io(&io, &sum, sizeof sum);
     if (rc || !restore) return rc;
-    if (sum != expected || memcmp(t.magic, "NX2AGT1", 8) ||
+    if (sum != expected || modes > 3 ||
         ((t.frame | t.jobs | t.device | t.ticket) & ASYNC_FENCE) ||
         g_frame || g_job_enq || g_job_done) return -EBADMSG;
     if ((rc = dm_checkpoint_present_ticket(&t.ticket, 1))) return rc;
+    if (has_modes) {
+        mtl_set_origin_lower_left((modes >> 1) & 1);
+        mtl_set_depth_zero(modes & 1);
+    }
     g_frame = t.frame;
     g_job_enq = g_job_done = checkpoint_done_job = t.jobs;
     checkpoint_device_fence = t.device;

@@ -1577,18 +1577,18 @@ static _Atomic int checkpoint_choice_pending;
 static jmethodID checkpoint_offer_method, checkpoint_status_method;
 static _Atomic int awaiting_restored_frame;
 void dm_checkpoint_field_choose(int) __attribute__((weak));
-JNIEXPORT void JNICALL Java_org_nx2a_GameActivity_chooseCheckpoint(JNIEnv *env, jobject activity, jboolean restore) {
+JNIEXPORT void JNICALL Java_org_nx2a_GameActivity_chooseCheckpoint(JNIEnv *env, jobject activity, jint choice) {
     if (!(*env)->IsSameObject(env, activity, g_act->clazz)) return;
     int expected = CHECKPOINT_WAIT_FIELD;
     if (dm_checkpoint_field_choose && atomic_compare_exchange_strong(&checkpoint_choice_pending, &expected, 0)) {
-        atomic_store(&awaiting_restored_frame, restore);
-        dm_checkpoint_field_choose(restore);
+        atomic_store(&awaiting_restored_frame, choice == DM_CHECKPOINT_RESTORE);
+        dm_checkpoint_field_choose(choice);
         start_game(g_act);
         return;
     }
     expected = CHECKPOINT_WAIT_CHOICE;
     if (!atomic_compare_exchange_strong(&checkpoint_choice_pending, &expected, 0)) return;
-    if (restore) {
+    if (choice == DM_CHECKPOINT_RESTORE) {
         settings_load(dm_checkpoint_settings());
         dm_haptics_android_set(atomic_load(&g_set_rumble));
         settings_save();
@@ -1618,7 +1618,7 @@ static int prepare_checkpoint(ANativeActivity *act) {
             atomic_store(&checkpoint_choice_pending, 0);
         }
         if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
-        dm_checkpoint_field_choose(0);
+        dm_checkpoint_field_choose(DM_CHECKPOINT_SKIP);
     } else if (kind) atomic_store(&checkpoint_choice_pending, CHECKPOINT_WAIT_FRAME);
     else dm_checkpoint_consume();
     return 0;

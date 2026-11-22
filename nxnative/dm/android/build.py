@@ -103,6 +103,18 @@ if a.field_checkpoint:
                 raise ValueError(f'{table}: invalid constructor call')
             rows.append(f'{{"{build}",{offset:#x},{opcode:#x}}}')
         if rows: CFLAGS.append('-DDM_CHECKPOINT_HEAP_CTORS=' + ','.join(rows))
+    # SDK builds can be shared by unrelated games. Match the module at restore.
+    table = DM / 'games/checkpoint_sdk_clock.tsv'
+    if table.is_file():
+        clocks = []
+        for line in table.read_text(encoding='utf-8').splitlines():
+            if not line or line.startswith('#'): continue
+            build, slot, tick = line.split('\t')
+            slot, tick = int(slot, 0), int(tick, 0)
+            if not re.fullmatch('[0-9a-f]{32}', build) or not (0 < slot < 2**32 and 0 < tick < 2**32) or slot % 8 or tick % 4:
+                raise ValueError(f'{table}: invalid SDK clock location')
+            clocks.append(f'{{"{build}",{slot:#x},{tick:#x}}}')
+        if clocks: CFLAGS.append('-DDM_CHECKPOINT_SDK_CLOCKS=' + ','.join(clocks))
 VPX_FLAGS = [TARGET, '-O2'] + DBG + ['-fPIC', f'-I{DM / "third_party/libvpx"}', f'-I{DM / "third_party/libvpx/config"}', '-w']
 ZSTD_FLAGS = [TARGET, '-O2'] + DBG + ['-fPIC', '-fvisibility=hidden', '-DZSTDLIB_VISIBLE=', '-DZSTDERRORLIB_VISIBLE=', '-w']   # its API stays inside libdmhost.so
 

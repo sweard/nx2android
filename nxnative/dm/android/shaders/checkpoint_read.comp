@@ -1,0 +1,20 @@
+#version 450
+#extension GL_EXT_samplerless_texture_functions : require
+layout(local_size_x=8, local_size_y=8) in;
+layout(binding=0) uniform texture2DMS sourceImage;
+layout(binding=1, std430) writeonly buffer Pixels { uint data[]; };
+layout(push_constant) uniform Params { uint width, samples, sampleIndex, depth; } p;
+void main() {
+    ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(pos, textureSize(sourceImage)))) return;
+    uint base = (uint(pos.y) * p.width + uint(pos.x)) * p.samples;
+    for (uint i = 0; i < p.samples; ++i) {
+        vec4 v = texelFetch(sourceImage, pos, int(i));
+        // Unsigned 11/11/10 floats share binary16's exponent. Samples from this
+        // format are exactly representable in a half, including subnormals.
+        uint rg = packHalf2x16(v.rg);
+        uint b = packHalf2x16(vec2(v.b, 0.0));
+        uint packed = ((rg >> 4) & 0x7ffu) | (((rg >> 20) & 0x7ffu) << 11) | (((b >> 5) & 0x3ffu) << 22);
+        data[base + i] = p.depth != 0 ? floatBitsToUint(v.r) : packed;
+    }
+}

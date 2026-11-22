@@ -175,5 +175,30 @@ int dm_checkpoint_modules_save(int fd) { return modules_io(fd, 0, 0); }
 int dm_checkpoint_modules_restore(int fd) {
     // The coordinator owns this private, immutable section for the full call.
     int rc = modules_io(fd, 1, 0);
-    return rc ? rc : modules_io(fd, 1, 1);
+    if (!rc) rc = modules_io(fd, 1, 1);
+    if (rc) return rc;
+#ifdef DM_CHECKPOINT_SDK_CLOCKS
+    static const struct { const char *build; size_t slot, tick; } clocks[] = {DM_CHECKPOINT_SDK_CLOCKS};
+    for (int i = 0; i < g_nmod; ++i) {
+        module_t *m = &g_mod[i];
+        // The game's SDK copies a relocated time provider into writable data at
+        // startup. Restoring the changed word would keep the previous PID's
+        // pointer. Both initialized clock choices use h_time_timespec on the
+        // host; the pre-initialization tick provider belongs to the guest.
+        if (strcmp(m->name, "sdk")) continue;
+        size_t k = 0;
+        while (k < sizeof clocks / sizeof clocks[0] && strcmp(m->build_id, clocks[k].build)) ++k;
+        if (k == sizeof clocks / sizeof clocks[0]) continue;
+        const size_t clock_slot = clocks[k].slot;
+        if (clocks[k].tick >= m->data_off) return -EBADMSG;
+        if (clock_slot < m->data_off || clock_slot + sizeof(uintptr_t) > m->key_page_off) return -EBADMSG;
+        uintptr_t *clock = (uintptr_t *)(m->base + clock_slot);
+        if (*clock == (uintptr_t)(m->base + clocks[k].tick)) continue;
+        void *provider = force_lookup("_ZN2nn4time41GetStandardUserSystemClockCurrentTimespecEP8timespec");
+        if (!provider) return -ENOTSUP;
+        *clock = (uintptr_t)provider;
+        LOG("[snapshot] rebound SDK realtime clock");
+    }
+#endif
+    return 0;
 }

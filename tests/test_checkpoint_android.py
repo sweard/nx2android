@@ -92,6 +92,15 @@ int main(int argc, char **argv) {
     assert(argc == 5);
     const char *base = argv[1], *files = argv[2], *save = argv[3], *mode = argv[4];
     if (!strcmp(mode, "field-start")) return __wrap_dm_checkpoint_init(base, files);
+    if (!strncmp(mode, "choose-", 7)) {
+        assert(__wrap_dm_checkpoint_init(base, files) == 2);
+        int restore = !strcmp(mode, "choose-restore");
+        int skip = !strcmp(mode, "choose-skip");
+        dm_checkpoint_field_choose(restore ? DM_CHECKPOINT_RESTORE : skip ? DM_CHECKPOINT_SKIP : DM_CHECKPOINT_DISCARD);
+        assert(!!chosen_scene[0] == restore);
+        if (strcmp(mode, "choose-discard-interrupted")) remove_discarded_scene();
+        return 0;
+    }
     if (!strcmp(mode, "field-publish")) {
         private_dir = open(base, O_RDONLY | O_DIRECTORY);
         return private_dir < 0 || publish_scene(save);
@@ -241,6 +250,33 @@ class ManualCheckpoint(unittest.TestCase):
             for verification in check.split():
                 subprocess.run([*args, verification], check=True, timeout=8)
             self.assertEqual((save / 'slot.sav').read_bytes(), b'committed game data')
+
+    def test_field_start_normally_discards_only_the_checkpoint(self):
+        for interrupted in (False, True):
+            with self.subTest(interrupted=interrupted), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                files = root / 'external'
+                files.mkdir()
+                save = root / 'save'
+                save.mkdir()
+                (save / 'slot').write_text('in-game progress')
+                scene = root / '.runtime-survey-core.abc123'
+                scene.mkdir()
+                for name in 'events bindings modules memory pools threads images handles files mounts audio timeline renderer'.split():
+                    (scene / name).write_text(name)
+                args = [self.executable, root, files, scene]
+                subprocess.run([*args, 'field-publish'], check=True)
+                marker = root / 'runtime-checkpoint.current'
+                for choice in ('choose-restore', 'choose-skip'):
+                    subprocess.run([*args, choice], check=True)
+                    self.assertEqual(marker.read_text(), scene.name)
+                    self.assertTrue((scene / 'memory').is_file())
+                subprocess.run([*args, 'choose-discard-interrupted' if interrupted else 'choose-discard'], check=True)
+                self.assertFalse(marker.exists())
+                self.assertEqual(scene.exists(), interrupted)
+                subprocess.run([*args, 'field-start'], check=True)
+                self.assertFalse(scene.exists())
+                self.assertEqual((save / 'slot').read_text(), 'in-game progress')
 
     def test_manual_publication_is_consumed_after_a_cold_start_choice(self):
         self.run_case('saved', 'available consume unavailable')

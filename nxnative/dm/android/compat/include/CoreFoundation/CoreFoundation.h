@@ -10,3 +10,4 @@ const void *CFDictionaryGetValue(CFDictionaryRef d, const void *key);
 void CFDictionarySetValue(CFMutableDictionaryRef d, const void *key, const void *value);
 void CFDictionaryRemoveValue(CFMutableDictionaryRef d, const void *key);
 CFIndex CFDictionaryGetCount(CFDictionaryRef d);
+void CFDictionaryGetKeysAndValues(CFDictionaryRef d, const void **keys, const void **values);

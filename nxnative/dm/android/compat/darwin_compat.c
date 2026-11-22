@@ -283,6 +283,15 @@ void CFDictionarySetValue(CFMutableDictionaryRef d, const void *key, const void 
 }
 void CFDictionaryRemoveValue(CFMutableDictionaryRef d, const void *key) { size_t i = find(d, key); if (i < d->cap) { d->k[i] = TOMB; d->v[i] = NULL; d->n--; } }
 CFIndex CFDictionaryGetCount(CFDictionaryRef d) { return (CFIndex)d->n; }
+void CFDictionaryGetKeysAndValues(CFDictionaryRef d, const void **keys, const void **values) {
+    size_t n = 0;
+    for (size_t i = 0; i < d->cap; ++i) if (d->k[i] && d->k[i] != TOMB) {
+        if (keys) keys[n] = d->k[i];
+        if (values) values[n] = d->v[i];
+        ++n;
+    }
+}
+
 
 // ---------------- clonefile / renamex_np ----------------
 static int copy_file(const char *src, const char *dst, mode_t mode) {

@@ -1,0 +1,3 @@
+# Restore the original FMallocBinned3 call from patches.py for field checkpoints.
+# main build ID    constructor offset    original AArch64 instruction
+b7f965b9d7227db8e29f04e84ea7331b	0x137f0	0x94026be0
