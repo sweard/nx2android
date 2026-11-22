@@ -23,7 +23,8 @@ HARNESS = r'''
 #include <unistd.h>
 #include "checkpoint_android.h"
 #include "saves_android.h"
-#include "field_slot.inc"
+#include "checkpoint/slot.h"
+void dm_checkpoint_field_choose(int choice);
 
 static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cv = PTHREAD_COND_INITIALIZER;
@@ -91,19 +92,23 @@ static void set_docked(const char *root, int docked) {
 int main(int argc, char **argv) {
     assert(argc == 5);
     const char *base = argv[1], *files = argv[2], *save = argv[3], *mode = argv[4];
-    if (!strcmp(mode, "field-start")) return __wrap_dm_checkpoint_init(base, files);
+    if (!strcmp(mode, "field-start")) return dm_checkpoint_slot_init(base, files);
     if (!strncmp(mode, "choose-", 7)) {
-        assert(__wrap_dm_checkpoint_init(base, files) == 2);
+        assert(dm_checkpoint_slot_init(base, files) == 2);
         int restore = !strcmp(mode, "choose-restore");
         int skip = !strcmp(mode, "choose-skip");
         dm_checkpoint_field_choose(restore ? DM_CHECKPOINT_RESTORE : skip ? DM_CHECKPOINT_SKIP : DM_CHECKPOINT_DISCARD);
-        assert(!!chosen_scene[0] == restore);
-        if (strcmp(mode, "choose-discard-interrupted")) remove_discarded_scene();
+        assert(!!dm_checkpoint_slot_name()[0] == restore);
+        if (strcmp(mode, "choose-discard-interrupted")) dm_checkpoint_slot_remove_discarded();
         return 0;
     }
     if (!strcmp(mode, "field-publish")) {
-        private_dir = open(base, O_RDONLY | O_DIRECTORY);
-        return private_dir < 0 || publish_scene(save);
+        char staging[2048];
+        snprintf(staging, sizeof staging, "%s/test-capture", base);
+        assert(!rename(save, staging));
+        dm_checkpoint_slot_init(base, files);
+        assert(!rename(staging, save));
+        return dm_checkpoint_slot_publish(save);
     }
     assert(!setenv("DM_SAVE", save, 1));
     dm_saves_paths(files);
@@ -157,12 +162,6 @@ class ManualCheckpoint(unittest.TestCase):
         cls.executable = root / 'checkpoint'
         (root / 'dm.h').write_text('#include <stdio.h>\n#define LOG(...) ((void)0)\n')
         (root / 'saves.c').write_text('#define dm_saves_checkpoint_capture capture_impl\n#include "saves_android.c"\n')
-        field = (ANDROID.parents[2] / 'devtools/runtime_checkpoint/game_survey.c').read_text()
-        # Exercise the native slot code on a real filesystem without the Android GPU backend.
-        (root / 'field_slot.inc').write_text(
-            '#include "dm.h"\n' +
-            field[field.index('static const char *survey_files'):field.index('static _Atomic int diagnostic_state')] +
-            field[field.index('static int read_current_scene('):])
         harness = root / 'test.c'
         harness.write_text(HARNESS)
         flags = ['-Dst_ctim=st_ctimespec', '-DSYS_renameat2=-1', '-Wno-deprecated-declarations'] if sys.platform == 'darwin' else []
@@ -170,7 +169,7 @@ class ManualCheckpoint(unittest.TestCase):
                                  '-Wno-unused-but-set-variable',
                                  '-pthread', *flags,
                                  f'-I{root}', f'-I{ANDROID}', str(harness), str(root / 'saves.c'),
-                                 str(ANDROID / 'checkpoint_android.c'), '-o', str(cls.executable)],
+                                 str(ANDROID / 'checkpoint_android.c'), str(ANDROID / 'checkpoint/slot.c'), '-o', str(cls.executable)],
                                 capture_output=True, text=True, timeout=30)
         if result.returncode:
             raise AssertionError(result.stderr)

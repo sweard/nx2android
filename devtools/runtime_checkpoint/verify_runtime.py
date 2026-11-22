@@ -22,6 +22,8 @@ def link(args, exe):
                 DM / 'gfx/nvn/include', DM / 'gfx/tex', DM / 'third_party/vulkan-headers/include']
     src = [HERE / name for name in ('svc_probe.c', 'sdk_worker.c', 'sdk_worker.S', 'svc_gpu.c', 'svc_wait.c', 'svc_image.c', 'svc_scene.c')]
     objects = sorted((args.build / 'obj').glob('*.o'))
+    if not (args.build / 'obj/android_checkpoint_restore.c.o').exists():
+        src.append(DM / 'android/checkpoint/restore.c')
     if not objects or not (gen / 'game_profile.h').is_file():
         raise ValueError('Expected an Android host build directory for this title')
     subprocess.run([args.cc, '-O2', '-ffixed-x18', '-DDM_MANUAL_CHECKPOINT', '-Wall', '-Werror', '-Wno-format',

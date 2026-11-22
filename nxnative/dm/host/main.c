@@ -3,6 +3,7 @@
 #include "front.h"
 #if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
 #include "../android/checkpoint_memory.h"
+#include "../android/checkpoint_android.h"
 #endif
 #include <stdatomic.h>
 #include <sys/resource.h>
@@ -99,7 +100,11 @@ static void host_preload(int argc, char **argv) {
     int i = 2;
     for (; i < argc && strcmp(argv[i], "--") && n < MAX_MOD; i++) names[n++] = argv[i];
     if (!n) { static const char *def[] = DM_GAME_MODULES; for (int k = 0; k < DM_GAME_NMOD && n < MAX_MOD; k++) names[n++] = def[k]; }   // default module list from the game profile's modules (Mario: main sdk)
+#ifdef DM_FIELD_CHECKPOINT
+    dm_checkpoint_load_modules(argv[1], names, n);
+#else
     load_modules(argv[1], names, n);
+#endif
     if (i < argc && !strcmp(argv[i], "--")) for (i++; i < argc && g_argc < 63; i++) g_argv[g_argc++] = argv[i];
     else if (*DM_GAME_ARGS && !dm_checkpoint_native_heap) {   // no "--" on the command line (the iOS app, the NSP script's Mac runs): the game profile's game_args, split at spaces
         char *s = strdup(DM_GAME_ARGS);
