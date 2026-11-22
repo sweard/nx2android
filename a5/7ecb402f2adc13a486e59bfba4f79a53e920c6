@@ -1,0 +1,66 @@
+nxnative/dm/android/checkpoint_android.h
+  s_926c68cc5bacfb::t_0b88eecbd90645 7-8
+nxnative/dm/android/java/org/nx2a/GameActivity.java
+  s_926c68cc5bacfb::t_0b88eecbd90645 22-23,88,91,93-94,102-104
+tests/test_checkpoint_android.py
+  s_926c68cc5bacfb::t_f5569363e3f8b0 95-103,254-279
+  s_926c68cc5bacfb::t_a6eec3318790c7 280
+nxnative/dm/games/0100B8A026F14000/checkpoint_heap.tsv
+  s_926c68cc5bacfb::t_f62765663e3dc0 1-3
+nxnative/dm/android/front_android.c
+  s_926c68cc5bacfb::t_0b88eecbd90645 1580,1584-1585,1591,1621
+nxnative/dm/gfx/nvn/hle_nvn.c
+  s_db1760f56a9c1f::t_2b0b89d19f2d1f 1412,1427,1438,1444-1449,1453,1457-1460
+  s_db1760f56a9c1f::t_93ffda87f2a108 81-82,1396-1411,1413-1426,1428-1433
+devtools/runtime_checkpoint/game_survey.c
+  s_926c68cc5bacfb::t_0b88eecbd90645 34,64-82,261
+nxnative/dm/android/gfx_vk_exec_state.inc
+  s_db1760f56a9c1f::t_2b0b89d19f2d1f 21-23
+nxnative/dm/android/checkpoint_modules.inc
+  s_926c68cc5bacfb::t_d547a9a5938379 178-183,185-187,194-195,197-203
+  s_db1760f56a9c1f::t_5d1074f5fe4e87 184,188-193,196
+nxnative/dm/host/hle_audio.c
+  s_926c68cc5bacfb::t_f62765663e3dc0 555-562,588-589,594-605,617,619,622-624,627-630,639,645-651,656-657
+  s_926c68cc5bacfb::t_151b091dd13090 571-580,614,640
+nxnative/dm/android/checkpoint_scene_images.inc
+  s_926c68cc5bacfb::t_a4b326fcc441ac 164-167
+  s_db1760f56a9c1f::t_5d20602eb651d8 37,53-54,56,95,163
+nxnative/dm/android/build.py
+  s_926c68cc5bacfb::t_d9976038a928b5 106-117
+nxnative/dm/android/checkpoint_multisample.inc
+  s_db1760f56a9c1f::t_4b2b07dfc67728 1-242
+nxnative/dm/android/compat/darwin_compat.c
+  s_db1760f56a9c1f::t_88617dbc794a8a 286-294
+nxnative/dm/android/compat/include/CoreFoundation/CoreFoundation.h
+  s_db1760f56a9c1f::t_349c19a84b9eb9 13
+nxnative/dm/android/shaders/checkpoint_read.comp
+  s_db1760f56a9c1f::t_209977d00df53f 1-20
+nxnative/dm/android/shaders/checkpoint_write.frag
+  s_db1760f56a9c1f::t_2df20792fa5494 1-12
+nxnative/dm/games/checkpoint_sdk_clock.tsv
+  s_926c68cc5bacfb::t_ff6296104da185 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a57ecb402f2adc13a486e59bfba4f79a53e920c6",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    },
+    "s_db1760f56a9c1f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "unknown"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
