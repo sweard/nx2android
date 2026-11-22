@@ -10,6 +10,7 @@ static _Atomic int awaiting_restored_frame;
 #ifdef DM_FIELD_CHECKPOINT
 #include "checkpoint/save_commit.h"
 #include <errno.h>
+#include <pthread.h>
 JNIEXPORT jlong JNICALL Java_org_nx2a_GameActivity_saveConflictId(JNIEnv *env, jobject activity) {
     ANativeActivity *act = dm_checkpoint_activity();
     return act && (*env)->IsSameObject(env, activity, act->clazz) ? (jlong)dm_checkpoint_conflict_id() : 0;
@@ -95,9 +96,31 @@ static int call_activity(jmethodID method, const jvalue *args) {
 }
 #endif
 
+#ifdef DM_FIELD_CHECKPOINT
+// A filesystem takeover can be running on a switched stack outside the
+// pthread's stack bounds. Enter ART from a normal Android thread instead.
+static void *post_save_status(void *argument) {
+    jvalue *value = argument;
+    int delivered = call_activity(checkpoint_status_method, value);
+    value->i = delivered;
+    return NULL;
+}
+#endif
+
 int dm_checkpoint_notify(int status) {
 #ifdef DM_MANUAL_CHECKPOINT
     jvalue value = {.i = status};
+#ifdef DM_FIELD_CHECKPOINT
+    if (status == DM_CHECKPOINT_SAVE_CONFLICT || status == DM_CHECKPOINT_CONFLICT_EXPIRED ||
+        status == DM_CHECKPOINT_WRITE_FAILED) {
+        if (!checkpoint_status_method) return 0;
+        pthread_t thread;
+        if (pthread_create(&thread, NULL, post_save_status, &value)) return 0;
+        // Java only queues the dialog; this preserves notification/ticket order.
+        pthread_join(thread, NULL);
+        return value.i;
+    }
+#endif
     return call_activity(checkpoint_status_method, &value);
 #else
     (void)status;
