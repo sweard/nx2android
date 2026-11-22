@@ -1,0 +1,19 @@
+nxnative/dm/android/checkpoint_ui.c
+  s_926c68cc5bacfb::t_bbb0a97b03e7a0 13,99-109,113-123
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "15b11b8a00f021415c6d2d111d5657f868e539d1",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
