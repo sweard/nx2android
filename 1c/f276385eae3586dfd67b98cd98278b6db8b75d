@@ -1,0 +1,25 @@
+nxnative/dm/host/hle.h
+  s_926c68cc5bacfb::t_6827510f1962ec 21-24
+nxnative/dm/android/checkpoint_files.inc
+  s_926c68cc5bacfb::t_6827510f1962ec 145-146,157,182-183,185-188,217
+nxnative/dm/host/hle_sdk16.c
+  s_926c68cc5bacfb::t_6827510f1962ec 28-43
+nxnative/dm/android/checkpoint_wait.inc
+  s_926c68cc5bacfb::t_f3acc236b596d3 449,461-463
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1cf276385eae3586dfd67b98cd98278b6db8b75d",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
