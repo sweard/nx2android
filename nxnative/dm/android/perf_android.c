@@ -254,7 +254,11 @@ static uint64_t fg_render_period(void) {
     int fps = atomic_load(&g_fg_display_fps);
     return fps > 0 && fps_pin() < 0 ? (2000000000ull + fps - 1) / (uint64_t)fps : 0;
 }
-uint64_t dm_present_period_adapt(uint64_t period) {
+static int64_t g_period_now;   // the period dm_present_period_adapt last returned (the game's, or the adaptive step's when longer), ns
+double dm_perf_period_ms(void) { int64_t p = __atomic_load_n(&g_period_now, __ATOMIC_RELAXED); return p > 0 ? (double)p / 1e6 : 0; }   // the frame-time graph's target (gfx_vk_present.c); 0: not known yet
+static uint64_t period_adapt(uint64_t period);
+uint64_t dm_present_period_adapt(uint64_t period) { uint64_t r = period_adapt(period); if (r) __atomic_store_n(&g_period_now, (int64_t)r, __ATOMIC_RELAXED); return r; }
+static uint64_t period_adapt(uint64_t period) {
     g_game_period = period;
     if (!period) return period;
     uint64_t fg_period = fg_render_period();

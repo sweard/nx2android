@@ -141,6 +141,32 @@ static _Atomic int g_cust[2][2][DM_AOV_N][CUST_K], g_cust_ver, g_edit;
 static const char *const LAYOUT_NAMES[2] = {"tablet", "phone"};
 static int ctl_named(const char *n) { for (int i = 0; i < OV_N; i++) if (!strcmp(OV_LAYOUTS[0][i].name, n)) return i; return -1; }
 int dm_opmode(void); void dm_set_opmode(int m);   // hle_oe.c: 0 handheld, 1 docked; a change reaches the game as the Switch's operation mode notification
+// ---- the frame rate counter's options (overlay_layout.h fpso_*): settings.txt fps_rows (a bit a row: 1 FPS, 2 SOC, 4 BAT, 8 driver, 16 graph), fps_pos (0 top left, 1 top right,
+// 2 bottom left, 3 bottom right), fps_colour (0 white, 1 yellow, 2 green, 3 cyan, 4 magenta), fps_outline (0 box, 1 none, 2 thin, 3 medium, 4 thick), fps_size (0 small,
+// 1 normal, 2 large, 3 extra large). A value out of range is the default. g_fps_ver counts the changes (dm_menu_state: the panel is drawn again)
+static _Atomic int g_fps_opts = FPSO_DEFAULT, g_fps_ver;
+// FPS_OPTS_BEGIN
+static int fps_opt_parse(const char *line) {   // one settings.txt line: 1 when it was one of the counter's
+    int v, o = atomic_load(&g_fps_opts), r = fpso_rows(o), p = fpso_pos(o), c = fpso_colour(o), l = fpso_outline(o), z = fpso_size(o);
+    if (sscanf(line, "fps_rows=%d", &v) == 1) r = v >= 0 && v <= FPSO_ALL ? v : FPSO_ROWS_DEFAULT;
+    else if (sscanf(line, "fps_pos=%d", &v) == 1) p = v >= 0 && v < FPSO_POS_N ? v : FPSO_TL;
+    else if (sscanf(line, "fps_colour=%d", &v) == 1) c = v >= 0 && v < FPSO_COLOUR_N ? v : FPSO_WHITE;
+    else if (sscanf(line, "fps_outline=%d", &v) == 1) l = v >= 0 && v < FPSO_OUTLINE_N ? v : FPSO_BOX;
+    else if (sscanf(line, "fps_size=%d", &v) == 1) z = v >= 0 && v < FPSO_SIZE_N ? v : FPSO_NORMAL;
+    else return 0;
+    atomic_store(&g_fps_opts, fpso_pack(r, p, c, l, z)); return 1;
+}
+static void fps_opt_write(FILE *f) {   // (all five keys: a file without them is the default)
+    int o = atomic_load(&g_fps_opts);
+    fprintf(f, "fps_rows=%d\nfps_pos=%d\nfps_colour=%d\nfps_outline=%d\nfps_size=%d\n", fpso_rows(o), fpso_pos(o), fpso_colour(o), fpso_outline(o), fpso_size(o));
+}
+static int fps_opt_press(int item) {   // a menu item of the Counter or Style tab: 1 when it changed an option
+    int o = atomic_load(&g_fps_opts), n = fpso_step(o, item);
+    if (n == o) return 0;
+    atomic_store(&g_fps_opts, n); atomic_fetch_add(&g_fps_ver, 1); return 1;
+}
+// FPS_OPTS_END
+int dm_fps_opts(void) { return atomic_load(&g_fps_opts); }   // gfx_vk_present.c: the counter's options, packed (fpso_*)
 static void settings_load(const char *checkpoint) {
     char p[600]; snprintf(p, sizeof p, "%s/settings.txt", g_root); FILE *f = fopen(checkpoint ? checkpoint : p, "r"); char line[128];
     if (!f) return;
@@ -155,6 +181,7 @@ static void settings_load(const char *checkpoint) {
         else if (sscanf(line, "fps=%d", &v) == 1) atomic_store(&g_set_fps, v != 0);
         else if (sscanf(line, "framegen=%d", &v) == 1) atomic_store(&g_set_framegen, v != 0);
         else if (sscanf(line, "framegen_target=%d", &v) == 1) atomic_store(&g_set_fg_target, v == 0 || v == 90 ? 0 : 60);   // migrate the old 90 fps choice to no cap
+        else if (fps_opt_parse(line)) {}
         else if (sscanf(line, "docked=%d", &v) == 1) {
             if (checkpoint) dm_set_opmode(v != 0);
             else setenv("DM_OPMODE", v ? "1" : "0", 1);   // over env.txt's: the host reads it once, at its first query
@@ -181,6 +208,7 @@ static void settings_save(void) {
     FILE *f = fopen(tmp, "w"); if (!f) { LOG("[RED] cannot write %s", tmp); return; }
     fprintf(f, "overlay=%d\nrumble=%d\ndocked=%d\nfps=%d\nopacity=%d\ngrid=%d\n", atomic_load(&g_set_overlay), atomic_load(&g_set_rumble), dm_opmode() != 0, atomic_load(&g_set_fps),
             atomic_load(&g_set_opacity), atomic_load(&g_set_grid));
+    fps_opt_write(f);
     if (atomic_load(&g_set_labels) >= 0) fprintf(f, "labels=%d\n", atomic_load(&g_set_labels));   // (only once the player chose: until then env.txt decides)
     fprintf(f, "framegen=%d\nframegen_target=%d\n", atomic_load(&g_set_framegen), atomic_load(&g_set_fg_target));
     for (int l = 0; l < 2; l++) for (int i = 0; i < OV_N; i++) {
@@ -684,14 +712,15 @@ int dm_menu_state(void) {
     if (!atomic_load(&g_menu)) return -1;
     if (atomic_load(&g_edit)) return OVE_ST | atomic_load(&g_ed_st);
     if (atomic_load(&g_sp_on)) return OVS_ST | (atomic_load(&g_sp_hi) + 1) << 4 | (atomic_load(&g_sp_ver) & 255) << 20;
-    int lossless = vk_lsfg_available();
+    int lossless = vk_lsfg_available(), tab = atomic_load(&g_menu_tab);
     return atomic_load(&g_set_overlay) | atomic_load(&g_set_rumble) << 1 | (dm_opmode() != 0) << 2 | atomic_load(&g_set_fps) << 3 | (atomic_load(&g_menu_hi) + 1) << 4 |
-           atomic_load(&g_menu_tab) << 8 | atomic_load(&g_set_opacity) << 9 | atomic_load(&g_sv_st) << 20 | (atomic_load(&g_sv_n) & 1) << 23 |
+           (tab & 1) << 8 | (tab >> 1) << 15 | (atomic_load(&g_set_opacity) - OV_OPACITY_MIN) << 9 | atomic_load(&g_sv_st) << 20 | ((tab >= 2 ? atomic_load(&g_fps_ver) : atomic_load(&g_sv_n)) & 1) << 23 |
            atomic_load(&g_menu_checkpoint_focus) << OVM_CHECKPOINT_FOCUS_BIT | dm_checkpoint_state() << OVM_CHECKPOINT_SHIFT | pad_labels() << 28 |
            (lossless && atomic_load(&g_set_framegen)) << OVM_FRAMEGEN_BIT | lossless << OVM_FG_AVAILABLE_BIT |
            (dm_framegen_target() == 0) << OVM_FG_UNCAPPED_BIT;
 }
-int dm_overlay_fps(void) { return atomic_load(&g_set_fps) && !atomic_load(&g_menu); }   // gfx_vk_present.c draws the counter (not while the menu holds the game)
+// gfx_vk_present.c draws the counter: not while the menu holds the game, except under the pause menu's Counter and Style tabs, where it shows what they change
+int dm_overlay_fps(void) { return atomic_load(&g_menu) ? atomic_load(&g_menu_tab) >= 2 && !atomic_load(&g_edit) && !atomic_load(&g_sp_on) && !atomic_load(&g_tx_on) : atomic_load(&g_set_fps); }
 static void menu_open(int hi) {
     if (!atomic_load(&g_running) || atomic_exchange(&g_menu, 1)) return;
     atomic_store(&g_menu_hi, hi); atomic_store(&g_menu_scroll, 0); g_menu_ptr = -1;
@@ -714,8 +743,8 @@ static void menu_close(void) {
     if (!atomic_exchange(&g_menu, 0)) return;
     g_menu_ptr = -1; atomic_store(&g_menu_t, 0);
     hold_sync(); dm_haptics_suspend(4, 0); dm_overlay_redraw();
-    LOG("[menu] closed: the game goes on (gamepad %s, opacity %d%%, rumble %s, face buttons by %s, frame rate %s, %s)", atomic_load(&g_set_overlay) ? "on" : "off", atomic_load(&g_set_opacity),
-        atomic_load(&g_set_rumble) ? "on" : "off", pad_labels() ? "label" : "position", atomic_load(&g_set_fps) ? "shown" : "hidden", dm_opmode() ? "docked" : "handheld");
+    LOG("[menu] closed: the game goes on (gamepad %s, opacity %d%%, rumble %s, face buttons by %s, frame rate %s %#x, %s)", atomic_load(&g_set_overlay) ? "on" : "off", atomic_load(&g_set_opacity),
+        atomic_load(&g_set_rumble) ? "on" : "off", pad_labels() ? "label" : "position", atomic_load(&g_set_fps) ? "shown" : "hidden", atomic_load(&g_fps_opts), dm_opmode() ? "docked" : "handheld");
 }
 static void menu_opacity(int v) {   // the slider: a new value is drawn at once and saved when the finger lifts (menu_touch) or with each controller step
     v = v < OV_OPACITY_MIN ? OV_OPACITY_MIN : v > OV_OPACITY_MAX ? OV_OPACITY_MAX : v;
@@ -765,6 +794,7 @@ static void menu_do(int item) {
         settings_save();
     }
     else if (item == OVM_FG_TARGET) { menu_set_fg_choice(dm_framegen_target() == 60); return; }
+    else if (fps_opt_press(item)) settings_save();   // the counter's rows, corner, colour, outline and size
     else if (item == OVM_MODE) { dm_set_opmode(dm_opmode() ? 0 : 1); settings_save(); }   // the game takes it when it goes on
     else if (item == OVM_PAD) { atomic_store(&g_set_labels, !pad_labels()); settings_save(); }   // at once (pad_labels)
     else if (item == OVM_TAB) { menu_tab(atomic_load(&g_menu_tab) + 1); return; }
