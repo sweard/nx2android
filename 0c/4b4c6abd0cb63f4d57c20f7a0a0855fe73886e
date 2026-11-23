@@ -1,0 +1,30 @@
+docs/ARCHITECTURE.md
+  s_926c68cc5bacfb::t_23f4ce0b06b62a 393-394
+tests/test_menu_scroll.py
+  s_926c68cc5bacfb::t_23f4ce0b06b62a 20-42,45-57,59-64,71,75,77-215
+  s_926c68cc5bacfb::t_0af6e350d51995 1-19,216-219
+nxnative/dm/android/front_android.c
+  s_926c68cc5bacfb::t_89013db11d9137 616-619,650,675,707-710,715-716,718,723-731,736,750,763,766,785,792,808,810,823,829,859,861
+nxnative/dm/android/gfx_vk_present.c
+  s_926c68cc5bacfb::t_dd9a73193a13dc 74,79,443,447,460,463-465,467-471,473,476-482,489,491-494,499,502,504,511-513,516-517,521-528,580,584,587,599,605,609,622,989-990
+nxnative/dm/android/java/org/nx2a/ExternalActivity.java
+  s_926c68cc5bacfb::t_5d4e497391a33a 51,160,215-216,222
+nxnative/dm/android/overlay_layout.h
+  s_926c68cc5bacfb::t_37ff8af82035f8 242-248,283,285,289-291,297-336,340-341,375,380
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0c4b4c6abd0cb63f4d57c20f7a0a0855fe73886e",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
