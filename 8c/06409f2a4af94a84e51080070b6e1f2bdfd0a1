@@ -1,0 +1,38 @@
+nxnative/dm/games/010074F013262000/README.md
+  s_926c68cc5bacfb::t_0b683a904fcbb2 25,36,42
+  s_926c68cc5bacfb::t_9c03ebf1acdd6c 37-38
+docs/ARCHITECTURE.md
+  s_926c68cc5bacfb::t_0b683a904fcbb2 201,420
+docs/DEVELOPMENT_GUIDE.md
+  s_926c68cc5bacfb::t_0b683a904fcbb2 353-359
+porter/host.py
+  s_926c68cc5bacfb::t_0b683a904fcbb2 10,153-173,196-198,200,214
+  s_926c68cc5bacfb::t_0758ff3b30916e 174
+porter/cli.py
+  s_926c68cc5bacfb::t_0b683a904fcbb2 26,88-89,273
+porter/pipeline.py
+  s_926c68cc5bacfb::t_0b683a904fcbb2 74,251-252,504-505,866
+nxnative/dm/android/tools/android_profile.py
+  s_926c68cc5bacfb::t_0b683a904fcbb2 31
+tests/test_driver.py
+  s_926c68cc5bacfb::t_0758ff3b30916e 278-287
+  s_926c68cc5bacfb::t_c25868ca0a8ec9 257-277
+tests/test_porter.py
+  s_926c68cc5bacfb::t_83725547a1b643 70-78,353-365
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8c06409f2a4af94a84e51080070b6e1f2bdfd0a1",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
