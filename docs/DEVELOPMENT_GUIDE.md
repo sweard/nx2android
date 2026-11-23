@@ -350,6 +350,13 @@ resets each submission; the counter remains cumulative for the host process.
 
 `python -m porter port <folder>` packages `org.nx2a.GameActivity` and its Unicode EditText dialog by default (`--native-keyboard`). Combine it with `--external-display` to select `org.nx2a.KeyboardExternalActivity`. These activities require JDK `javac` plus SDK platform and build-tools. `--no-native-keyboard` explicitly keeps the controller keyboard; a single-screen opt-out build remains code-less. Installation and save requests resolve the installed package's launcher activity, including ports built before this option existed.
 
+### Runtime checkpoints
+
+For a single-screen NVN/Vulkan game, build with `python -m porter port <folder> --field-checkpoint`. This enables the **Save checkpoint** action and cold-start restore in `org.nx2a.GameActivity`. Use the default native keyboard activity. External-display activities and the code-less controller-keyboard APK lack the checkpoint dialogs.
+
+For an installed port with matching modules and a registered profile, `python -m porter host --package <package>` preserves its current checkpoint capability. Pass `--field-checkpoint` to enable it on an APK that already has the checkpoint UI, or `--no-field-checkpoint` to disable it. Host updates replace the native library in the installed APK and retain its activity. An older APK without the UI needs a new APK from `porter port`. These flags do not change the data pack format.
+
+
 JNI passes ordinary UTF-8 byte arrays, which preserve supplementary characters. The guest's minimum and maximum lengths are UTF-16 units, and native output truncation preserves complete UTF-8 code points. The guest passes its request-local minimum length to a host pthread and joins it. That worker attaches to the VM, looks up and calls the Java method, and detaches on its own pthread stack. The bridge caches method presence or absence for the activity class. When the optional method is absent, the guest uses the overlay keyboard after the worker exits.
 
 Cancel, pause and destruction release waiting callers without accepting text. Requests are serialized, and a concurrent request is cancelled with a log line. The native dialog takes activity window focus, so the regular Android window-focus callback reports the transition to the guest. The bridge supports text entry. Additional guest keyboard modes and candidate/update callbacks are outside its scope.

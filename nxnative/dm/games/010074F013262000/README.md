@@ -22,8 +22,7 @@ Read the profile's porting log in the comment header of [`android.tsv`](android.
 
 ## Game version
 
-- Update 2.2.0.
-- The profile was checked with `v655360` (the `tested` row of android.tsv).
+Updates 2.2.0 (`v655360`) and 2.2.1 (`v720896`) have identical main NSO bytes. The same docked 1920×1080 patch applies to both builds.
 
 ## Frame rate
 
@@ -34,10 +33,13 @@ Read the profile's porting log in the comment header of [`android.tsv`](android.
 | Device | GPU | Vulkan driver | Game version | nx2android | Result |
 |---|---|---|---|---|---|
 | Lenovo Legion Y700 TB322FC (Snapdragon 8 Elite, Adreno 830, Android 16) | Adreno 830 | not recorded | 2.2.0 (v655360) | `v0.1.0` | wip |
+| OPPO PMA110 | Adreno 840 | not recorded | 2.2.1 (v720896) | local build, 2026-11-13 | Simplified Chinese, four DLC mounted, imported save loaded in Colony Iota. |
+
+In the same handheld 1280×720 view, 12-second samples showed 29.1 render / 29.2 display fps with frame generation off and 25.2 / 50.5 with Lossless. After switching to docked 1920×1080, the scene, characters and HUD drew correctly during a five-second camera pan. The Vulkan log reported stale texture aliases after the switch.
 
 ## Options
 
-- Not recorded.
+- Switch between handheld and docked in the pause menu.
 
 ## Quirks and known issues
 

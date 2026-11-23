@@ -254,6 +254,37 @@ class HostTest(unittest.TestCase):   # porter host's update(): its refusals, the
         self.assertEqual(self.host.windows_text('Pokémon\n'.encode('utf-8')), legacy)
         check(header, hashlib.sha256(self.host.windows_text(header)).hexdigest())   # Brilliant Diamond ported on Windows before the fix
 
+    def test_host_checkpoint_capability(self):
+        from unittest.mock import Mock
+        apk = self.t / 'capability.apk'
+        host = 'lib/arm64-v8a/libdmhost.so'
+        callbacks = b'offerCheckpoint\0offerRuntimeCheckpoint\0checkpointStatus\0requestCheckpoint\0chooseCheckpoint\0saveConflictId\0resolveSaveConflict\0'
+        for previous in (False, True):
+            with zipfile.ZipFile(apk, 'w') as z:
+                z.writestr(host, b'offerRuntimeCheckpoint\0' if previous else b'offerCheckpoint\0')
+                z.writestr('classes.dex', callbacks)
+            for requested in (None, True, False):
+                adb = Mock()
+                adb.shell.side_effect = [PKG + '/org.nx2a.GameActivity', 'present']
+                self.assertEqual(self.host.checkpoint_build(adb, PKG, apk, requested), previous if requested is None else requested)
+        for launcher, shaders, error in [('android.app.NativeActivity', 'present', 'activity'), ('org.nx2a.GameActivity', '', 'shaders.dmsv')]:
+            adb = Mock()
+            adb.shell.side_effect = [PKG + '/' + launcher, shaders]
+            with self.assertRaisesRegex(BuildError, error): self.host.checkpoint_build(adb, PKG, apk, True)
+        with self.assertRaisesRegex(BuildError, 'activity'):
+            self.host.update(HostDevice(self.t / 'a.apk', self.files()), PKG, field_checkpoint=True)
+        self.assertEqual(self.builds, [])
+
+    def test_checkpoint_host_update_passes_the_build_option(self):
+        from unittest.mock import patch
+        dev = HostDevice(self.t / 'a.apk', self.files())
+        with patch.object(self.host, 'checkpoint_build', return_value=True) as detect:
+            out = self.host.update(dev, PKG, field_checkpoint=True)
+        self.assertTrue(detect.call_args.args[-1])
+        self.assertIn('--field-checkpoint', self.builds[0])
+        self.assertTrue(out['field_checkpoint'])
+        self.assertIsNotNone(dev.installed_apk)
+
     def test_update(self):
         for debuggable in (False, True):
             self.builds.clear()

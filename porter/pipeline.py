@@ -71,6 +71,7 @@ class Options:
     touch: bool = False                # a game played by touch: the on-screen gamepad starts hidden (TOUCH_SETTINGS), so it takes none of the game's touches
     no_menu_button: bool = False       # no on-screen menu button: DM_MENU_BUTTON=0 in env.txt (dm/android/front_android.c g_menu_btn); Back opens the menu (issue #397)
     native_keyboard: bool = True       # Unicode Android IME by default (requires SDK/JDK); --no-native-keyboard keeps the controller keyboard
+    field_checkpoint: bool = False     # experimental Vulkan runtime checkpoints in the single-screen GameActivity
     external_display: bool = False     # compile the optional external-screen activity with the Android SDK
     vercode_offset: int = 0            # added to the APK's versionCode: a rebuild of the same game version installs over a build with a higher one (version_code)
     alias_headroom: int = None         # GB more alias region (alias_headroom); None: ALIAS_HEADROOM for a version the profile was not brought up on, none for one it was
@@ -247,6 +248,8 @@ class Port:
         o.folder = Path(o.folder).expanduser().resolve()
         if not o.folder.is_dir(): raise BuildError(f'not a folder: {o.folder}')
         version_code('v0', o.vercode_offset); alias_headroom_gb(o.alias_headroom)   # an offset or headroom out of range fails now, not after the shaders
+        if o.field_checkpoint and (o.external_display or not o.native_keyboard):
+            raise BuildError('--field-checkpoint needs the single-screen GameActivity: use --native-keyboard without --external-display')
         self.driver_system = str(o.vulkan_driver) == 'system'   # --vulkan-driver system: the device's driver even when the profile asks for Turnip
         if self.driver_system: o.vulkan_driver = None
         if o.vulkan_driver:
@@ -498,6 +501,8 @@ class Port:
         gfx = src['graphics'][0]
         # OpenGL ES: the device's own GL driver runs it (dm/android/gl_android.c); no shaders to translate, the game compiles its GLSL ES at run time
         self.gl = gfx == 'gl'
+        if self.gl and self.o.field_checkpoint:
+            raise BuildError('--field-checkpoint cannot capture OpenGL ES state')
         if self.gl: say(f"{self.app_name} renders with OpenGL ({src['graphics'][1]}): the Android host hands its GL calls to the device's OpenGL ES driver"); return
         if gfx != 'nvn': raise BuildError(f'{self.app_name} renders with {gfx} ({src["graphics"][1]}): the Android host replays NVN or OpenGL ES only so far')
         # Game Freak's GFPAKs and Trinity packs with Oodle entries: decoded by the game's own decoder on the Android device (device_oodle); PKZ packs still need the Mac host
@@ -858,7 +863,7 @@ class Port:
         PROG.stage('host', step=f'NDK {self.tools["ndk"].name}')
         out = self.aw / ('host-debug' if self.o.debug else 'host')
         nsp.run([PY, DM / 'android/build.py', '--game', self.g.id, '--ndk', self.tools['ndk'], '--out', out, '--lib', '--jobs', str(self.o.jobs)] + ([] if self.o.debug else ['--release'])
-                + (['--adrenotools'] if self.o.vulkan_driver else []), self.logs / 'android_host.log', env=self.env)
+                + (['--field-checkpoint'] if self.o.field_checkpoint else []) + (['--adrenotools'] if self.o.vulkan_driver else []), self.logs / 'android_host.log', env=self.env)
         self.so = out / 'libdmhost.so'
         if not self.so.is_file(): raise BuildError(f'build.py made no {self.so}')
         ph = out / 'gen' / self.g.id / 'game_profile.h'   # the profile the host was built from, for the data pack (porter host compares it with its checkout's)

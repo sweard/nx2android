@@ -23,6 +23,7 @@ def _parser():
     po.add_argument('--debug', action='store_true', help='a development build: debug information, debuggable, DM_CTL key presses')
     po.add_argument('--experimental', action='store_true', help='try a game not ported to Android yet (a profile guessed from a survey of its files; it may not start)')
     po.add_argument('--package', default='', help="the app's package instead of the profile's (a test install beside another build of the game)")
+    po.add_argument('--field-checkpoint', action='store_true', help='enable experimental runtime checkpoints for single-screen Vulkan games (GameActivity)')
     po.add_argument('--native-keyboard', action=argparse.BooleanOptionalAction, default=True, help='use the Android Unicode keyboard (default: enabled; requires JDK and Android SDK platform/build-tools)')
     po.add_argument('--external-display', action='store_true', help='build the external-screen gamepad activity (requires Android SDK platform and build-tools)')
     po.add_argument('--fps60', action='store_true', help='60 fps: the profile\'s own frame-rate cap, else the community\'s FPSLocker-Warehouse config of the game\'s build, fetched from GitHub')
@@ -84,6 +85,8 @@ def _parser():
     dr.add_argument('--package', default='', help='the app (default: the only ported game installed)')
     dr.add_argument('--device', default='', help='adb serial (default: the configured device, else the only one)'); dr.add_argument('--json', action='store_true')
     hs = sub.add_parser('host', help="a port on the device brought to this version's host, without the game files: its libdmhost.so is built again from the profile (the saves and the game's data stay)")
+    hs.add_argument('--field-checkpoint', action=argparse.BooleanOptionalAction, default=None,
+                    help='enable or disable runtime checkpoints (default: preserve the installed host setting)')
     hs.add_argument('--package', default='', help='the app (default: the only ported game installed)')
     hs.add_argument('--device', default='', help='adb serial (default: the configured device, else the only one)')
     hs.add_argument('--jobs', type=int, default=os.cpu_count() or 8); hs.add_argument('--json', action='store_true')
@@ -267,7 +270,7 @@ def cmd_driver(a):   # porter driver and porter host: the installed APK rebuilt 
             lock = adb.hold(paths.user_dir())   # they reinstall the APK: not while porter install runs on the device
             try:
                 out = driver.swap(adb, saves.pick_app(adb, a.package), None if a.system else a.library) if a.cmd == 'driver' else \
-                      host.update(adb, saves.pick_app(adb, a.package), a.jobs)
+                      host.update(adb, saves.pick_app(adb, a.package), a.jobs, field_checkpoint=a.field_checkpoint)
             finally:
                 if lock: lock.close()
     except BuildError as e:

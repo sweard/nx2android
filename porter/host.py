@@ -7,7 +7,7 @@
 # hash of the game_profile.h it was built with (nx2a-data.json profile_h, which porter port writes) this checkout's, or this checkout's without defines added since (ADDED_DEFINES) that are at their off value. A port made on Windows before game.py wrote the header as bytes hashed the same header with CRLF newlines (still UTF-8), and that form is accepted too. A derived profile (a version the profile does not register, with
 # its automatic alias headroom) or --alias-headroom compiled another DM_GAME_MEM_ALIAS into libdmhost.so, and the repository's would give the game a smaller alias region. Nor does a change in sdk_patches.py for other SDK builds: the cuts and observation gates it and the game's patches.py give the build IDs of
 # the port's modules are checked against those mods/<module>.cuts.tsv and .obs.tsv list. A changed shader translator or data pack is not carried over either: a port again does that.
-import hashlib, json, os, re, shlex, subprocess, sys, tempfile
+import hashlib, json, os, re, shlex, subprocess, sys, tempfile, zipfile
 from pathlib import Path
 
 from porter import datapack, paths, toolchain
@@ -150,8 +150,28 @@ def check_profile(package, manifest, title_id):
                      f'port the game again')
 
 
-def update(adb, package, jobs=os.cpu_count() or 8):
-    """package's libdmhost.so built again from this checkout and installed. → {'package', 'title_id', 'debug', 'host'}"""
+def checkpoint_build(adb, package, src, requested):
+    # Field hosts (including releases predating this CLI) look up this exact Java callback in checkpoint_ui.c.
+    if requested is False: return False
+    try:
+        with zipfile.ZipFile(src) as apk:
+            if requested is None and b'offerRuntimeCheckpoint\0' not in apk.read('lib/arm64-v8a/libdmhost.so'):
+                return False
+            dex = apk.read('classes.dex') if 'classes.dex' in apk.namelist() else b''
+    except (OSError, KeyError, zipfile.BadZipFile) as exc:
+        raise BuildError(f'{package}: could not inspect the installed host: {exc}') from exc
+    launcher = adb.shell(f'cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER {shlex.quote(package)}')
+    callbacks = ('offerCheckpoint', 'offerRuntimeCheckpoint', 'checkpointStatus', 'requestCheckpoint', 'chooseCheckpoint', 'saveConflictId', 'resolveSaveConflict')
+    if f'{package}/org.nx2a.GameActivity' not in launcher.splitlines() or not all(name.encode() + b'\0' in dex for name in callbacks):
+        raise BuildError(f'{package}: the installed activity lacks the runtime checkpoint UI; rebuild the APK with porter port --field-checkpoint')
+    shaders = shlex.quote(datapack.files_folder(package) + '/shaders.dmsv')
+    if adb.shell(f'test -s {shaders} && echo present', check=False).strip() != 'present':
+        raise BuildError(f'{package}: runtime checkpoints require the NVN/Vulkan data pack (missing shaders.dmsv)')
+    return True
+
+
+def update(adb, package, jobs=os.cpu_count() or 8, *, field_checkpoint=None):
+    """package's libdmhost.so built again from this checkout and installed. → {'package', 'title_id', 'debug', 'host', 'field_checkpoint'}"""
     files = datapack.files_folder(package)
     try: manifest = json.loads(adb.read_text(f'{files}/nx2a-data.json') or '{}')
     except ValueError: manifest = {}
@@ -173,13 +193,14 @@ def update(adb, package, jobs=os.cpu_count() or 8):
     ndk, _ = toolchain.find_ndk()
     if not ndk: raise BuildError('no Android NDK found: python -m porter tools --download')
     with tempfile.TemporaryDirectory(prefix='nx2a_host_') as t:
+        src, out = Path(t) / 'installed.apk', Path(t) / 'host.apk'
+        adb.run('pull', installed_apk(adb, package), src, timeout=600)
+        enabled = checkpoint_build(adb, package, src, field_checkpoint)
         say(f'{package}: building the host of {title_id} ({"debug" if debug else "release"} build)')
-        r = subprocess.run([sys.executable, str(DM / 'android/build.py'), '--game', title_id, '--ndk', str(ndk), '--out', t, '--lib', '--jobs', str(jobs)] + ([] if debug else ['--release']),
+        r = subprocess.run([sys.executable, str(DM / 'android/build.py'), '--game', title_id, '--ndk', str(ndk), '--out', t, '--lib', '--jobs', str(jobs)] + ([] if debug else ['--release']) + (['--field-checkpoint'] if enabled else []),
                            capture_output=True, text=True, errors='replace', env=clean_env())
         so = Path(t) / 'libdmhost.so'
         if r.returncode or not so.is_file(): raise BuildError(f'{package}: the host did not build: ' + ((r.stderr.strip() or r.stdout.strip()).splitlines() or ['no output'])[-1])
-        src, out = Path(t) / 'installed.apk', Path(t) / 'host.apk'
-        adb.run('pull', installed_apk(adb, package), src, timeout=600)
         from porter.pipeline import ui_font_assets   # the overlay's font: an APK ported before it came has none, and the new host looks for it
         fonts = [a for n, f in ui_font_assets().items() for a in ('--asset', f'{n}={f}')]
         r = subprocess.run([sys.executable, str(DM / 'android/apk/apkdriver.py'), str(src), str(out), str(paths.signing_key()), '--host', str(so)] + fonts,
@@ -190,4 +211,4 @@ def update(adb, package, jobs=os.cpu_count() or 8):
         try: adb.install(out, package)
         except AdbError as e: raise BuildError(str(e)) from e
     say(f'{package}: host of this checkout installed ({size / 2**20:.1f} MB); the game\'s data on the device is unchanged')
-    return {'package': package, 'title_id': title_id, 'debug': debug, 'host': size}
+    return {'package': package, 'title_id': title_id, 'debug': debug, 'host': size, 'field_checkpoint': enabled}
