@@ -1,0 +1,93 @@
+tests/test_overlay_visibility.py
+  s_db1760f56a9c1f::t_46f27226dd13f1 29-30,43-49,69-70,421-438
+tests/test_fps_counter_options.py
+  s_db1760f56a9c1f::t_f963d595a8955b 31,40-42
+README.md
+  s_db1760f56a9c1f::t_46f27226dd13f1 68-69,71-75
+  s_db1760f56a9c1f::t_f963d595a8955b 70
+tests/test_game_files.py
+  s_db1760f56a9c1f::t_46f27226dd13f1 1-92
+tests/test_vk_present_timing.py
+  s_db1760f56a9c1f::t_46f27226dd13f1 17-29,37-99,102-245,304,306-308,313,316,320-326,328-329,334-335,340,344,347,350-351,354
+  s_926c68cc5bacfb::t_a9de3d84e28191 30-36,100-101
+tests/test_overlay_layout.py
+  s_926c68cc5bacfb::t_9147fcfc313100 100,102-107
+  s_db1760f56a9c1f::t_f963d595a8955b 121-123,125-132
+  s_db1760f56a9c1f::t_46f27226dd13f1 27-28,98-99
+nxnative/dm/android/overlay_layout.h
+  s_db1760f56a9c1f::t_46f27226dd13f1 266,283,344-346,348-350
+  s_926c68cc5bacfb::t_9147fcfc313100 230,236-238,269,279,281-282,347
+  s_926c68cc5bacfb::t_e8abe10f487322 351
+nxnative/dm/android/gfx_vk_lsfg.h
+  s_db1760f56a9c1f::t_46f27226dd13f1 1-14
+nxnative/dm/android/lossless_dll.h
+  s_db1760f56a9c1f::t_46f27226dd13f1 1-16
+nxnative/dm/android/gfx_vk_present.c
+  s_926c68cc5bacfb::t_9147fcfc313100 443-445,464,472,496,534,546-549,552-554,557,560,562,812,814-820,1237-1240,1257,1261-1262,1346-1347,1576,1583
+  s_db1760f56a9c1f::t_46f27226dd13f1 6,10,20,26,28-29,32-34,36,39-40,44-50,52-61,76,98-101,113-114,134-136,225-226,228-229,234,299-300,556,559,561,563,797-799,801-811,821,1080-1164,1166-1180,1186,1231-1236,1241-1243,1247-1252,1259,1263-1269,1276-1287,1292-1299,1339-1340,1343-1345,1351,1353-1360,1366-1370,1403-1546,1551,1574-1575,1577-1582,1584-1585,1589,1591-1596,1602,1606-1613,1620,1625,1633,1635-1636,1671-1672,1688,1715,1718
+  s_db1760f56a9c1f::t_f963d595a8955b 256
+nxnative/dm/android/java/org/nx2a/GameActivity.java
+  s_db1760f56a9c1f::t_46f27226dd13f1 4,7,10-15,28
+nxnative/dm/android/tools/android_profile.py
+  s_926c68cc5bacfb::t_9147fcfc313100 31
+docs/ARCHITECTURE.md
+  s_db1760f56a9c1f::t_46f27226dd13f1 436-441
+  s_926c68cc5bacfb::t_9147fcfc313100 220
+nxnative/dm/android/apk/mkapk.py
+  s_db1760f56a9c1f::t_46f27226dd13f1 166-169
+nxnative/dm/android/lossless_dll.c
+  s_db1760f56a9c1f::t_46f27226dd13f1 1-96
+nxnative/dm/android/gfx_vk.h
+  s_db1760f56a9c1f::t_46f27226dd13f1 31,33,39-41,57
+nxnative/dm/android/perf_android.c
+  s_926c68cc5bacfb::t_9147fcfc313100 308-311
+  s_db1760f56a9c1f::t_46f27226dd13f1 263-264,284-289,319-326,378-379,388,440
+nxnative/dm/android/gfx_vk_lsfg.c
+  s_db1760f56a9c1f::t_46f27226dd13f1 1-730
+nxnative/dm/android/java/org/nx2a/ExternalActivity.java
+  s_db1760f56a9c1f::t_46f27226dd13f1 7,55-59,91
+nxnative/dm/android/front_android.c
+  s_db1760f56a9c1f::t_8fc9d25b5268c2 800-801
+  s_db1760f56a9c1f::t_46f27226dd13f1 11,55-57,59-73,100,147-148,173,187-192,647,658,661-662,708-716,729-739,745-750,759,776,798-799,802,817,1335-1337,1348,1354-1357,1417,1439,1443-1444,1547
+  s_926c68cc5bacfb::t_9147fcfc313100 660
+  s_926c68cc5bacfb::t_722e74c97ef1eb 1548
+nxnative/dm/android/java/org/nx2a/GameFiles.java
+  s_db1760f56a9c1f::t_46f27226dd13f1 1-98
+tests/test_porter.py
+  s_926c68cc5bacfb::t_9147fcfc313100 70-78
+tests/test_menu_scroll.py
+  s_926c68cc5bacfb::t_9147fcfc313100 130,178
+  s_db1760f56a9c1f::t_46f27226dd13f1 41,109,120,140,142,170-177,180,193-194
+nxnative/dm/android/apk/lsfg-vk-LICENSE.txt
+  s_db1760f56a9c1f::t_46f27226dd13f1 1-21
+nxnative/dm/android/apk/apkdriver.py
+  s_db1760f56a9c1f::t_46f27226dd13f1 45-49
+nxnative/dm/android/gfx_vk_core.c
+  s_db1760f56a9c1f::t_46f27226dd13f1 337-339
+tests/test_perf_adaptive.py
+  s_db1760f56a9c1f::t_46f27226dd13f1 68-76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d5a8b0dd3a8586e2dbe7eb5d5a552d658f6dcd1f",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": null
+    },
+    "s_db1760f56a9c1f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "unknown"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
