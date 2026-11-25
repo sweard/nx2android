@@ -1,21 +1,11 @@
-// Docked scene-size control for the Digimon 1.2.2 renderer.
+// Docked scene-size control for supported temporal reconstruction profiles.
 #include "hle.h"
 #include "gsr2_profile.h"
 #if DM_HAS_GSR2_INPUT_CONTROL
 #include <sys/uio.h>
 #include <unistd.h>
 
-extern int dm_gsr2_render_height(void);
 extern int vk_gsr2_has_profile(void);
-typedef struct { uintptr_t owner, params; } drs_objects;
-typedef struct { float x, y; } drs_scale;
-static struct {
-    drs_objects objects;
-    uint8_t dynamic;
-    drs_scale scale;
-    int height;
-} saved;
-
 static int read_field(uintptr_t addr, void *out, size_t size) {
     struct iovec local = {out, size}, remote = {(void *)addr, size};
     return process_vm_readv(getpid(), &local, 1, &remote, 1, 0) == (ssize_t)size;
@@ -25,6 +15,16 @@ static int write_field(uintptr_t addr, void *value, size_t size) {
     struct iovec local = {value, size}, remote = {(void *)addr, size};
     return process_vm_writev(getpid(), &local, 1, &remote, 1, 0) == (ssize_t)size;
 }
+#if DM_GAME_PROGRAM_ID == GSR2_DIGIMON_ID
+typedef struct { uintptr_t owner, params; } drs_objects;
+typedef struct { float x, y; } drs_scale;
+static struct {
+    drs_objects objects;
+    uint8_t dynamic;
+    drs_scale scale;
+    int height;
+} saved;
+
 static drs_objects resolve(void) {
     static uintptr_t main_base;
     drs_objects result = {0};
@@ -61,7 +61,7 @@ int dm_gsr2_release_resolution(void) {
     return !saved.objects.owner || release(resolve());
 }
 void dm_gsr2_resolution_tick(void) {
-    int height = dm_gsr2_render_height();
+    int height = 720 * dm_gsr2_custom_percent() / 100;
     if (height) {
         const char *mode = getenv("DM_VK_GSR2");
         if (!dm_opmode() || !mode || atoi(mode) != 2 || !vk_gsr2_has_profile()) height = 0;
@@ -91,4 +91,7 @@ void dm_gsr2_resolution_tick(void) {
     if (saved.height != height) LOG("[gsr2] requested docked scene input %dp", height);
     saved.height = height;
 }
+#else
+#include "gsr2_resolution_ue.inc"
+#endif
 #endif

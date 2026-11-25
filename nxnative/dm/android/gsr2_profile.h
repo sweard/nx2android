@@ -1,16 +1,12 @@
 // The same title gate controls the Vulkan adapter and its pause-menu page.
 #pragma once
 #include "../games/temporal/builds.h"
-#if defined(DM_GAME_PROGRAM_ID) && DM_GAME_PROGRAM_ID == GSR2_DIGIMON_ID
+#if defined(DM_GAME_PROGRAM_ID) && (DM_GAME_PROGRAM_ID == GSR2_DIGIMON_ID || DM_GAME_PROGRAM_ID == GSR2_OT2_ID || DM_GAME_PROGRAM_ID == GSR2_DQ12_ID || DM_GAME_PROGRAM_ID == GSR2_DQ7_ID || DM_GAME_PROGRAM_ID == GSR2_OT0_ID || DM_GAME_PROGRAM_ID == GSR2_FF_HK_ID)
 #define DM_HAS_GSR2_ADAPTER 1
-#define DM_HAS_GSR2_INPUT_CONTROL 1
-#elif defined(DM_GAME_PROGRAM_ID) && (DM_GAME_PROGRAM_ID == GSR2_OT2_ID || DM_GAME_PROGRAM_ID == GSR2_DQ12_ID || DM_GAME_PROGRAM_ID == GSR2_DQ7_ID || DM_GAME_PROGRAM_ID == GSR2_OT0_ID || DM_GAME_PROGRAM_ID == GSR2_FF_HK_ID)
-#define DM_HAS_GSR2_ADAPTER 1
-#define DM_HAS_GSR2_INPUT_CONTROL 0
 #else
 #define DM_HAS_GSR2_ADAPTER 0
-#define DM_HAS_GSR2_INPUT_CONTROL 0
 #endif
+#define DM_HAS_GSR2_INPUT_CONTROL DM_HAS_GSR2_ADAPTER
 
 enum { GSR2_OFF, GSR2_AUTO, GSR2_CUSTOM };
 enum { GSR2_MIN_PERCENT = 50, GSR2_MAX_PERCENT = 100, GSR2_STEP = 5 };
@@ -22,6 +18,7 @@ int dm_gsr2_input_mode(void);
 int dm_gsr2_output_height(void);
 
 #if DM_HAS_GSR2_INPUT_CONTROL
+int dm_gsr2_custom_percent(void);
 void dm_gsr2_resolution_tick(void);
 int dm_gsr2_release_resolution(void);
 #endif
