@@ -1,19 +1,29 @@
 nxnative/dm/android/overlay_layout.h
   s_926c68cc5bacfb::t_37ff8af82035f8 245-251,288,290,294-296,302-341,345-346,384,389
+  s_1451eb933fac31::t_356ce0f40831b6 350
+  s_1451eb933fac31::t_2ecb0a3702d780 298
 nxnative/dm/android/gfx_vk_present.c
   s_926c68cc5bacfb::t_dd9a73193a13dc 76,83,450,454,469,472-474,476-480,482,485-491,502-504,510,513,515,522-524,527-528,532-539,591,595,598,610,616,620,633,1000-1001
   s_db1760f56a9c1f::t_4e56963b1fe805 231,494,496,517,529,1006
+  s_1451eb933fac31::t_356ce0f40831b6 500,505
 docs/ARCHITECTURE.md
   s_926c68cc5bacfb::t_23f4ce0b06b62a 403-404
 nxnative/dm/android/front_android.c
   s_926c68cc5bacfb::t_89013db11d9137 624-627,662,692,726-729,734,737,747-754,759,773,789,792,811,818,834,836,849,855,885,887
   s_db1760f56a9c1f::t_4e56963b1fe805 897,909
+  s_1451eb933fac31::t_2ecb0a3702d780 480,779-781
+  s_1451eb933fac31::t_356ce0f40831b6 735,738,743-746
 nxnative/dm/android/java/org/nx2a/ExternalActivity.java
   s_926c68cc5bacfb::t_5d4e497391a33a 51,160,215-216,222
+  s_1451eb933fac31::t_2ecb0a3702d780 224
 tests/test_menu_scroll.py
   s_926c68cc5bacfb::t_0af6e350d51995 1-17,221-224
   s_db1760f56a9c1f::t_4e56963b1fe805 34-35,49,56-61,63-65,67
   s_926c68cc5bacfb::t_23f4ce0b06b62a 18-33,36-48,50-52,54-55,62,66,68-70,72,78-88,89-122,124-132,134-142,144,146-151,153-163,165-167,179,181-183,185-186,188-199,202-208,210,212-217,218-220
+  s_1451eb933fac31::t_356ce0f40831b6 53,71,123,133,143,145,152,164,168-178,180,184,187,200-201,209,211
+  s_1451eb933fac31::t_2ecb0a3702d780 73-77
+tests/test_overlay_layout.py
+  s_1451eb933fac31::t_2ecb0a3702d780 116
 ---
 {
   "schema_version": "authorship/3.0.0",
@@ -21,6 +31,14 @@ tests/test_menu_scroll.py
   "base_commit_sha": "2d40c9397c1d15086d4b274a75eea774f363eb33",
   "prompts": {},
   "sessions": {
+    "s_1451eb933fac31": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a211cf-78ec-7bb2-9f6e-a095d96cf321",
+        "model": "unknown"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    },
     "s_926c68cc5bacfb": {
       "agent_id": {
         "tool": "codex",
