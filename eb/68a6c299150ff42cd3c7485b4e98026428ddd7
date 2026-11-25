@@ -1,0 +1,37 @@
+docs/ARCHITECTURE.md
+  s_db1760f56a9c1f::t_4814c1fcdf4118 310
+tests/test_vulkan_driver_import.py
+  s_db1760f56a9c1f::t_4814c1fcdf4118 13,43-54,56-64
+nxnative/dm/android/java/org/nx2a/VulkanDriverStore.java
+  s_926c68cc5bacfb::t_699587ce63f1c6 11-14,16-17,23,37-64,66-71
+  s_db1760f56a9c1f::t_4814c1fcdf4118 32-36
+README.md
+  s_db1760f56a9c1f::t_4814c1fcdf4118 68
+nxnative/dm/android/java/org/nx2a/GameDriver.java
+  s_db1760f56a9c1f::t_4814c1fcdf4118 41-45,58-60,69
+  s_926c68cc5bacfb::t_699587ce63f1c6 8-11,18-20,49,61-68,70-73,75,77-87,89,107-113,124-148,152
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "eb68a6c299150ff42cd3c7485b4e98026428ddd7",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    },
+    "s_db1760f56a9c1f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "unknown"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
