@@ -51,8 +51,7 @@ static void temporal_read_bindings(const vk_temporal_bindings *b, vk_temporal_fr
 
 int vk_temporal_current_draw(vk_temporal_frame *frame) {
     *frame = (vk_temporal_frame){0};
-    vk_temporal_adapter adapter = temporal_adapter_for_title(DM_GAME_PROGRAM_ID);
-    if (!adapter || !S.sh[1] || !adapter(S.sh[1]->key, frame)) return 0;
+    if (!gs_profile || !S.sh[1] || !gs_profile->read_draw(S.sh[1]->key, frame)) return 0;
     frame->present = g_tex_frame;
     frame->fragment_key = S.sh[1]->key;
     return 1;

@@ -13,6 +13,7 @@ class TemporalInputTest(unittest.TestCase):
             work = pathlib.Path(tmp)
             # Compile the replay code against small native type doubles without an Android SDK.
             shutil.copy(android / 'gfx_vk_temporal.h', work)
+            shutil.copy(android / 'gfx_vk_gsr2_profile.h', work)
             (work / 'gfx_vk.h').write_text("""
 #include <stdint.h>
 typedef struct { uint64_t serial; struct { unsigned width, height; } d; } tex_t;

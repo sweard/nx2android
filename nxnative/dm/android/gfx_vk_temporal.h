@@ -38,6 +38,7 @@ typedef enum { VK_TEMPORAL_NO_DISPATCH, VK_TEMPORAL_UPSCALE_INPUT, VK_TEMPORAL_U
 typedef struct {
     uint64_t present, compute_key;
     vk_temporal_stage stage;
+    unsigned tile_w, tile_h;
     vk_temporal_texture input, output;
 } vk_temporal_dispatch;
 

@@ -75,6 +75,7 @@ uint32_t *spv_ubo_component(const uint32_t *w, uint32_t nw, uint32_t *onw, uint3
 uint32_t *spv_gs_split(const uint32_t *w, uint32_t nw, int mode, uint32_t *onw, char *why, size_t nwhy);
 uint32_t vk_mem_type(uint32_t bits, VkMemoryPropertyFlags want, VkMemoryPropertyFlags avoid);
 const char *dm_app_driver_choice(void);
+int vk_gsr2_has_profile(void);
 uint64_t vk_gsr2_last_extent(void);  // last validated scene/output widths and heights, packed as four 16-bit values
 void vk_driver_frame_shown(void);
 void vk_init(void);   // once, from mtl_init or the first use
@@ -205,6 +206,7 @@ typedef struct {
     int gs_split; VkShaderModule gs_mod[2]; // 1: effects/raster modules ready, 2: cannot safely separate, 0: not checked
 } vkshader_t;
 vkshader_t *vk_shader(uint64_t key, int stage);   // NULL when the bundle has no such shader
+int vk_shader_stage(uint64_t key);
 vkshader_t *vk_shader_gs_topo(vkshader_t *gs, VkPrimitiveTopology topo);   // the geometry shader translated for the draw's input primitive (shader_vk.py gs_variant_key); gs when there is none
 VkShaderModule vk_shader_module(vkshader_t *s, uint64_t um, uint64_t im, uint32_t xo, int fd, uint32_t vi);   // the module, or its variant (integer views; extra outputs; fragment depth written)
 int vk_shader_gs_split_ready(vkshader_t *s); // both modules exist before either pass may be recorded

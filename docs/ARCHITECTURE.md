@@ -214,6 +214,39 @@ The resource identities connected all three stages across four consecutive prese
 
 ### Experimental Snapdragon GSR 2
 
+The Vulkan export writes `temporal_candidates` to `shaders.dmsv.report.json`. To inspect an existing data pack, run `python nxnative/dm/android/tools/temporal_candidates.py path/to/shaders.dmsv`. Both paths use DMSV reflection and group shader keys by bindings. Fragment candidates sample a plain 2D texture and have one floating-point color output. Compute candidates sample a plain 2D texture and bind a 2D storage image. Each resource tuple records the descriptor binding, handle source, register, byte offset and descriptor count. Compute workgroup dimensions describe shader invocations. The number of **output pixels** covered by each group needs independent verification.
+
+The host selects a verified profile using the packaged title ID, the loaded guest main build ID and shader stages in the actual bundle. Per-build compute and composite rules live in `nxnative/dm/games/temporal/`. The adapter captures draw resources, supplies matching scene color, depth, viewport extent and camera parameters at reconstruction time, and advances camera history after a successful record. Composite rules identify the vertex/fragment pair and scene texture slot. A guest resolution override additionally requires a validated game-specific control.
+
+For **Octopath Traveler II 1.1.1** (main `0d9649011312f62e93f6a5673a09d7e9`), the local export contains 14,100 shaders, including 4,842 fragment and 517 compute candidates. Matching their keys against the game’s global shader cache narrows the set to 696 fragment and 509 compute shaders. Its main contains the names `SceneColorTexture`, `SceneDepthTexture`, `GBufferVelocityTexture`, `TemporalAAJitter` and `PostProcessTonemap.usf`. The docked profile uses the camera and passes verified below. The GSR2 tab offers Off and Auto for this build. Other viewport or pass layouts use the guest path.
+
+On Find X9 Ultra, the Digimon 1.2.2 tunnel save exercised the shared profile on the Qualcomm system driver. Docked Custom 50%, 1440p output and frame generation off produced 640×360 input and a 2560×1440 scene, HUD and final picture in a 3168×1440 layer. Both guest dispatches were replaced. The minimap, waypoint and action prompts remained visible.
+
+On the same phone, an Octopath Traveler II docked capture at Flamechurch Cathedral on bundled Turnip (Mesa git `2648b2059f`) established the following pass identities.
+
+- Fragment shader `75501d33243a6fcb` reads the same 1280×720 D24S8 image used as the scene depth attachment from texture register 128 and a 1280×720 B10G11R11 scene color from register 129. Its output is 640×360. The shared depth helper copies the active rectangle into a matching D32F or D24S8 image, exposing only the depth aspect for sampling.
+- Fragment shader `94edc6d52c88a68a` reads a 1279×720 image from register 128 and writes a 1920×1080 target. A temporary solid-color clear immediately after this pass removed the world and overhead NPC prompts while the bottom-right game HUD remained visible. The world returned when the clear stopped.
+- Compute shader `1b4efa803353603c` alternated two 960×540 history images across three successive presents. This establishes a history for that intermediate pass. Per-object velocity remains unidentified.
+
+The active Octopath view uses 1279×720 pixels of the 1280×720 depth allocation. In the Cathedral save, 30 GPU readbacks of a 256×160 region matched the copied 24-bit depth pixel for pixel. Fragment UBO 0 supplies the current-to-previous clip transform at float index 488. Using reversed guest depth with this transform predicted 274 tracked points in two moving frame pairs with a median error of 0.29 input pixels (90th percentile 2.84). The previous world-to-clip matrix exactly matched the preceding capture's current matrix in 222 consecutive frame comparisons.
+
+All 225 native projection samples had zero jitter. A diagnostic build added a known clip-space offset to alternate vertex projections. The expected screen displacement was (+0.75, −0.50) input pixels; the five color frame pairs had median displacements of (+0.71 to +0.73, −0.51 to −0.49). For a row-vector projection with clip W = view Z, an offset in projection row 2 maps to pixels by multiplying X by width/2 and Y by −height/2. The shipped adapter accepts the observed unjittered projection and retains the guest path for other projection patterns.
+
+With frame generation off and output set to 1440p, the adapter reconstructed the tone-mapped scene before the original fullscreen composite. The subsequent game HUD drew into the same 2560×1440 picture, which was presented in a 3168×1440 layer. The character, NPC prompts and bottom-right HUD remained visible while walking. This verification covers the docked Cathedral save.
+
+Four additional docked builds use the shared Unreal draw adapter in `gfx_vk_gsr2_ue.inc`. Each entry in `games/temporal/ue_titles.inc` identifies the depth draw, the view uniform layout and the fullscreen pass that samples the tone-mapped color before HUD composition.
+
+| Game build | Field scene | Active input observed | Clip-to-previous float index |
+| --- | --- | --- | --- |
+| Final Fantasy Resonance HK 1.0.1 | Chapter 1 castle | 1920×1080, also 1536×864 under dynamic resolution | 544 |
+| Dragon Quest I & II HD-2D Remake 1.0.2 | Dragon Quest I, Tantegel castle gate | 1440×810 in a 1440×812 allocation | 488 |
+| Dragon Quest VII Reimagined 1.2.0 | Pilchard Bay docks | 1920×1080 | 488 |
+| Octopath Traveler 0 Chinese 1.0.4 | Wishvale watermill | 1280×720 | 496 |
+
+These profiles accept the observed unjittered projection and use reversed D24S8 depth and the game's current-to-previous clip matrix. They track camera motion only. Inputs are Off or Auto. When the active scene exceeds the selected output height or the draw identities or resource layout change, the guest can render normally. Dragon Quest I & II preserves the two padding rows for normalized texture sampling while composing the HUD at the exact output height. The Final Fantasy FXAA shader reads fragment coordinates in guest pixels, so its support uniform accounts for the raster scale during that draw. At 1536×864 a second fullscreen pass samples the FXAA result and writes the window. The adapter carries the reconstructed image through both passes.
+
+With Auto input, 1440p output and frame generation off on Find X9 Ultra, all four field scenes presented the 2560×1440 attachment in a 3168×1440 layer. The Final Fantasy castle retained that attachment across the switch between 1080p and 864p input. The field tests covered character movement and the game HUD. Dragon Quest II in the dual-title package was not independently exercised.
+
 `vk_temporal_current_dispatch()` identifies the input and output dispatches. A title adapter supplies matching camera and raw depth data to the common Vulkan backend. The Digimon adapter in `gfx_vk_gsr2_digimon.inc` takes the inverse view-projection and active viewport from the decal draw, copies the matching D32F depth when the depth-linearization pass reads it, and checks the eye position and horizontal FOV against the fog camera. The depth-linearization pass itself uses a smaller viewport. The first compute dispatch's scale constants must agree with the camera viewport and display extent.
 
 On Digimon, the pause menu's **GSR2** tab offers Off, Auto and Custom input. Auto uses the game's viewport. Custom sets both docked scene dimensions to 50–100% of 1280×720 in 5% steps. At 50% the viewport is 640×360. The status rows report the most recently recorded scene and reconstruction.
@@ -230,7 +263,7 @@ The saved settings are `gsr2_input=0/1/2` (Off/Auto/Custom), `gsr2_percent` (50 
 | --- | --- |
 | `0` (default) | Use the game's renderer. |
 | `1` | Run Convert and Upscale into private images while displaying the game's original output. |
-| `2` | On a matched frame, copy the reconstructed scene into the second guest dispatch's output before the HUD is drawn. Unmatched frames keep the guest output. |
+| `2` | Publish the reconstructed scene before HUD composition using the profile’s graphics or compute pass. Unmatched frames use the guest output. |
 
 The backend uses Qualcomm's SGSR2 two-pass compute shaders (revision `d926f074`), double-buffered history and camera reprojection. The tunnel camera reported zero jitter. No per-object velocity has been identified, so objects moving independently of the camera may leave trails. Nonzero jitter with unverified units, missing inputs or incompatible images leave the guest path in place. A camera cut, an interruption or a resolution change resets accumulation. Mode 2 can replace both matching full-image guest dispatches. The host fills each pass's actual output image before skipping it, preserving intermediate consumers. Shadow mode executes the original dispatches. Frame generation remains a separate presentation feature.
 

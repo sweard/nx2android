@@ -14,8 +14,7 @@ static struct {
     tex_t rt_col[8];
     view_t rt_cview[8];
 } S;
-static uint64_t title, g_tex_frame;
-#define DM_GAME_PROGRAM_ID title
+static uint64_t g_tex_frame;
 #define VKLOG(...) printf(__VA_ARGS__)
 
 static int vk_tex_by_id(int id, const view_t **v, const tex_t **t) {
@@ -27,13 +26,41 @@ static int vk_tex_by_id(int id, const view_t **v, const tex_t **t) {
     return id > 0 && id < 3;
 }
 
+#include "gfx_vk_gsr2_profile.h"
+static const gsr2_profile *gs_profile;
+static void digimon_observe_draw(void) {}
+static int digimon_collect(const vk_temporal_dispatch *dispatch, gsr2_frame_input *frame) {
+    (void)dispatch; (void)frame; return 0;
+}
+static void digimon_recorded(void) {}
+static void ot2_observe_draw(void) {}
+static void ue_observe_draw(void) {}
 #include "gfx_vk_exec_temporal.inc"
 
+static int missing_fragment;
+static int bundle_stage(uint64_t key) {
+    if (key == UINT64_C(0x911dc1299b288cef)) return 0;
+    if (key == UINT64_C(0x3a91240d8b0e0725)) return 1;
+    if (key == UINT64_C(0xa0641c211a8f53b8)) return missing_fragment ? -1 : 1;
+    return 5;
+}
+
 int main(void) {
-    int sample, storage;
-    assert(temporal_compute_stage(0, UINT64_C(0xa540b3cb9347b2ca), &sample, &storage) == VK_TEMPORAL_NO_DISPATCH);
-    assert(temporal_compute_stage(UINT64_C(0x010062e01fe0c000), UINT64_C(0x80310bcd69270f72),
-                                  &sample, &storage) == VK_TEMPORAL_UPSCALE_OUTPUT && sample == 129 && storage == 2);
+    assert(!gsr2_profile_for_build(GSR2_DIGIMON_ID, ""));
+    assert(!gsr2_profile_for_build(GSR2_DIGIMON_ID, "another-build"));
+    assert(!gsr2_profile_for_build(UINT64_C(0x0100A3501946E000), GSR2_DIGIMON_BUILD));
+    gs_profile = gsr2_profile_for_build(GSR2_DIGIMON_ID, GSR2_DIGIMON_BUILD);
+    assert(gs_profile && gsr2_bundle_matches(gs_profile, bundle_stage));
+    missing_fragment = 1;
+    assert(!gsr2_bundle_matches(gs_profile, bundle_stage));
+    const gsr2_compute_pass *pass = gsr2_compute_for_key(gs_profile, UINT64_C(0x80310bcd69270f72));
+    assert(pass && pass->stage == VK_TEMPORAL_UPSCALE_OUTPUT && pass->sample == 129 && pass->image == 2);
+    assert(pass->tile_w == 16 && pass->tile_h == 16 && !gsr2_compute_for_key(gs_profile, 0));
+    uint64_t vs = UINT64_C(0x911dc1299b288cef), fs = UINT64_C(0xa0641c211a8f53b8);
+    assert(!gsr2_composite_for_keys(gs_profile, 0, fs));
+    assert(!gsr2_composite_for_keys(gs_profile, vs, 0));
+    assert(gsr2_composite_for_keys(gs_profile, vs, fs)->final_window);
+    assert(!gsr2_composite_for_keys(gs_profile, vs, UINT64_C(0x3a91240d8b0e0725))->final_window);
     float previous[16]={2,0,0,10, 0,3,0,4, 0,0,4,-5, 0,0,0,1};
     float current[16];
     memcpy(current,previous,sizeof current);
@@ -48,8 +75,9 @@ int main(void) {
     vk_temporal_frame frame;
     S.sh[1] = &shader;
     shader.key = UINT64_C(0xf11a301b78580073);
+    gs_profile = NULL;
     assert(!vk_temporal_current_draw(&frame));
-    title = UINT64_C(0x010062e01fe0c000);
+    gs_profile = gsr2_profile_for_build(GSR2_DIGIMON_ID, GSR2_DIGIMON_BUILD);
     S.tex[1][0] = (UINT64_C(12) << 20) | 1;
     S.tex[1][1] = 2;
     S.ubo[1][1] = (p_bind_buf){0x1000, 0x1b0};
@@ -83,6 +111,30 @@ int main(void) {
     assert(vk_temporal_current_draw(&frame) && !frame.jitter.bytes);
     shader.key = 42;
     assert(!vk_temporal_current_draw(&frame) && !frame.depth.texture.serial && !frame.fragment_key);
+    gs_profile = gsr2_profile_for_build(GSR2_OT2_ID, GSR2_OT2_BUILD);
+    assert(gs_profile && !gs_profile->compute_count);
+    assert(!gsr2_bundle_matches(gs_profile, bundle_stage)); // the Digimon fixture contains no OT2 depth shader
+    assert(gsr2_composite_for_keys(gs_profile, UINT64_C(0xd6b8d37f4c6d67ab), UINT64_C(0x94edc6d52c88a68a))->scales_scene);
+    shader.key = OT2_DEPTH_FS;
+    S.tex[1][128] = 2;
+    S.tex[1][129] = 1;
+    S.ubo[1][0] = (p_bind_buf){0x1000, 5776};
+    assert(vk_temporal_current_draw(&frame) && frame.pass == VK_TEMPORAL_SCENE_INPUTS);
+    assert(frame.depth.texture.serial == 2 && frame.color.texture.serial == 1 && !frame.motion.texture.serial);
+    assert(frame.current_view_projection.address == 0x1000 + 16 * 4);
+    assert(frame.previous_view_projection.address == 0x1000 + 300 * 4);
+    for (size_t i = 0; i < sizeof ue_titles / sizeof *ue_titles; i++) {
+        gs_profile = gsr2_profile_for_build(ue_titles[i].id, ue_titles[i].build);
+        assert(gs_profile == &ue_titles[i].profile);
+        assert(!gsr2_profile_for_build(ue_titles[i].id, GSR2_OT2_BUILD));
+        assert(!gsr2_bundle_matches(gs_profile, bundle_stage));
+        shader.key = gs_profile->ue->depth_fragment;
+        S.tex[1][gs_profile->ue->depth_slot] = 2;
+        assert(vk_temporal_current_draw(&frame) && frame.depth.texture.serial == 2);
+        assert(!frame.motion.texture.serial && !frame.jitter.bytes);
+        shader.key = gs_profile->composite->fragment;
+        assert(!vk_temporal_current_draw(&frame));
+    }
     S.sh[1] = NULL;
     assert(!vk_temporal_current_draw(&frame));
 }

@@ -507,7 +507,7 @@ static VkDescriptorSet stage_set(int st, vkshader_t *s, uint32_t *dofs, VkDescri
     }
     int memo = st < 3 && !g_x_nosetmemo && !g_tracing && !g_var_now && !g_x_nosetc && !g_x_nodrvc && !g_ubolog_key && g_td_off < 0 && set_memo_ok(s), verify = 0;
 #if DM_HAS_GSR2_ADAPTER
-    int composite = st == 1 && gs_color ? gs_composite_stage() : 0;
+    const gsr2_composite_pass *composite = st == 1 && gs_color ? gs_composite_stage() : NULL;
     if (composite) memo = 0;
 #endif
 
@@ -538,7 +538,22 @@ static VkDescriptorSet stage_set(int st, vkshader_t *s, uint32_t *dofs, VkDescri
         wr->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET; wr->dstSet = set; wr->dstBinding = b->binding; wr->descriptorCount = 1;
         VkBuffer buf; VkDeviceSize off, len;
         switch (b->kind) {
-        case RK_SUPPORT: bi[nw] = (VkDescriptorBufferInfo){vk_support_buffer(), 0, 65536}; break;
+        case RK_SUPPORT:
+#if DM_HAS_GSR2_ADAPTER
+            if (composite && gs_profile->ue && composite == gs_profile->composite &&
+                gs_profile->ue->composite_uses_fragcoord && S.pass_w != gs_color->w) {
+                // This fullscreen shader reads only render_scale[0].x at byte 192.
+                // Convert scaled gl_FragCoord to guest pixels before it computes UV.
+                const size_t size = 208;
+                float *support = vk_scratch(size, V.props.limits.minUniformBufferOffsetAlignment, &buf, &off);
+                memset(support, 0, size);
+                support[192 / sizeof(float)] = (float)S.pass_w / gs_color->w;
+                bi[nw] = (VkDescriptorBufferInfo){buf, off, size};
+                break;
+            }
+#endif
+            bi[nw] = (VkDescriptorBufferInfo){vk_support_buffer(), 0, 65536};
+            break;
         case RK_C1: vk_shader_c1(s, &buf, &off, &len); bi[nw] = (VkDescriptorBufferInfo){buf, off, len}; break;
         case RK_CBUF: if (have_cbd && i < CBD_MAX) bi[nw] = cbd[i]; else cbuf_desc(st, s, b, &bi[nw]); if (ncb < MEMO_CB) { mci[ncb] = (uint8_t)i; mcd[ncb++] = bi[nw]; } break;
         case RK_DRV: {
@@ -575,11 +590,11 @@ static VkDescriptorSet stage_set(int st, vkshader_t *s, uint32_t *dofs, VkDescri
                 g_tex_sseq = b->kind == RK_TEX && b->reg >= 0 && b->reg < 256 ? S.tex_sseq[st][b->reg] : 0;
                 int num = tex_desc_for(st, b, h, &ii[nii + k], 0);
 #if DM_HAS_GSR2_ADAPTER
-                if (composite && !num && b->kind == RK_TEX && !b->reg && !k) {
+                if (composite && !num && b->kind == RK_TEX && b->reg == (int)composite->sample && !k) {
                     vkimg_t *source = gs_current_source(h);
                     if (source && source != gs_color) {
                         ii[nii + k].imageView = source->gs_scaled->full;
-                        if (composite == 2) gs_window_draw = 1;
+                        if (composite->final_window) gs_window_draw = 1;
                     }
                 }
 #endif

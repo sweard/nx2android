@@ -95,7 +95,7 @@ static int init(void) {
 }
 
 static int make_image(work_image *im, uint32_t w, uint32_t h, VkFormat fmt) {
-    int is_depth = fmt == VK_FORMAT_D32_SFLOAT;
+    int is_depth = fmt == VK_FORMAT_D32_SFLOAT || fmt == VK_FORMAT_D24_UNORM_S8_UINT;
     VkImageCreateInfo ci = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
                             .imageType = VK_IMAGE_TYPE_2D,
                             .format = fmt,
@@ -226,13 +226,18 @@ VkImage vk_gsr2_record(VkCommandBuffer cb, VkImageView color, VkImageView depth,
 VkImageView vk_gsr2_capture_depth(VkCommandBuffer cb, vkimg_t *source, uint32_t w, uint32_t h) {
     static work_image snapshot;
     static uint32_t width, height;
-    if (!source || source->fmt != VK_FORMAT_D32_SFLOAT || source->samples != VK_SAMPLE_COUNT_1_BIT ||
+    static VkFormat format;
+    if (!source || (source->fmt != VK_FORMAT_D32_SFLOAT && source->fmt != VK_FORMAT_D24_UNORM_S8_UINT) ||
+        source->samples != VK_SAMPLE_COUNT_1_BIT ||
         !(source->usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) || source->layout != VK_IMAGE_LAYOUT_GENERAL || !w || !h ||
         w > source->w || h > source->h)
         return VK_NULL_HANDLE;
-    if (w != width || h != height) {
+    if (w != width || h != height || source->fmt != format) {
+        VkFormatProperties fp;
+        vkGetPhysicalDeviceFormatProperties(V.pd, source->fmt, &fp);
+        if (!(fp.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT)) return VK_NULL_HANDLE;
         work_image replacement = {0};
-        if (!make_image(&replacement, w, h, VK_FORMAT_D32_SFLOAT)) {
+        if (!make_image(&replacement, w, h, source->fmt)) {
             if (replacement.image) vk_defer_free_image(replacement.image, replacement.memory);
             return VK_NULL_HANDLE;
         }
@@ -241,6 +246,10 @@ VkImageView vk_gsr2_capture_depth(VkCommandBuffer cb, vkimg_t *source, uint32_t 
         snapshot = replacement;
         width = w;
         height = h;
+        format = source->fmt;
+        // Both aspects share the layout. Only depth is copied and exposed to the sampler.
+        VkImageAspectFlags aspects = VK_IMAGE_ASPECT_DEPTH_BIT;
+        if (format == VK_FORMAT_D24_UNORM_S8_UINT) aspects |= VK_IMAGE_ASPECT_STENCIL_BIT;
         VkImageMemoryBarrier b = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
                                   .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                                   .newLayout = VK_IMAGE_LAYOUT_GENERAL,
@@ -248,7 +257,7 @@ VkImageView vk_gsr2_capture_depth(VkCommandBuffer cb, vkimg_t *source, uint32_t 
                                   .image = snapshot.image,
                                   .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                                   .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                                  .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}};
+                                  .subresourceRange = {aspects, 0, 1, 0, 1}};
         vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1,
                              &b);
     }

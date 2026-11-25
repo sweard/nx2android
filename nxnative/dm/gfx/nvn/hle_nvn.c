@@ -2084,7 +2084,7 @@ static void engine_dyn_tick(uint64_t presents) {
 NVN(nvnQueuePresentTexture, void, NVNqueue *q, NVNwindow *w, int idx) {
     (void)q; win_t *o = (win_t *)w; o->presents++; SEQ("present %d", idx);
     dm_fps_lock_tick();
-#if defined(__ANDROID__) && DM_HAS_GSR2_ADAPTER
+#if defined(__ANDROID__) && DM_HAS_GSR2_INPUT_CONTROL
     dm_gsr2_resolution_tick();
 #endif
     if (dm_fps_state) { static int was; int c = fps_step_cap(); if (c != was) { LOG("[nvn] frame step cap %d → %d fps at present %llu%s", was, c, (unsigned long long)o->presents, c == 30 && was == 60 ? " (prerendered movie)" : ""); was = c; } }

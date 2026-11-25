@@ -157,13 +157,13 @@ class ShaderCache(unittest.TestCase):
 
     def test_only_shader_export_helpers_invalidate_shader_key(self):
         dm = self.root / 'dm'; tools = dm / 'android/tools'; tools.mkdir(parents=True)
-        names = ('shader_vk.py', 'dmsv.py', 'shader_products.py', 'android_profile.py', 'darwin2elf.py')
+        names = ('shader_vk.py', 'dmsv.py', 'shader_products.py', 'temporal_candidates.py', 'android_profile.py', 'darwin2elf.py')
         for name in names: (tools / name).write_text('initial')
         with mock.patch.object(pipeline, 'DM', dm):
             self.export()
-            for name in names[3:]: (tools / name).write_text('unrelated change')
+            for name in names[4:]: (tools / name).write_text('unrelated change')
             self.export(); self.assertEqual(self.exports, 1)
-            for i, name in enumerate(names[:3], 2):
+            for i, name in enumerate(names[:4], 2):
                 (tools / name).write_text('export change')
                 self.export(); self.assertEqual(self.exports, i)
 

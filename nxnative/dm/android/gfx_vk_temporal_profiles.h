@@ -2,7 +2,6 @@
 // draw. A matched draw can deliberately return incomplete inputs.
 #pragma once
 #include "gsr2_profile.h"
-typedef int (*vk_temporal_adapter)(uint64_t fragment_key, vk_temporal_frame *frame);
 
 static int temporal_digimon(uint64_t fragment_key, vk_temporal_frame *frame) {
     // Digimon Story Time Stranger 1.2.2: both NXFS parameter tables identify
@@ -30,14 +29,26 @@ static int temporal_digimon(uint64_t fragment_key, vk_temporal_frame *frame) {
     return 1;
 }
 
-static inline vk_temporal_adapter temporal_adapter_for_title(uint64_t title) {
-    return title == GSR2_DIGIMON_ID ? temporal_digimon : NULL;
+static int temporal_ot2(uint64_t key, vk_temporal_frame *frame) {
+    if (key != OT2_DEPTH_FS) return 0;
+    static const vk_temporal_bindings scene = {
+        .color = 129, .depth = 128, .motion = -1, .output = 0, .jitter = {-1, 0},
+        .current_view_projection = {0, 16 * sizeof(float)}, .previous_view_projection = {0, 300 * sizeof(float)},
+    };
+    frame->pass = VK_TEMPORAL_SCENE_INPUTS;
+    temporal_read_bindings(&scene, frame);
+    return 1;
 }
 
-static inline vk_temporal_stage temporal_compute_stage(uint64_t title, uint64_t key, int *sample, int *image) {
-    if (title != GSR2_DIGIMON_ID) return VK_TEMPORAL_NO_DISPATCH;
-    *sample=129; *image=2;
-    if (key==UINT64_C(0xa540b3cb9347b2ca)) return VK_TEMPORAL_UPSCALE_INPUT;
-    if (key==UINT64_C(0x80310bcd69270f72)) return VK_TEMPORAL_UPSCALE_OUTPUT;
-    return VK_TEMPORAL_NO_DISPATCH;
+static int temporal_ue(uint64_t key, vk_temporal_frame *frame) {
+    const gsr2_ue_pass *rule = gs_profile->ue;
+    if (key != rule->depth_fragment) return 0;
+    const vk_temporal_bindings inputs = {
+        .color = -1, .depth = (int)rule->depth_slot, .motion = -1, .output = 0,
+        .jitter = {-1, 0}, .current_view_projection = {-1, 0},
+        .previous_view_projection = {-1, 0},
+    };
+    frame->pass = VK_TEMPORAL_SCENE_INPUTS;
+    temporal_read_bindings(&inputs, frame);
+    return 1;
 }

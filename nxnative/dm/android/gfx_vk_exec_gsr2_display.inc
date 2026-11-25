@@ -4,10 +4,8 @@
 static vkimg_t *gs_color, *gs_depth;
 static int gs_window_draw;
 
-static int gs_composite_stage(void) {
-    if (!S.sh[0] || S.sh[0]->key != UINT64_C(0x911dc1299b288cef) || !S.sh[1]) return 0;
-    if (S.sh[1]->key == UINT64_C(0x3a91240d8b0e0725)) return 1;
-    return S.sh[1]->key == UINT64_C(0xa0641c211a8f53b8) ? 2 : 0;
+static const gsr2_composite_pass *gs_composite_stage(void) {
+    return S.sh[0] && S.sh[1] ? gsr2_composite_for_keys(gs_profile, S.sh[0]->key, S.sh[1]->key) : NULL;
 }
 
 static vkimg_t *gs_current_source(uint64_t handle) {
@@ -41,13 +39,16 @@ static void gs_begin_display_pass(void) {
     for (int i = 1; i < 8; ++i) if (P_att[i].im) return;
     vkimg_t *color = P_att[0].im, *depth = P_att[8].im;
     if (color->aspect != VK_IMAGE_ASPECT_COLOR_BIT || (depth && !gs_attachment_ok(8))) return;
-    vkimg_t *source = gs_composite_stage() ? gs_current_source(vk_tex_slot_handle(S.tex[1], S.img[1], 0)) : NULL;
-    if (source && (source == color || source->w != color->w || source->h != color->h)) return;
+    const gsr2_composite_pass *pass = gs_composite_stage();
+    vkimg_t *source = pass ? gs_current_source(vk_tex_slot_handle(S.tex[1], S.img[1], pass->sample)) : NULL;
+    if (source && (source == color || (!pass->scales_scene && (source->w != color->w || source->h != color->h)))) return;
     if (!source && color->gs_stamp != g_tex_frame + 1) return;
     vkimg_t *ref = (source ? source : color)->gs_scaled;
     if (!ref || ref->samples != (source ? 1u : color->samples)) return;
-    vkimg_t *out = vk_gsr2_surface(vk_cmd(), color, ref->w, ref->h);
-    vkimg_t *z = depth ? vk_gsr2_surface(vk_cmd(), depth, ref->w, ref->h) : NULL;
+    // A UE scene texture can include padding outside the normalized active UV range.
+    uint32_t out_h = source && gs_profile->ue ? ref->w * 9 / 16 : ref->h;
+    vkimg_t *out = vk_gsr2_surface(vk_cmd(), color, ref->w, out_h);
+    vkimg_t *z = depth ? vk_gsr2_surface(vk_cmd(), depth, ref->w, out_h) : NULL;
     if (!out || (depth && !z)) return;
     gs_color = color;
     gs_depth = depth;

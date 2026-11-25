@@ -8,7 +8,7 @@ typedef struct {
     float clip_to_previous[16];
     float exposure, tan_half_horizontal_fov, near_plane, min_lerp;
     uint32_t same_camera, reset;
-    uint32_t tail_padding[2];
+    uint32_t reversed_depth, tail_padding;
 } vk_gsr2_params;
 
 // Records into private images. The returned image is in GENERAL, valid through this

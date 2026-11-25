@@ -236,6 +236,7 @@ static void settings_load(const char *checkpoint) {
             mode = !legacy_on ? GSR2_OFF : legacy_height ? GSR2_CUSTOM : GSR2_AUTO;
         // The old menu could save a height while env.txt supplied the switch.
         if (mode < 0 && legacy_height && dm_gsr2_input_mode() == GSR2_AUTO) mode = GSR2_CUSTOM;
+        if (mode == GSR2_CUSTOM && !DM_HAS_GSR2_INPUT_CONTROL) mode = GSR2_AUTO;
         if (mode >= 0) menu_gsr2_set(mode);
     }
     if (checkpoint) atomic_fetch_add(&g_cust_ver, 1);
@@ -859,7 +860,7 @@ static void menu_do(int item) {
         settings_save();
     }
     else if (DM_HAS_GSR2_ADAPTER && item == OVM_GSR2) {
-        menu_gsr2_set((dm_gsr2_input_mode() + 1) % 3);
+        menu_gsr2_set((dm_gsr2_input_mode() + 1) % (DM_HAS_GSR2_INPUT_CONTROL ? 3 : 2));
         settings_save();
     }
     else if (item == OVM_FRAMEGEN) {

@@ -20,6 +20,25 @@ VkBufferView vk_tbuf_view(const tex_t *t, int storage);
 void vk_sub_update(uint64_t dst, const void *data, uint64_t n);
 int prog_key(const prog_t *p, unsigned st, uint8_t key[8]);
 
+#include "gfx_vk_gsr2_profile.h"
+static const gsr2_profile *gs_profile;  // Replay thread, selected at submission start.
+
+// A running APK has one guest build and one immutable DMSV mapping. Wait until
+// main is known before caching the inventory check; presentation can start early.
+static const gsr2_profile *gsr2_current_profile(void) {
+    if (!DM_HAS_GSR2_ADAPTER) return NULL;
+    const gsr2_profile *p = gsr2_profile_for_build(DM_GAME_PROGRAM_ID, dm_main_build());
+    if (!p) return NULL;
+    static _Atomic int matches;
+    int state = atomic_load(&matches);
+    if (!state) {
+        state = gsr2_bundle_matches(p, vk_shader_stage) ? 1 : -1;
+        atomic_store(&matches, state);
+    }
+    return state > 0 ? p : NULL;
+}
+int vk_gsr2_has_profile(void) { return gsr2_current_profile() != NULL; }
+
 #include "gfx_vk_exec_state.inc"   // the NVN state shadow: what the game set, read by the walker and the draws
 #include "gfx_vk_exec_render_cond.inc"   // conditional rendering (profile render_cond)
 #include "gfx_vk_exec_passes.inc"   // render passes: attachments, aliases, LRZ touches, clears at pass start, pass splits

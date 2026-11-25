@@ -32,6 +32,7 @@ layout(binding = 0, std140) uniform Params
     float                MinLerpContribution;
     uint                 bSameCamera;
     uint                 reset;
+    uint                 reversedDepth;
 } params;
 
 
@@ -56,6 +57,13 @@ void main()
 	vec4 bottomLeft = textureGather(InputDepth, (gatherCoord+v12));
 	vec2 v14 = vec2(ViewportSizeInverse.x*2.0, ViewportSizeInverse.y*2.0);
 	vec4 bottomRight = textureGather(InputDepth, (gatherCoord+v14));
+    // SGSR2's depth rejection expects near = 0. The camera matrix uses guest clip depth.
+    if (params.reversedDepth != 0u) {
+        topleft = 1.0 - topleft;
+        topRight = 1.0 - topRight;
+        bottomLeft = 1.0 - bottomLeft;
+        bottomRight = 1.0 - bottomRight;
+    }
 	float maxC = min(min(min(topleft.y,topRight.x),bottomLeft.z),bottomRight.w);
 	float topleft4 = min(min(min(topleft.y,topleft.x),topleft.z),topleft.w);
 	float topLeftMax9 = min(bottomLeft.w,min(min(maxC,topleft4),topRight.w));
@@ -90,7 +98,7 @@ void main()
 #else
          vec2 ScreenPos = vec2(2.0f * ViewportUV - 1.0f);
 #endif
-        vec3 Position = vec3(ScreenPos, topLeftMax9);    //this_clip
+        vec3 Position = vec3(ScreenPos, params.reversedDepth != 0u ? 1.0 - topLeftMax9 : topLeftMax9);    //this_clip
         vec4 PreClip = params.clipToPrevClip[3] + ((params.clipToPrevClip[2] * Position.z) + ((params.clipToPrevClip[1] * ScreenPos.y) + (params.clipToPrevClip[0] * ScreenPos.x)));
         vec2 PreScreen = PreClip.xy / PreClip.w;
         motion = Position.xy - PreScreen;

@@ -1,10 +1,15 @@
 // The same title gate controls the Vulkan adapter and its pause-menu page.
 #pragma once
-#define GSR2_DIGIMON_ID 0x010062e01fe0c000ull
+#include "../games/temporal/builds.h"
 #if defined(DM_GAME_PROGRAM_ID) && DM_GAME_PROGRAM_ID == GSR2_DIGIMON_ID
 #define DM_HAS_GSR2_ADAPTER 1
+#define DM_HAS_GSR2_INPUT_CONTROL 1
+#elif defined(DM_GAME_PROGRAM_ID) && (DM_GAME_PROGRAM_ID == GSR2_OT2_ID || DM_GAME_PROGRAM_ID == GSR2_DQ12_ID || DM_GAME_PROGRAM_ID == GSR2_DQ7_ID || DM_GAME_PROGRAM_ID == GSR2_OT0_ID || DM_GAME_PROGRAM_ID == GSR2_FF_HK_ID)
+#define DM_HAS_GSR2_ADAPTER 1
+#define DM_HAS_GSR2_INPUT_CONTROL 0
 #else
 #define DM_HAS_GSR2_ADAPTER 0
+#define DM_HAS_GSR2_INPUT_CONTROL 0
 #endif
 
 enum { GSR2_OFF, GSR2_AUTO, GSR2_CUSTOM };
@@ -16,7 +21,7 @@ static inline int gsr2_output_valid(int h) { return h == 720 || h == 1080 || h =
 int dm_gsr2_input_mode(void);
 int dm_gsr2_output_height(void);
 
-#if DM_HAS_GSR2_ADAPTER
+#if DM_HAS_GSR2_INPUT_CONTROL
 void dm_gsr2_resolution_tick(void);
 int dm_gsr2_release_resolution(void);
 #endif

@@ -139,7 +139,7 @@ static void *survey_threads(void *unused) {
         }
     }
     LOG("[snapshot] thread sample: handles=%u kernel waits=%u clock readers=%u result=%d", count, n, clocks, rc);
-#if DM_HAS_GSR2_ADAPTER
+#if DM_HAS_GSR2_INPUT_CONTROL
     if (!rc && !dm_gsr2_release_resolution()) rc = -EAGAIN;
 #endif
     if (!rc) {

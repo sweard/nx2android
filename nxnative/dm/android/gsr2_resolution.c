@@ -1,11 +1,12 @@
 // Docked scene-size control for the Digimon 1.2.2 renderer.
 #include "hle.h"
 #include "gsr2_profile.h"
-#if DM_HAS_GSR2_ADAPTER
+#if DM_HAS_GSR2_INPUT_CONTROL
 #include <sys/uio.h>
 #include <unistd.h>
 
 extern int dm_gsr2_render_height(void);
+extern int vk_gsr2_has_profile(void);
 typedef struct { uintptr_t owner, params; } drs_objects;
 typedef struct { float x, y; } drs_scale;
 static struct {
@@ -29,7 +30,7 @@ static drs_objects resolve(void) {
     drs_objects result = {0};
     if (!main_base) {
         for (int i = 0; i < g_nmod; ++i)
-            if (!strcmp(g_mod[i].name, "main") && !strcmp(g_mod[i].build_id, "135c83cdea06aec2d858e1bc7d53d72f"))
+            if (!strcmp(g_mod[i].name, "main") && !strcmp(g_mod[i].build_id, GSR2_DIGIMON_BUILD))
                 main_base = (uintptr_t)g_mod[i].base;
     }
     // The debug menu's width and height getters call renderer vtable slot 0xb8.
@@ -63,7 +64,7 @@ void dm_gsr2_resolution_tick(void) {
     int height = dm_gsr2_render_height();
     if (height) {
         const char *mode = getenv("DM_VK_GSR2");
-        if (!dm_opmode() || !mode || atoi(mode) != 2) height = 0;
+        if (!dm_opmode() || !mode || atoi(mode) != 2 || !vk_gsr2_has_profile()) height = 0;
     }
     if (!height && !saved.objects.owner) return;
     drs_objects obj = resolve();

@@ -209,7 +209,8 @@ static int swap_make(void) {
     int ww = ANativeWindow_getWidth(w), wh = ANativeWindow_getHeight(w);
 #if DM_HAS_GSR2_ADAPTER
     static int rejected_height;
-    int height = !dm_external_active() && ww >= wh ? (dm_gsr2_input_mode() != GSR2_OFF ? dm_gsr2_output_height() : 0) : 0;
+    int height = !dm_external_active() && ww >= wh && dm_gsr2_input_mode() != GSR2_OFF &&
+                 vk_gsr2_has_profile() ? dm_gsr2_output_height() : 0;
     if (ww != (int)gs_window_extent.width || wh != (int)gs_window_extent.height || gs_swap_requested != height) {
         if (g_swap) swap_destroy();
         rejected_height = 0;
