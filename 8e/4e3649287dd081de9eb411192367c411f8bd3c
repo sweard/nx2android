@@ -1,0 +1,70 @@
+nxnative/dm/android/gfx_vk.h
+  s_926c68cc5bacfb::t_caa97d57ac961b 76-77
+tests/test_overlay_visibility.py
+  s_926c68cc5bacfb::t_caa97d57ac961b 48,71-72
+porter/pipeline.py
+  s_926c68cc5bacfb::t_caa97d57ac961b 915
+  s_db1760f56a9c1f::t_6f175e9ebe2e28 935-937,942
+docs/ARCHITECTURE.md
+  s_db1760f56a9c1f::t_6f175e9ebe2e28 310
+porter/driver.py
+  s_db1760f56a9c1f::t_6f175e9ebe2e28 4
+nxnative/dm/android/overlay_layout.h
+  s_926c68cc5bacfb::t_caa97d57ac961b 231,238,268,273
+nxnative/dm/android/gfx_vk_core.c
+  s_926c68cc5bacfb::t_caa97d57ac961b 16-17,175-181,190-201,206,211-212,218
+  s_db1760f56a9c1f::t_6f175e9ebe2e28 18-19
+  s_db1760f56a9c1f::t_e6d3364759c87c 123-140,142,153-156,213,215
+tests/test_vulkan_driver_import.py
+  s_db1760f56a9c1f::t_e6d3364759c87c 1-58
+nxnative/dm/android/front_android.c
+  s_db1760f56a9c1f::t_6f175e9ebe2e28 18,89
+  s_926c68cc5bacfb::t_caa97d57ac961b 88,90-91,797-798,804-805,828-829,1665-1683
+tests/test_fps_counter_options.py
+  s_926c68cc5bacfb::t_caa97d57ac961b 32
+nxnative/dm/android/java/org/nx2a/ExternalActivity.java
+  s_926c68cc5bacfb::t_caa97d57ac961b 56-58,61,94
+tests/test_overlay_layout.py
+  s_926c68cc5bacfb::t_caa97d57ac961b 26-27,108
+docs/DEVELOPMENT_GUIDE.md
+  s_db1760f56a9c1f::t_6f175e9ebe2e28 65
+nxnative/dm/android/java/org/nx2a/VulkanDriverStore.java
+  s_926c68cc5bacfb::t_32621ab819838a 1-97
+nxnative/dm/android/java/org/nx2a/GameActivity.java
+  s_926c68cc5bacfb::t_caa97d57ac961b 23-25,28,46
+nxnative/dm/android/apk/apkdriver.py
+  s_db1760f56a9c1f::t_6f175e9ebe2e28 6
+nxnative/dm/android/java/org/nx2a/GameDriver.java
+  s_926c68cc5bacfb::t_32621ab819838a 28-29,31,36,40,57,94
+  s_926c68cc5bacfb::t_d0185da3da2eb7 1-27,30,32-35,37-39,41-56,58-93,95-116
+nxnative/dm/android/gfx_vk_present.c
+  s_926c68cc5bacfb::t_caa97d57ac961b 447,467,1411
+tests/test_menu_scroll.py
+  s_926c68cc5bacfb::t_caa97d57ac961b 39,111
+README.md
+  s_db1760f56a9c1f::t_6f175e9ebe2e28 68-69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8e4e3649287dd081de9eb411192367c411f8bd3c",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    },
+    "s_db1760f56a9c1f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "unknown"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
