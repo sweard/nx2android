@@ -98,10 +98,10 @@ int main(void) {
     assert(ov_drag_pos(1100, 505, 1013, 50) == 508);
 
     assert(ov_menu_item(0, 5) == OVM_PAD);
-    for (int row = 6; row < OVM_ROWS - 1; ++row) assert(ov_menu_item(0, row) < 0);
-    assert(ov_menu_item(1, OVM_ROWS - 6) == -1);
+    for (int row = 7; row < OVM_ROWS - 1; ++row) assert(ov_menu_item(0, row) < 0);
+    assert(ov_menu_item(0, 6) == -1);
     audio_available = 1;
-    assert(ov_menu_item(1, OVM_ROWS - 6) == OVM_AUDIO);
+    assert(ov_menu_item(0, 6) == OVM_AUDIO);
     assert(ov_menu_item(1, OVM_ROWS - 5) == OVM_FRAMEGEN && ov_menu_item(1, OVM_ROWS - 4) == OVM_FG_TARGET);
     assert(ov_menu_item(1, OVM_ROWS - 3) == -1);
     assert(ov_menu_item(1, OVM_ROWS - 2) == -1);
