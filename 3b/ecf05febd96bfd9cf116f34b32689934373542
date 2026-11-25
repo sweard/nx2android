@@ -1,0 +1,149 @@
+nxnative/dm/games/temporal/ue_titles.inc
+  s_926c68cc5bacfb::t_c4d14262f70b8a 5-34
+  s_926c68cc5bacfb::t_3a668c9bbafa37 2-4
+  s_926c68cc5bacfb::t_0fa05c50e3357b 35-37
+  s_4f46b79833923e::t_a83fb5a19a855f 1,38-41
+nxnative/dm/android/gsr2_profile.h
+  s_926c68cc5bacfb::t_0c4262bf446634 8-9,12
+  s_db1760f56a9c1f::t_77019eba031ab3 3,6-7,24
+nxnative/dm/games/temporal/digimon_122.inc
+  s_db1760f56a9c1f::t_a009aed6535c49 10
+  s_926c68cc5bacfb::t_0c4262bf446634 7-8
+  s_db1760f56a9c1f::t_5d8c5b99a2e0c6 1-6,9,11-14
+nxnative/dm/android/gfx_vk_exec.c
+  s_db1760f56a9c1f::t_486c28c0c17f50 24
+  s_926c68cc5bacfb::t_19615d74e6e18d 23,25
+  s_db1760f56a9c1f::t_4e7dd2710d349d 26-40
+  s_926c68cc5bacfb::t_f67db30bd9ccdd 41
+nxnative/dm/android/gfx_vk_exec_state.inc
+  s_db1760f56a9c1f::t_4e7dd2710d349d 168
+  s_926c68cc5bacfb::t_19615d74e6e18d 169
+nxnative/dm/games/temporal/builds.h
+  s_926c68cc5bacfb::t_0c4262bf446634 3-4
+  s_db1760f56a9c1f::t_373183649f50b0 1-2,5-9
+docs/ARCHITECTURE.md
+  s_926c68cc5bacfb::t_8f64607aacbedd 246-248
+  s_db1760f56a9c1f::t_4e7dd2710d349d 217-220,222
+  s_926c68cc5bacfb::t_cdb33fd5117d34 221,227,229,231-236,266
+  s_db1760f56a9c1f::t_87a624c2d58b2d 223-226,228,230
+  s_926c68cc5bacfb::t_66f619ea1e752c 237-245,249
+nxnative/dm/android/gfx_vk_gsr2_ue.inc
+  s_926c68cc5bacfb::t_c4d14262f70b8a 57
+  s_926c68cc5bacfb::t_1f7c49c28f2fa3 54-56
+  s_926c68cc5bacfb::t_664f9e7b277f55 58-60
+  s_4f46b79833923e::t_1fc0926784e67d 1-53,61-85
+nxnative/dm/android/gfx_vk_gsr2.h
+  s_926c68cc5bacfb::t_0c4262bf446634 11
+nxnative/dm/android/gfx_vk_gsr2.c
+  s_db1760f56a9c1f::t_7ecd658bb0d4f1 98,229-231,235-238,240,249-252,260
+nxnative/dm/android/gfx_vk_gsr2_profile.h
+  s_926c68cc5bacfb::t_19615d74e6e18d 1-8,10-15,17-18,20,37,42-45,48,58-59,71-75,77-80
+  s_926c68cc5bacfb::t_0c4262bf446634 16,30-31,50,56,62
+  s_db1760f56a9c1f::t_a009aed6535c49 57
+  s_db1760f56a9c1f::t_486c28c0c17f50 9,29,32-36,38-41,47,53,70,76
+  s_db1760f56a9c1f::t_4e7dd2710d349d 60,63-69
+  s_db1760f56a9c1f::t_f9aa0929fb55e0 19,21-28,46,49,51-52,54-55,61
+nxnative/dm/android/gfx_vk_temporal.h
+  s_db1760f56a9c1f::t_486c28c0c17f50 41
+nxnative/dm/android/gfx_vk_exec_gsr2.inc
+  s_db1760f56a9c1f::t_486c28c0c17f50 18-19,66,70,101,106,117,124,126,136,142,147,150-156,161-164,167,170
+  s_926c68cc5bacfb::t_19615d74e6e18d 15-17,22-23,64-65,67-69,71,105,107-110,120,122-123,172,178
+  s_926c68cc5bacfb::t_0c4262bf446634 78-81,85,89-90,98,113,192-193
+  s_db1760f56a9c1f::t_18c3086cbea581 72-73,102-104,111-112,114-116,118-119,194-195
+nxnative/dm/android/gfx_vk_temporal_profiles.h
+  s_926c68cc5bacfb::t_0c4262bf446634 32-40,50-51,53
+  s_db1760f56a9c1f::t_8f9a46d70433b2 43-49,52
+nxnative/dm/android/shaders/sgsr2_convert.comp
+  s_926c68cc5bacfb::t_0c4262bf446634 35,60-66,101
+nxnative/dm/android/gfx_vk_gsr2_ot2.inc
+  s_926c68cc5bacfb::t_0c4262bf446634 1-71
+nxnative/dm/android/tools/temporal_candidates.py
+  s_926c68cc5bacfb::t_1107ec7ae80b26 1-57
+nxnative/dm/android/gfx_vk_exec_descriptors.inc
+  s_926c68cc5bacfb::t_19615d74e6e18d 510,593,597
+  s_926c68cc5bacfb::t_c4d14262f70b8a 543-544
+  s_926c68cc5bacfb::t_2a2ea528a758c2 541-542
+  s_926c68cc5bacfb::t_71b4dc49d5a739 545-547
+  s_4f46b79833923e::t_bbaae7c1247dbc 548-556
+nxnative/dm/android/gsr2_resolution.c
+  s_db1760f56a9c1f::t_4e7dd2710d349d 9,67
+  s_926c68cc5bacfb::t_19615d74e6e18d 33
+  s_db1760f56a9c1f::t_ce84c82c2c752c 4
+nxnative/dm/android/gfx_vk_exec_draws.inc
+  s_db1760f56a9c1f::t_486c28c0c17f50 187
+nxnative/dm/games/temporal/ot2_111.inc
+  s_926c68cc5bacfb::t_0c4262bf446634 1-9
+nxnative/dm/android/gfx_vk_gsr2_digimon.inc
+  s_926c68cc5bacfb::t_19615d74e6e18d 4-5,20,38-39,44,47,74-84
+  s_db1760f56a9c1f::t_95103be8e9c828 85-86
+tests/test_vk_temporal.py
+  s_926c68cc5bacfb::t_1107ec7ae80b26 16
+tests/vk_temporal_harness.c
+  s_926c68cc5bacfb::t_0c4262bf446634 36
+  s_926c68cc5bacfb::t_1107ec7ae80b26 29,56-57,59-63
+  s_db1760f56a9c1f::t_f9dc8faa5518ab 40-47,53-55
+  s_926c68cc5bacfb::t_cdb33fd5117d34 114-125
+  s_db1760f56a9c1f::t_486c28c0c17f50 17,30-35,49-52,58,78,80
+  s_db1760f56a9c1f::t_eeee1e831ccc06 37,126-137
+nxnative/dm/android/gfx_vk_exec_gsr2_display.inc
+  s_926c68cc5bacfb::t_19615d74e6e18d 7-8,42-43
+  s_926c68cc5bacfb::t_0c4262bf446634 44
+  s_db1760f56a9c1f::t_9577c07b2b4468 48-51
+porter/pipeline.py
+  s_db1760f56a9c1f::t_486c28c0c17f50 861
+nxnative/dm/android/gfx_vk.h
+  s_db1760f56a9c1f::t_4e7dd2710d349d 209
+  s_926c68cc5bacfb::t_1019daa6cd26c2 78
+nxnative/dm/android/gfx_null.c
+  s_db1760f56a9c1f::t_f9dc8faa5518ab 49
+nxnative/dm/android/tools/shader_vk.py
+  s_926c68cc5bacfb::t_1107ec7ae80b26 17,512-514
+nxnative/dm/android/gfx_vk_exec_temporal.inc
+  s_db1760f56a9c1f::t_486c28c0c17f50 54
+nxnative/dm/android/checkpoint/runtime.c
+  s_db1760f56a9c1f::t_fc83412c53373a 142
+nxnative/dm/android/front_android.c
+  s_db1760f56a9c1f::t_68fd0dadd51155 239,863
+nxnative/dm/android/gfx_vk_present.c
+  s_db1760f56a9c1f::t_9052f2212fa0f0 212-213
+nxnative/dm/gfx/nvn/hle_nvn.c
+  s_db1760f56a9c1f::t_79bfbd6c1c0795 2087
+tests/test_shader_cache.py
+  s_db1760f56a9c1f::t_b8d9349313f430 160,164,166
+tests/test_shader_export_checks.py
+  s_db1760f56a9c1f::t_11f7321e094bac 26,86
+tests/test_temporal_candidates.py
+  s_db1760f56a9c1f::t_2672e4bb6793fb 1-20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3becf05febd96bfd9cf116f34b32689934373542",
+  "prompts": {},
+  "sessions": {
+    "s_4f46b79833923e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21258-d8be-7cc0-a48e-16ed286269e6",
+        "model": "unknown"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    },
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    },
+    "s_db1760f56a9c1f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "unknown"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
