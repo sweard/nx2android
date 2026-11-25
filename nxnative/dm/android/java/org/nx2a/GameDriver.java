@@ -5,12 +5,19 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.database.Cursor;
+import android.icu.text.Collator;
+import android.icu.text.RuleBasedCollator;
+import android.text.InputFilter;
+import android.widget.EditText;
 import android.net.Uri;
 import android.provider.OpenableColumns;
 import android.widget.Toast;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -28,16 +35,18 @@ final class GameDriver {
     private VulkanDriverStore store() {
         return new VulkanDriverStore(activity.getDir("gpu_drivers", Activity.MODE_PRIVATE));
     }
-    private File imported() { return store().imported(prefs().getString("file", "")); }
 
     // Called once from ANativeActivity_onCreate, before any game thread is started.
     String forLaunch() {
-        File file = imported();
-        store().cleanAtLaunch(file);
+        Map<String, ?> preferences = prefs().getAll();
+        VulkanDriverStore store = store();
+        File file = store.selected(preferences);
+        Map<File, String> drivers = store.drivers(preferences);
+        store.cleanAtLaunch(drivers.keySet());
         int mode = prefs().getInt("mode", DEFAULT);
         if (mode == DEFAULT) return null;
         if (mode == SYSTEM) return "system";
-        if (VulkanDriverStore.canLaunch(file)) return file.getPath();
+        if (drivers.containsKey(file) && VulkanDriverStore.canLaunch(file)) return file.getPath();
         prefs().edit().putInt("mode", SYSTEM).commit();
         note("The imported Vulkan driver was unavailable or did not reach the first game frame. Using the system driver.");
         return "system";
@@ -46,20 +55,38 @@ final class GameDriver {
     void open() {
         activity.runOnUiThread(() -> {
             if (busy || activity.isFinishing() || activity.isDestroyed()) return;
-            File file = imported();
-            boolean hasFile = file != null && file.isFile();
-            String[] choices = hasFile
-                    ? new String[]{"Package default", "System driver", "Imported: " + prefs().getString("label", "driver.so")}
-                    : new String[]{"Package default", "System driver"};
+            Map<String, ?> preferences = prefs().getAll();
+            VulkanDriverStore store = store();
+            List<Map.Entry<File, String>> drivers = new ArrayList<>(store.drivers(preferences).entrySet());
+            RuleBasedCollator order = (RuleBasedCollator)Collator.getInstance();
+            order.setNumericCollation(true);
+            drivers.sort((a, b) -> order.compare(a.getValue(), b.getValue()));
+            String[] choices = new String[2 + drivers.size()];
+            choices[DEFAULT] = "Package default";
+            choices[SYSTEM] = "System driver";
+            int mode = prefs().getInt("mode", DEFAULT);
+            int checked = mode == IMPORTED ? -1 : mode;
+            File selected = store.selected(preferences);
+            for (int i = 0; i < drivers.size(); i++) {
+                choices[i + 2] = drivers.get(i).getValue();
+                if (mode == IMPORTED && drivers.get(i).getKey().equals(selected)) checked = i + 2;
+            }
             AlertDialog.Builder dialog = new AlertDialog.Builder(activity).setTitle("Vulkan driver for next launch")
-                    .setSingleChoiceItems(choices, prefs().getInt("mode", DEFAULT), (d, which) -> {
+                    .setSingleChoiceItems(choices, checked, (d, which) -> {
                         d.dismiss();
-                        if (which == IMPORTED && VulkanDriverStore.pending(file).exists() && !VulkanDriverStore.pending(file).delete()) {
-                            note("Could not reset the driver for another attempt.");
-                            return;
+                        SharedPreferences.Editor edit = prefs().edit();
+                        if (which >= 2) {
+                            File file = drivers.get(which - 2).getKey();
+                            File marker = VulkanDriverStore.pending(file);
+                            if (marker.exists() && !marker.delete()) {
+                                note("Could not reset the driver for another attempt.");
+                                return;
+                            }
+                            edit.putInt("mode", IMPORTED).putString("selected", file.getName());
+                        } else {
+                            edit.putInt("mode", which);
                         }
-                        boolean saved = prefs().edit().putInt("mode", which).commit();
-                        note(saved ? "Driver selected. Fully close and reopen the game to apply." : "Could not save driver selection.");
+                        note(edit.commit() ? "Driver selected. Fully close and reopen the game to apply." : "Could not save driver selection.");
                     }).setNegativeButton("Cancel", null);
             if (new File(activity.getApplicationInfo().nativeLibraryDir, "libadrenotools.so").isFile())
                 dialog.setNeutralButton("Import .so", (d, w) -> pick());
@@ -77,7 +104,13 @@ final class GameDriver {
         if (request != REQUEST) return false;
         Uri uri = code == Activity.RESULT_OK && data != null ? data.getData() : null;
         if (uri == null) busy = false;
-        else worker.execute(() -> copy(uri));
+        else {
+            busy = true;
+            worker.execute(() -> {
+                String version = VulkanDriverStore.suggestedVersion(label(uri));
+                activity.runOnUiThread(() -> nameImport(uri, version));
+            });
+        }
         return true;
     }
 
@@ -88,11 +121,35 @@ final class GameDriver {
         return "driver.so";
     }
 
-    private void copy(Uri uri) {
+    private void nameImport(Uri uri, String version) {
+        if (activity.isDestroyed() || activity.isFinishing()) return;
+        EditText input = new EditText(activity);
+        input.setSingleLine(true);
+        input.setFilters(new InputFilter[]{new InputFilter.LengthFilter(80)});
+        input.setHint("e.g. V40");
+        input.setText(version);
+        input.selectAll();
+        AlertDialog dialog = new AlertDialog.Builder(activity).setTitle("Driver version or name")
+                .setView(input).setPositiveButton("Import", null)
+                .setNegativeButton("Cancel", (d, which) -> busy = false)
+                .setOnCancelListener(d -> busy = false).create();
+        dialog.show();
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String name = input.getText().toString().trim();
+            if (name.isEmpty()) { input.setError("Enter a version or name."); return; }
+            for (String existing : store().drivers(prefs().getAll()).values()) {
+                if (existing.equalsIgnoreCase(name)) { input.setError("This name is already in use."); return; }
+            }
+            dialog.dismiss();
+            worker.execute(() -> copy(uri, name));
+        });
+    }
+
+    private void copy(Uri uri, String name) {
         File file = null;
         try (InputStream stream = activity.getContentResolver().openInputStream(uri)) {
             file = store().copy(stream);
-            if (!prefs().edit().putString("file", file.getName()).putString("label", label(uri))
+            if (!prefs().edit().putString(file.getName(), name).putString("selected", file.getName())
                     .putInt("mode", IMPORTED).commit()) throw new IOException("Could not save selection");
             file = null;
             note("Driver imported and selected. Fully close and reopen the game to apply.");

@@ -8,12 +8,19 @@ import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.LinkedHashMap;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** Imported libraries have immutable names so a new import cannot replace a mapped file.
  * The activity publishes the returned basename and selection together in private preferences. */
 final class VulkanDriverStore {
     private static final int MAX_BYTES = 256 * 1024 * 1024;
+    private static final Pattern VERSION = Pattern.compile("(?i)(?:^|[^a-z0-9])(v[0-9]+(?:\\.[0-9]+)*(?:-r[0-9]+)?)(?=$|[^a-z0-9])");
     private final File directory;
 
     VulkanDriverStore(File directory) { this.directory = directory; }
@@ -22,11 +29,46 @@ final class VulkanDriverStore {
         return name.matches("libgpu-[0-9a-f-]{36}\\.so") ? new File(directory, name) : null;
     }
 
-    void cleanAtLaunch(File keep) {
+    File selected(Map<String, ?> preferences) {
+        Object name = preferences.containsKey("selected") ? preferences.get("selected") : preferences.get("file");
+        return name instanceof String ? imported((String)name) : null;
+    }
+
+    static String suggestedVersion(String filename) {
+        Matcher match = VERSION.matcher(filename);
+        return match.find() ? match.group(1).toUpperCase(Locale.ROOT) : "";
+    }
+
+    // The previous APK kept one file/label pair. Keep reading it as a catalog entry.
+    // New selections use a separate key, so switching away never loses this entry.
+    Map<File, String> drivers(Map<String, ?> preferences) {
+        Map<File, String> entries = new LinkedHashMap<>();
+        Object legacy = preferences.get("file");
+        if (legacy instanceof String) {
+            File file = imported((String)legacy);
+            if (file != null && file.isFile()) {
+                Object label = preferences.get("label");
+                String name = label instanceof String ? (String)label : "driver.so";
+                String version = suggestedVersion(name);
+                entries.put(file, version.isEmpty() ? name : version);
+            }
+        }
+        for (Map.Entry<String, ?> p : preferences.entrySet()) {
+            File file = imported(p.getKey());
+            if (file != null && file.isFile() && p.getValue() instanceof String)
+                entries.put(file, (String)p.getValue());
+        }
+        return entries;
+    }
+
+    void cleanAtLaunch(Set<File> registered) {
         File[] files = directory.listFiles();
-        if (files != null) for (File file : files) {
-            if (file.getName().startsWith("libgpu-") && !file.equals(keep)
-                    && (keep == null || !file.equals(pending(keep)))) file.delete();
+        if (files == null) return;
+        for (File file : files) {
+            String name = file.getName();
+            if (name.endsWith(".pending")) name = name.substring(0, name.length() - ".pending".length());
+            File library = imported(name);
+            if (library != null && !registered.contains(library)) file.delete();
         }
     }
 

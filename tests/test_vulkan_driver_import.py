@@ -10,7 +10,7 @@ SOURCE = Path(__file__).resolve().parents[1] / 'nxnative/dm/android/java/org/nx2
 
 @unittest.skipUnless(shutil.which('javac') and shutil.which('java'), 'JDK required')
 class VulkanDriverImport(unittest.TestCase):
-    def test_replacement_and_cold_start(self):
+    def test_multiple_versions_legacy_selection_and_cold_start(self):
         probe = r'''
 package org.nx2a;
 import java.io.*;
@@ -40,9 +40,28 @@ class DriverProbe {
         }
         File second = store.copy(new ByteArrayInputStream(data));
         assert !first.equals(second) && first.exists();
+        assert VulkanDriverStore.suggestedVersion("Turnip-V40-Adreno840.so").equals("V40");
+        assert VulkanDriverStore.suggestedVersion("turnip_v27.0.0-R3.so").equals("V27.0.0-R3");
+        assert VulkanDriverStore.suggestedVersion("libvulkan_freedreno.so").isEmpty();
+        Map<String, Object> prefs = new HashMap<>();
+        prefs.put("file", second.getName());
+        prefs.put("label", "Turnip-V40-Adreno840.so");
+        assert store.selected(prefs).equals(second);
+        assert store.drivers(prefs).get(second).equals("V40");
+        prefs.put(first.getName(), "V39");
+        prefs.put("selected", first.getName());
+        assert store.selected(prefs).equals(first);
+        assert store.drivers(prefs).size() == 2 && store.drivers(prefs).get(first).equals("V39");
         assert VulkanDriverStore.pending(second).createNewFile();
-        store.cleanAtLaunch(second);
-        assert !first.exists() && !VulkanDriverStore.canLaunch(second);
+        File unpublished = store.copy(new ByteArrayInputStream(data));
+        assert VulkanDriverStore.pending(unpublished).createNewFile();
+        store.cleanAtLaunch(store.drivers(prefs).keySet());
+        assert !unpublished.exists() && !VulkanDriverStore.pending(unpublished).exists();
+        assert first.exists() && VulkanDriverStore.canLaunch(store.selected(prefs));
+        prefs.put("selected", second.getName());
+        assert second.exists() && !VulkanDriverStore.canLaunch(store.selected(prefs));
+        assert store.drivers(prefs).size() == 2;
+
         assert VulkanDriverStore.pending(second).delete();
         assert VulkanDriverStore.canLaunch(second);
     }
