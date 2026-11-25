@@ -137,6 +137,8 @@ uint64_t nvn_sparse_gen(void) { return 0; }
 int nvn_sparse_address_translate(uint64_t a, uint64_t n, uint64_t *physical) { return 0; }
 uint64_t nvn_sparse_address_copy(uint64_t a, void *dst, uint64_t n) { return n; }
 /* CORE */
+static int g_gsr2_mode;
+static int gsr2_replace_dispatch(VkCommandBuffer cb, const p_dispatch *groups) { assert(0); return 0; }
 /* REPLAY */
 static int shader_wmem(vkshader_t *s) { return 0; }
 /* LIFECYCLE */

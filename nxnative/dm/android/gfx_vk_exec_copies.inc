@@ -26,6 +26,10 @@ static void copy_b2t(const p_copy_b2t *c, int to_texture) {
     vk_end_pass_land();
     vkimg_t *im = vk_tex(c->tex); const vkfmt_t *f = vk_fmt(c->tex->d.format);
     if (!im || !f) return;
+#if DM_HAS_GSR2_ADAPTER
+    if (to_texture) im->gs_stamp = 0;
+#endif
+
     if (c->r.width <= 0 || c->r.height < 0 || c->r.depth < 0) { VKRED_ONCE(72, "buffer ↔ texture copy with an invalid extent: skipped"); return; }
     unsigned bw = f->bw ? f->bw : 1, bh = f->bh ? f->bh : 1;
     uint32_t w = (uint32_t)c->r.width, h = (uint32_t)(c->r.height ? c->r.height : 1), depth = (uint32_t)(c->r.depth ? c->r.depth : 1);
@@ -278,12 +282,33 @@ static void copy_t2t(const p_copy_t2t *c) {
         vkCmdBlitImage(cb, si, VK_IMAGE_LAYOUT_GENERAL, di, VK_IMAGE_LAYOUT_GENERAL, 1, &r, (c->flags & 1) ? VK_FILTER_LINEAR : VK_FILTER_NEAREST);
         if (di != d->img) { vk_img_barrier_all(cb); vkCmdCopyImage(cb, di, VK_IMAGE_LAYOUT_GENERAL, d->img, VK_IMAGE_LAYOUT_GENERAL, 1, &back); }
     }
+
+#if DM_HAS_GSR2_ADAPTER
+    d->gs_stamp = 0;
+    if (s != d && s->gs_stamp == g_tex_frame + 1 && s->gs_scaled && !(k.flags & ~(DM_COPY_RESOLVE | 3u)) &&
+        ((s->samples == 1 && d->samples == 1) || ((k.flags & DM_COPY_RESOLVE) && s->samples == 4 && d->samples == 1)) &&
+        !ss.mipLevel && !ds.mipLevel && !ss.baseArrayLayer && !ds.baseArrayLayer &&
+        !k.sr.xoffset && !k.sr.yoffset && !k.dr.xoffset && !k.dr.yoffset &&
+        k.sr.width == sw && k.sr.height == sh && k.dr.width == dw && k.dr.height == dh &&
+        sw == dw && sh == dh && s->fmt == d->fmt) {
+        vkimg_t *scaled = vk_gsr2_surface(cb, d, s->gs_scaled->w, s->gs_scaled->h);
+        if (scaled) {
+            vk_gsr2_surface_blit(cb, s->gs_scaled, scaled);
+            d->gs_stamp = g_tex_frame + 1;
+            d->gs_final_stamp = s->gs_final_stamp;
+        }
+    }
+#endif
     t2t_lin_back(cb, d, k.dst, df, &k);
     vk_img_barrier_all(cb);
 }
 static void clear_tex(const p_clear_tex *c) {
     vk_end_pass();
     vkimg_t *im = vk_tex(c->tex); if (!im) return;
+#if DM_HAS_GSR2_ADAPTER
+    im->gs_stamp = 0;
+#endif
+
     VkCommandBuffer cb = vk_cmd(); vk_tex_prepare(cb, im); vk_img_barrier_all(cb); im->gpu_w = 1;
     VkImageSubresourceLayers l = sub_of(im, &c->view, c->has_view, c->r.zoffset);
     VkImageSubresourceRange rg = {l.aspectMask, l.mipLevel, 1, l.baseArrayLayer, im->layers > 1 ? (uint32_t)(c->r.depth ? c->r.depth : 1) : 1};

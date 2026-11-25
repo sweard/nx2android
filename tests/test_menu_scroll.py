@@ -30,6 +30,7 @@ class MenuScroll(unittest.TestCase):
 #include <string.h>
 #include "overlay_layout.h"
 #include "pixel_font.h"
+uint64_t vk_gsr2_last_extent(void) { return 0; }
 static uint8_t *font;
 int dm_ui_zh(void) { return 0; }
 int dm_fps_opts(void) { return FPSO_DEFAULT; }
@@ -124,6 +125,7 @@ typedef struct { int action; float x, y; } AInputEvent;
 #define AMotionEvent_getX(e,i) ((void)(i),(e)->x)
 #define AMotionEvent_getY(e,i) ((void)(i),(e)->y)
 static _Atomic int g_edit, g_sp_on, g_set_opacity = 60, g_set_fg_target = 60;
+static _Atomic int g_gsr2_percent = 100;
 static int actions, last_action = -1;
 static void dm_overlay_redraw(void) {}
 static void dm_haptics_android_tap(void) {}
@@ -133,7 +135,7 @@ static void menu_do(int item) { actions++; last_action=item; }
 static void menu_close(void) {}
 static void ed_key(uint64_t bit) { (void)bit; }
 static void sp_key(uint64_t bit) { (void)bit; }
-''' + state + csrc.function(front, 'static void menu_opacity(') + csrc.between(front, 'static void menu_tab(int t)', 'static void menu_set_fg_choice(') + csrc.function(front, 'static void menu_set_fg_choice(') + csrc.function(front, 'static void menu_touch(') + csrc.function(front, 'static void menu_key(') + r'''
+''' + state + csrc.function(front, 'static void menu_opacity(') + csrc.function(front, 'static void menu_gsr2_percent(') + csrc.between(front, 'static void menu_tab(int t)', 'static void menu_set_fg_choice(') + csrc.function(front, 'static void menu_set_fg_choice(') + csrc.function(front, 'static void menu_touch(') + csrc.function(front, 'static void menu_key(') + r'''
 static void touch(int action, float x, float y, float W, float H) {
     AInputEvent e={action,x,y}; menu_touch(&e,W,H);
 }

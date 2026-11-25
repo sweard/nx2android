@@ -506,6 +506,7 @@ static void dispatch(const p_dispatch *d) {
     g_dispatch[0] = (uint32_t)d->x; g_dispatch[1] = (uint32_t)d->y; g_dispatch[2] = (uint32_t)d->z;
     VkDescriptorBufferInfo indirect_c0 = {0};
     uint32_t dofs[96]; VkDescriptorSet set = stage_set(5, cs, dofs, d->ind ? &indirect_c0 : NULL);
+    if (!d->ind && (g_gsr2_mode == 1 || g_gsr2_mode == 2) && gsr2_replace_dispatch(cb, d)) return;
     uint64_t ck[3] = {cs->key, g_num_um, g_num_im};
     pthread_mutex_lock(&g_cpipe_mu); VkPipeline p = nvn_hm_get(&g_cpipes, ck); pthread_mutex_unlock(&g_cpipe_mu);
     if (!p) {

@@ -160,8 +160,11 @@ static void cpu_ready_config(void) {
     const char *e = getenv("DM_VK_CPU_READY");
     g_vk_cpu_ready = !(e && !atoi(e));   // live A/B: =0 leaves CPU reads unsynchronized
 }
+static int g_temporal_probe, g_gsr2_mode;
 static int g_dbg_draw_live; static uint64_t g_skip_ops_live;   // DM_VK_DBG_DRAW, DM_VK_SKIP_OPS: read with the other live switches, once a submission (bisection at a chosen moment)
 static void x_read(void) { cpu_ready_config(); { const char *e = getenv("DM_VK_DBG_DRAW"); g_dbg_draw_live = e ? atoi(e) : 0; } { uint64_t s = 0; const char *e = getenv("DM_VK_SKIP_OPS"); for (const char *q = e; q && *q;) { char *n; long v = strtol(q, &n, 10); if (n == q) break; if (v > 0 && v < 64) s |= 1ull << v; q = *n ? n + 1 : n; } g_skip_ops_live = s; } const char *c = getenv("DM_VK_CB_DRAWS"); g_x_cbdraws = c ? atoi(c) : 128; g_sub_pass = 0;
+    const char *gsr2 = getenv("DM_VK_GSR2"); g_gsr2_mode = gsr2 ? atoi(gsr2) : 0;
+    const char *temporal = getenv("DM_VK_TEMPORAL_PROBE"); g_temporal_probe = temporal && atoi(temporal) == 1;
     const char *fy = getenv("DM_VK_FLIPY"); g_flipy = !(fy && !atoi(fy));   // on unless DM_VK_FLIPY=0
     { const char *e = getenv("DM_VK_C2_FAST"); g_c2fast = !(e && !atoi(e)); }   // c2 segments found by their slots' hash (drv_shared); on unless DM_VK_C2_FAST=0
     if (g_x_listpasses) { g_x_listpasses = 0; setenv("DM_VK_TRACE_PASS", "-1", 1); }

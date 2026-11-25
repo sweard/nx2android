@@ -43,6 +43,10 @@ static _Atomic int g_cust[2][2][OV_N][4];
 static _Atomic int g_set_rumble, g_set_fps, g_set_framegen, g_set_labels, g_menu_tab, g_sv_st;
 static _Atomic int g_set_fg_target = 60;
 static int dm_framegen_target(void) { return atomic_load(&g_set_fg_target); }
+static _Atomic int g_gsr2_output = 1080, g_gsr2_input;
+int dm_gsr2_output_height(void) { return atomic_load(&g_gsr2_output); }
+int dm_gsr2_input_mode(void) { return atomic_load(&g_gsr2_input); }
+static void menu_gsr2_set(int mode) { atomic_store(&g_gsr2_input, mode); }
 static int layout, saves, lossless_available;
 static int vk_lsfg_available(void) { return lossless_available; }
 int dm_menu_driver_available(void) { return 0; }

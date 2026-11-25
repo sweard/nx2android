@@ -1,4 +1,6 @@
 // ---------------- draws ----------------
+#include "gfx_vk_exec_temporal.inc"
+#include "gfx_vk_exec_gsr2.inc"
 // What the draws of the command buffer being recorded set last: a draw that would set the same again records nothing. Vulkan keeps dynamic state and
 // bindings for the whole command buffer, across render passes and across pipelines that declare the same dynamic state (every one of ours, build_pipeline);
 // a new command buffer (g_cmd_gen, gfx_vk_core.c) starts empty. Xenoblade Chronicles 3 docked: ~1,900 draws a frame, each with 10 dynamic-state calls and
@@ -16,6 +18,13 @@ static void bc_index(VkCommandBuffer cb, VkBuffer b, VkDeviceSize o, VkIndexType
 static void set_dynamic(VkCommandBuffer cb) {
     int fresh = bc_fresh();
     float x = S.vp[0][0], y = S.vp[0][1], w = S.vp[0][2], h = S.vp[0][3];
+
+#if DM_HAS_GSR2_ADAPTER
+    if (gs_color) {
+        float sx = (float)S.pass_w / gs_color->w, sy = (float)S.pass_h / gs_color->h;
+        x *= sx; w *= sx; y *= sy; h *= sy;
+    }
+#endif
     if (w == 0 && h == 0) { w = (float)S.pass_w; h = (float)S.pass_h; }
     VkViewport vp = {x, y, w, h, S.dnear, S.dfar};
     if (g_lower_left && !g_flipy) { vp.y = (float)S.pass_h - y; vp.height = -h; }   // lower-left viewports count y from the bottom
@@ -175,6 +184,8 @@ static int prepare_draw(int prim, int indexed) {
     // A program may have no fragment stage (a depth-only draw: NVN binds by stage mask, and Metroid Dread draws about nine a frame so in its intro; nvn_mtl.m makes them vertex-only pipelines):
     // drawn with no fragment shader and no colour written (Vulkan leaves colour outputs undefined without one), as before only rasterizer-discard draws were
     if (!S.sh[0]) { g_vkst.skip_prog++; VKRED_ONCE(50, "draw with a program whose shaders are not in the bundle: skipped"); return 0; }
+    if (g_gsr2_mode == 1 || g_gsr2_mode == 2) gsr2_observe_draw();
+    if (g_temporal_probe) temporal_probe_draw();
     if (g_x_nogs && S.sh[2]) return 0;   // DM_VK_X_NOGS=1 (live, A/B): draws with a geometry shader are left out
     for (int i = 0; i < g_x_nskipvs; i++) if (S.sh[0]->key == g_x_skipvs[i]) return 0;   // DM_VK_X_SKIPVS=<key>[,<key>...] (live, up to 8): draws with these vertex shaders are left out
     for (int i = 0; i < g_x_nskipfs; i++) if (S.sh[1] && S.sh[1]->key == g_x_skipfs[i]) return 0;

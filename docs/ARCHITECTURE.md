@@ -192,6 +192,52 @@ skipped before Vulkan can receive an invalid pipeline.
 
 How a game's frames are paced is decided in one module, `nxnative/dm/host/dm_pacing.c`: the frame-rate target (`game.tsv` `fps_target`, `DM_FPS_TARGET`), the 30 fps ceiling (`fps_ceiling`, `DM_FPS_CEILING`), the frame step's hold (`fps_hold`, `DM_FPS_HOLD`), presents on the display's ticks (`present_interval`, `DM_PRESENT_INTERVAL`), the Android governor (`DM_ADAPTIVE_FPS`, `DM_FPS_PIN`, `DM_ADAPT_UP_PCT`), the window's rate vote (`DM_VK_WINDOW_GAME_RATE`) and GPU turbo (`DM_GPU_TURBO`). The mechanisms stay where they run (the frame step in `loader.c` and `nvn_fstep.h`, the 60 fps writes in `hle_fpslock.c`, the present interval in `hle_nvn.c`, presents and the rate vote in `gfx_vk_present.c`, the governor in `perf_android.c`) and ask it. At start-up the log has the whole policy in one line (`pacing: target 60 fps (game profile fps_target), ceiling 0, hold on ...`). A profile chooses its policy with one `android.tsv` row, `pacing <preset>` (below). Test harnesses that cut the governor out of `perf_android.c` compile the real `dm_pacing.c` with it (`tests/csrc.py` `pacing_files`).
 
+## Temporal inputs on Android
+
+On the Vulkan replay thread, a temporal consumer can call `vk_temporal_current_draw()` at a guest draw. The port's program ID selects one C adapter. Each adapter recognizes its game's pass and fills the same `vk_temporal_frame`. For fixed bindings it can call `temporal_read_bindings()` with the fragment texture slots, output attachment and uniform ranges from shader reflection. Register another game's callback in `gfx_vk_temporal_profiles.h` to implement different binding rules. The consumer does not need to know the title ID.
+
+A recognized pass can supply partial inputs. Texture serial zero and uniform length zero mean the corresponding input is unavailable. The call copies texture and view descriptors for the current draw. Uniforms refer to guest GPU addresses and require correctly ordered GPU reads before use. The texture dimensions describe the underlying resource. A consumer must account for subresource views, projection conventions, jitter units and motion encoding before reconstruction. The interface does not synthesize object motion or retain resources between draws.
+
+The initial adapter recognizes two Digimon Story Time Stranger 1.2.2 TAA fragment shaders. Their parameter tables identify color, depth and camera uniforms. A separate fog pass supplies partial scene inputs with different slots. On a Find X9 Ultra, the fog draw exposed 1280×720 color, depth and output resources and an eight-byte jitter range. The frame identifies it as an intermediate scene pass so a consumer can distinguish it from the temporal resolve. Set `DM_VK_TEMPORAL_PROBE=1` to report which inputs the guest actually bound. The probe is disabled by default. It records input availability only and does not dispatch an upscaler.
+
+### Digimon 1.2.2 docked upscale and HUD
+
+In the tunnel scene on a Find X9 Ultra, the fog and final scene-color draws used a 1024×576 viewport at (0, 0) within 1280×720 textures. The first upscale dispatch had input-to-output scale factors of 0.533333 on both axes, matching 1024/1920 and 576/1080. Read the active extent for the frame when integrating a temporal upscaler. Using the allocation dimensions here would include unused texels.
+
+| Stage | Shader key | Measured resource flow |
+| --- | --- | --- |
+| Compute, upscale | `a540b3cb9347b2ca` | Samples the scene in replay register 129 and writes a 1920×1080 storage image in image register 2. |
+| Compute, same size | `80310bcd69270f72` | Samples the first dispatch's output in register 129 and writes a second 1920×1080 image in image register 2. |
+| Fragment, compose scene | `3a91240d8b0e0725` | Samples the second dispatch's output in register 0 at a 1920×1080 viewport. This shader also runs at other sizes earlier in the frame. |
+
+The resource identities connected all three stages across four consecutive presents. Replacing only the matching scene composition draw with a solid color on the device left the minimap, waypoint and bottom action prompts visible over that color.
+
+### Experimental Snapdragon GSR 2
+
+`vk_temporal_current_dispatch()` identifies the input and output dispatches. A title adapter supplies matching camera and raw depth data to the common Vulkan backend. The Digimon adapter in `gfx_vk_gsr2_digimon.inc` takes the inverse view-projection and active viewport from the decal draw, copies the matching D32F depth when the depth-linearization pass reads it, and checks the eye position and horizontal FOV against the fog camera. The depth-linearization pass itself uses a smaller viewport. The first compute dispatch's scale constants must agree with the camera viewport and display extent.
+
+On Digimon, the pause menu's **GSR2** tab offers Off, Auto and Custom input. Auto uses the game's viewport. Custom sets both docked scene dimensions to 50–100% of 1280×720 in 5% steps. At 50% the viewport is 640×360. The status rows report the most recently recorded scene and reconstruction.
+
+**Output resolution** selects 1280×720, 1920×1080 (default) or 2560×1440. For the known scene path the guest's scene composite, 4-sample HUD, color resolve and final tone map operate at the selected size. The replay backend keeps a companion attachment for each participating guest image. A per-sample color or depth draw synchronizes multisampled attachments with their native-size counterparts for other guest consumers and checkpoint capture. A complete matching resolve carries the companion to the next pass. Missing scene inputs, incompatible attachments or an unrecognized final pass fall back to the guest image. The 1080p setting can use the guest's existing full-size targets directly.
+
+In landscape on the phone, the Vulkan swapchain keeps the window aspect ratio and allows a 16:9 game picture at the selected resolution. Android scales the resulting layer to the screen. The display panel retains its own resolution. In the tunnel on Find X9 Ultra with bundled Turnip V39, 720p, 1080p and 1440p produced landscape buffers of 1584×720, 2376×1080 and 3168×1440 respectively, including the side bars.
+
+The fixed inputs use the Digimon 1.2.2 engine's dynamic-resolution switch and its width and height ratios. The host checks the main build ID and the renderer getter before following the engine fields. Switching to Auto, disabling GSR2 or switching to handheld releases the override. A runtime checkpoint captures the game's own settings and the host reapplies its current preference after play resumes.
+
+The saved settings are `gsr2_input=0/1/2` (Off/Auto/Custom), `gsr2_percent` (50 through 100 in steps of 5) and `gsr2_output=720/1080/1440`. Older settings with `gsr2` and `gsr2_height` migrate on load. Previously enabled fixed heights of 576 and 720 select Custom at 80% and 100%, respectively. A disabled configuration stays off. Without an explicit mode, developers can still use `DM_VK_GSR2` in `env.txt`.
+
+| Value | Effect |
+| --- | --- |
+| `0` (default) | Use the game's renderer. |
+| `1` | Run Convert and Upscale into private images while displaying the game's original output. |
+| `2` | On a matched frame, copy the reconstructed scene into the second guest dispatch's output before the HUD is drawn. Unmatched frames keep the guest output. |
+
+The backend uses Qualcomm's SGSR2 two-pass compute shaders (revision `d926f074`), double-buffered history and camera reprojection. The tunnel camera reported zero jitter. No per-object velocity has been identified, so objects moving independently of the camera may leave trails. Nonzero jitter with unverified units, missing inputs or incompatible images leave the guest path in place. A camera cut, an interruption or a resolution change resets accumulation. Mode 2 can replace both matching full-image guest dispatches. The host fills each pass's actual output image before skipping it, preserving intermediate consumers. Shadow mode executes the original dispatches. Frame generation remains a separate presentation feature.
+
+Before guest dispatch replacement, two 30-second docked samples on the Find X9 Ultra used the same tunnel save, bundled Turnip V39 (Mesa git `2648b2059f`) and Lossless frame generation. The surface presented 59.69 FPS with SGSR2 off and 55.17 FPS with composition enabled. The median of three 300-frame GPU p50 measurements rose from 17.87 ms to 20.46 ms. These are whole-frame costs for the prototype. The composed sample used a 1280×720 scene, preserved the minimap and action prompts, and remained visible through a camera turn.
+
+With both guest passes replaced, 30-second samples in the same tunnel measured 54.69 displayed FPS at fixed 1280×720 and 57.13 at fixed 1024×576. Both produced 1920×1080 before HUD composition. Separate baseline samples with the same driver and Lossless settings measured 56.54 displayed FPS with GSR2 disabled and 54.41 with GSR2 on Auto.
+
 ## Descriptor cache hashing
 
 The Android backend's descriptor caches (`gfx_vk_exec_descriptors.inc`) find candidates by hash. Two kinds of path decide reuse differently:

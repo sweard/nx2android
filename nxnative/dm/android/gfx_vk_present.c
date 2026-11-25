@@ -196,12 +196,30 @@ static int rot_setup(void) {
     vkUpdateDescriptorSets(V.dev, 1, &wr, 0, NULL);
     return 1;
 }
+
+#if DM_HAS_GSR2_ADAPTER
+static int gs_swap_requested, gs_swap_height;
+static VkExtent2D gs_window_extent;
+
+#endif
 static int swap_make(void) {
     ANativeWindow *w = dm_front_window();
     if (w != g_win) { swap_destroy(); g_win = w; }
     if (!w) return 0;
     int ww = ANativeWindow_getWidth(w), wh = ANativeWindow_getHeight(w);
+#if DM_HAS_GSR2_ADAPTER
+    static int rejected_height;
+    int height = !dm_external_active() && ww >= wh ? (dm_gsr2_input_mode() != GSR2_OFF ? dm_gsr2_output_height() : 0) : 0;
+    if (ww != (int)gs_window_extent.width || wh != (int)gs_window_extent.height || gs_swap_requested != height) {
+        if (g_swap) swap_destroy();
+        rejected_height = 0;
+    }
+    gs_window_extent = (VkExtent2D){ww, wh};
+    gs_swap_requested = height;
+    gs_swap_height = height == rejected_height ? 0 : height;
+#else
     if (g_swap && ww > 0 && wh > 0 && ((uint32_t)ww != g_sext.width || (uint32_t)wh != g_sext.height)) swap_destroy();
+#endif
     if (g_swap) return 1;
     VkAndroidSurfaceCreateInfoKHR si = {VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR, NULL, 0, w};
     if (vkCreateAndroidSurfaceKHR(V.inst, &si, NULL, &g_surf)) return 0;
@@ -212,6 +230,15 @@ static int swap_make(void) {
     if (g_sfmt != g_want) VKRED_ONCE(95, "the surface offers no format %d for the window texture: its picture is %s", g_want, g_want == VK_FORMAT_R8G8B8A8_SRGB ? "darker" : "lighter");
     g_sext = (VkExtent2D){(uint32_t)ANativeWindow_getWidth(w), (uint32_t)ANativeWindow_getHeight(w)};   // the window as it is now; Android's compositor rotates (identity transform)
     if (!g_sext.width || !g_sext.height) g_sext = caps.currentExtent;
+
+#if DM_HAS_GSR2_ADAPTER
+    if (gs_swap_height && ww > 0 && wh > 0) {
+        double scale = fmax((double)gs_swap_height / wh, (double)(gs_swap_height * 16 / 9) / ww);
+        VkExtent2D logical = {(uint32_t)lround(ww * scale), (uint32_t)lround(wh * scale)};
+        if (logical.width <= V.props.limits.maxImageDimension2D && logical.height <= V.props.limits.maxImageDimension2D)
+            g_sext = logical;
+    }
+#endif
     uint32_t n = caps.minImageCount < 3 ? 3 : caps.minImageCount; if (caps.maxImageCount && n > caps.maxImageCount) n = caps.maxImageCount;
     int want = 1; { const char *e = getenv("DM_VK_PRETRANSFORM"); if (e && *e) want = atoi(e) != 0; }
     VkSurfaceTransformFlagBitsKHR turn = (VkSurfaceTransformFlagBitsKHR)(caps.currentTransform & (VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR | VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR));
@@ -221,6 +248,16 @@ static int swap_make(void) {
         VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_SHARING_MODE_EXCLUSIVE, 0, NULL, g_pre,
         (caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR) ? VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR : VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR, VK_PRESENT_MODE_FIFO_KHR, 1, VK_NULL_HANDLE};
     VkResult r = vkCreateSwapchainKHR(V.dev, &ci, NULL, &g_swap);
+
+#if DM_HAS_GSR2_ADAPTER
+    if (r && gs_swap_height) {
+        rejected_height = gs_swap_height;
+        rot_drop_image();
+        VKLOG("SGSR2 surface %ux%u rejected (%d), using window size", g_next.width, g_next.height, r);
+        swap_destroy();
+        return swap_make();
+    }
+#endif
     if (r) { VKLOG("[RED] swapchain creation failed: %d", r); swap_destroy(); return 0; }
     g_nsimg = 8; vkGetSwapchainImagesKHR(V.dev, g_swap, &g_nsimg, g_simg);
     VkSemaphoreCreateInfo sem = {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
@@ -442,6 +479,9 @@ static const char *ovm_label(int it) {
     case OVM_IMPORT: return TR("Import save", "导入存档");
     case OVM_PAD: return TR("Face buttons", "按键布局");
     case OVM_AUDIO: return TR("Audio output", "音频输出");
+    case OVM_GSR2_SIZE: return TR("Scale", "输入比例");
+    case OVM_GSR2_OUTPUT: return TR("Output resolution", "输出分辨率");
+    case OVM_GSR2: return TR("Input mode", "输入模式");
     case OVM_FRAMEGEN: return TR("Frame generation", "帧生成");
     case OVM_FG_TARGET: return TR("Target FPS", "目标帧率");
     case OVM_DRIVER: return TR("Vulkan driver", "Vulkan 驱动");
@@ -475,8 +515,10 @@ static const char *ovm_segment(int item, int i) {
     if (item == OVM_PAD) return ovm_pad(i);
     return i ? TR("No limit", "不限") : "60 FPS";
 }
-static int ov_val_n(int it) { return it == OVM_POS ? FPSO_POS_N : it == OVM_COLOUR ? FPSO_COLOUR_N : it == OVM_OUTLINE ? FPSO_OUTLINE_N : it == OVM_SIZE ? FPSO_SIZE_N : 0; }   // the choice rows' values
+static int ov_val_n(int it) { return (it == OVM_GSR2 || it == OVM_GSR2_OUTPUT) ? 3 : it == OVM_POS ? FPSO_POS_N : it == OVM_COLOUR ? FPSO_COLOUR_N : it == OVM_OUTLINE ? FPSO_OUTLINE_N : it == OVM_SIZE ? FPSO_SIZE_N : 0; }   // the choice rows' values
 static const char *ov_val_name(int it, int v) {
+    if (it == OVM_GSR2) return v == GSR2_AUTO ? TR("Auto", "自动") : v == GSR2_CUSTOM ? TR("Custom", "自定义") : TR("Off", "关闭");
+    if (it == OVM_GSR2_OUTPUT) return v == 0 ? "720p" : v == 2 ? "1440p" : "1080p";
     return it == OVM_POS ? FPSO_POS_NAMES[v] : it == OVM_COLOUR ? FPSO_COLOUR_NAMES[v] : it == OVM_OUTLINE ? FPSO_OUTLINE_NAMES[v] : FPSO_SIZE_NAMES[v];
 }
 static int ov_val_cur(int it, int o) { return it == OVM_POS ? fpso_pos(o) : it == OVM_COLOUR ? fpso_colour(o) : it == OVM_OUTLINE ? fpso_outline(o) : fpso_size(o); }
@@ -491,7 +533,7 @@ static int checkpoint_saving(int st) {
 static void ov_menu_panel(const ov_canvas *cv, int st, int position, int checkpoint_phase) {
     float p[4] = {0, 0, (float)cv->w, (float)cv->h}, r[4]; ov_menu_view_rowrect(p, 0, r);
     float rh = r[3], rw = r[2], gap = rh * 0.35f, sh = rh * 0.40f, sw = sh * 1.85f;
-    int tab = (st >> 8 & 1) | (st >> 15 & 1) << 1, sel = (st >> 4 & 15) - 1, op = OV_OPACITY_MIN + (st >> 9 & 63), fo = dm_fps_opts();
+    int tab = ov_menu_page(st), sel = (st >> 4 & 15) - 1, op = OV_OPACITY_MIN + (st >> 9 & 63), fo = dm_fps_opts();
     int checkpoint = st >> OVM_CHECKPOINT_SHIFT & 7;
     float offset = fmaxf(0, fminf(ov_menu_scroll_rows(position), ov_menu_scroll_limit(tab)));
     int is = (int)fmaxf(1, roundf(rh * 0.30f / PF_CAP));
@@ -566,23 +608,34 @@ static void ov_menu_panel(const ov_canvas *cv, int st, int position, int checkpo
         }
         const char *lbl = ovm_label(it), *btn = ovm_button(it);
         cv_text(target, r[0] + rh * 0.15f, cy, lbl, is, row == sel ? C_WHITE : C_DIM);
-        if (it == OVM_OPACITY) {   // the slider: its track, filled to the value, the knob and the percent
+        if (it == OVM_OPACITY || it == OVM_GSR2_SIZE) {   // the slider: its track, filled to the value, the knob and the percent
             float t[3]; ov_menu_track(paint_p, slot, t); float f = (float)(op - OV_OPACITY_MIN) / (OV_OPACITY_MAX - OV_OPACITY_MIN), th = fmaxf(2, rh * 0.08f), kr = rh * 0.20f;
+            int percent = GSR2_MIN_PERCENT + ((st >> 9) & 15) * GSR2_STEP;
+            if (it == OVM_GSR2_SIZE) {
+                ov_gsr2_track(paint_p, slot, t);
+                f = (float)(percent - GSR2_MIN_PERCENT) / (GSR2_MAX_PERCENT - GSR2_MIN_PERCENT);
+            }
             f = f < 0 ? 0 : f > 1 ? 1 : f;
             cv_rrect(target, t[0], t[1] - th / 2, t[0] + t[2], t[1] + th / 2, th / 2, C_OFF);
             cv_rrect(target, t[0], t[1] - th / 2, t[0] + f * t[2], t[1] + th / 2, th / 2, C_ACCENT);
             cv_disc(target, t[0] + f * t[2], t[1], kr, C_WHITE);
-            char v[8]; snprintf(v, sizeof v, "%d%%", op); cv_text(target, x1 - cv_text_w(v, is), cy, v, is, C_WHITE);
+            char v[48]; int vs = is;
+            if (it == OVM_GSR2_SIZE) {
+                snprintf(v, sizeof v, "%d%%  %dx%d", percent, 1280 * percent / 100, 720 * percent / 100);
+                while (vs > 1 && cv_text_w(v, vs) > x1 - t[0] - t[2] - kr - gap * 0.25f) vs--;
+            } else snprintf(v, sizeof v, "%d%%", op);
+            cv_text(target, x1 - cv_text_w(v, vs), cy, v, vs, C_WHITE);
         } else if (it == OVM_EXPORT && (st >> 20 & 7) != OVX_IDLE) {   // the export's outcome in place of its button: its name, or why there is none
             char nm[64], v[80]; int x = dm_save_note(nm, sizeof nm), vs = is;
             snprintf(v, sizeof v, "%s", x == OVX_BUSY ? TR("Exporting...", "导出中...") : x == OVX_DONE ? nm : x == OVX_NOSAVE ? TR("No save yet", "还没有存档") : TR("Failed", "失败"));
             while (vs > 1 && cv_text_w(v, vs) > rw - cv_text_w(lbl, is) - gap - rh * 0.3f) vs--;
             cv_text(target, x1 - cv_text_w(v, vs), cy, v, vs, x == OVX_FAILED ? C_ACCENT : C_WHITE);
         } else if (ov_val_n(it)) {   // the counter's corner, colour, outline and size: the value in a pill
-            int cur = ov_val_cur(it, fo); const char *nm = ov_val_name(it, cur); float pw = ov_val_w(it, is) + 2 * sh, hh = rh * 0.46f;
+            int mode = ((st >> 20) & 7) - 5;
+            int cur = it == OVM_GSR2 ? mode : it == OVM_GSR2_OUTPUT ? (st >> 13 & 3) : ov_val_cur(it, fo); const char *nm = ov_val_name(it, cur); float pw = ov_val_w(it, is) + 2 * sh, hh = rh * 0.46f;
             cv_rrect(target, x1 - pw, cy - hh / 2, x1, cy + hh / 2, hh / 2, C_OFF);
             const uint8_t *tc = C_WHITE, rgb[4] = {FPSO_RGB[fpso_colour(fo)][0], FPSO_RGB[fpso_colour(fo)][1], FPSO_RGB[fpso_colour(fo)][2], 255};
-            cv_text(target, x1 - pw + (pw - cv_text_w(nm, is)) / 2, cy, nm, is, it == OVM_COLOUR ? rgb : tc);
+            cv_text(target, x1 - pw + (pw - cv_text_w(nm, is)) / 2, cy, nm, is, it == OVM_COLOUR ? rgb : it == OVM_GSR2_OUTPUT && mode == GSR2_OFF ? C_DIM : tc);
         } else if (btn) {   // a button
             float bw = cv_text_w(btn, is) + 2 * sh, b[4] = {x1 - bw, cy - rh * 0.30f, bw, rh * 0.60f}; cv_button(target, b, btn, 0, 0);
         } else if (it == OVM_MODE || it == OVM_PAD || ov_menu_fg_choice(it)) {
@@ -599,7 +652,7 @@ static void ov_menu_panel(const ov_canvas *cv, int st, int position, int checkpo
             for (int k = 0; k < 2; k++) cv_text(target, x0 + k * segw + (segw - cv_text_w(seg[k], ts)) / 2, cy, seg[k], ts,
                                                k == cur ? C_WHITE : C_DIM);
         } else {   // a switch
-            int bit = it == OVM_OVERLAY ? 0 : it == OVM_RUMBLE ? 1 : it == OVM_FRAMEGEN ? OVM_FRAMEGEN_BIT : 3;
+            int bit = it == OVM_OVERLAY ? 0 : it == OVM_RUMBLE ? 1 : it == OVM_FRAMEGEN ? OVM_FRAMEGEN_BIT : it == OVM_GSR2 ? 8 : 3;
             int disabled = it == OVM_FRAMEGEN && !(st >> OVM_FG_AVAILABLE_BIT & 1);
             int on = it >= OVM_ROW_FPS && it <= OVM_ROW_GRAPH ? fpso_rows(fo) >> (it - OVM_ROW_FPS) & 1 : !disabled && (st >> bit & 1);
             float sx0 = x1 - sw;
@@ -609,6 +662,22 @@ static void ov_menu_panel(const ov_canvas *cv, int st, int position, int checkpo
             int ws = is;
             while (ws > 1 && cv_text_w(word, ws) > sx0 - 2 * gap - r[0] - cv_text_w(lbl, is)) ws--;
             cv_text(target, sx0 - gap - cv_text_w(word, ws), cy, word, ws, on ? C_WHITE : C_DIM);
+        }
+    }
+    if (DM_HAS_GSR2_ADAPTER && tab == OVM_GSR2_TAB) {
+        // Keep status out of controller navigation: the two status rows are read-only.
+        uint64_t sizes = vk_gsr2_last_extent();
+        for (int i = 0; i < 2; ++i) {
+            unsigned pair = (unsigned)(sizes >> (i ? 0 : 32));
+            char value[48];
+            const char *policy = "--";
+            if (pair) snprintf(value, sizeof value, "%ux%u", pair >> 16, pair & 65535);
+            else snprintf(value, sizeof value, "%s", policy);
+            ov_menu_view_rowrect(p, ov_menu_body_count(tab) + 1 + i, r);
+            float cy = r[1] + rh/2, right = r[0] + rw - rh*0.15f;
+            const char *label = i ? TR("Last rebuild", "上次重建") : TR("Last scene", "上次输入");
+            cv_text(cv, r[0] + rh*0.15f, cy, label, is, C_DIM);
+            cv_text(cv, right - cv_text_w(value, is), cy, value, is, C_DIM);
         }
     }
     int count = ov_menu_body_count(tab), limit = ov_menu_scroll_limit(tab);
@@ -876,7 +945,15 @@ static void ov_fps(VkCommandBuffer cb, int64_t now) {   // one value a row: FPS,
     if (want & FPSO_DRV) snprintf(rows[nr++], 32, "%s", g_vk_driver);
     int gr = (want & FPSO_GRAPH) != 0;   // the frame-time graph under the rows: as wide as the block, at least 24 digits, 2.5 text lines high
     if (!nr && !gr) return;
-    float W = (float)g_sext.width, H = (float)g_sext.height, k = W / g_ov.w, ch = (float)(PF_CAP * g_ov.gs + 4) * k, m = H * 0.02f, pad = ch * 0.2f, lh = ch * 1.1f;
+    float W = (float)g_sext.width, H = (float)g_sext.height, k = W / g_ov.w;
+#if DM_HAS_GSR2_ADAPTER
+    // Keep the counter's physical size when Android scales the game's buffer.
+    if (gs_swap_height && gs_window_extent.height && gs_window_extent.height != g_sext.height) {
+        int base = (int)fmaxf(2, roundf((gs_window_extent.height / 2) * 0.022f / PF_CAP));
+        k *= (H / gs_window_extent.height) * fpso_scale(base, fpso_size(o)) / g_ov.gs;
+    }
+#endif
+    float ch = (float)(PF_CAP * g_ov.gs + 4) * k, m = H * 0.02f, pad = ch * 0.2f, lh = ch * 1.1f;
     float bx = g_ov.sp[SP_BLACK][0], by = g_ov.sp[SP_BLACK][1], wmax = 0;
     for (int r = 0; r < nr; r++) wmax = fmaxf(wmax, ov_fps_len(rows[r], k));
     float bw = ch * 0.5f + wmax, bh_t = nr ? 2 * pad + ch + (nr - 1) * lh : pad, gh = 0, gw = 0;
@@ -1345,6 +1422,12 @@ static enum present_result present_window(vkimg_t *im, const int crop[4], double
     double s = fmin((double)g_sext.width / cw, (double)g_sext.height / ch); int dw = (int)(cw * s), dh = (int)(ch * s), dx = ((int)g_sext.width - dw) / 2, dy = ((int)g_sext.height - dh) / 2;
     { float y0, bh; if (dm_overlay_visible() == 1 && ov_band((float)g_sext.width, (float)g_sext.height, &y0, &bh)) {   // the picture across the top, the gamepad under it (ov_band: never on an external display, whose gamepad stays on the phone)
           s = fmin((double)g_sext.width / cw, (double)y0 / ch); dw = (int)(cw * s); dh = (int)(ch * s); dx = ((int)g_sext.width - dw) / 2; dy = ((int)y0 - dh) / 2; } }
+
+#if DM_HAS_GSR2_ADAPTER
+    if (ticket && !(ticket % 120) && dm_gsr2_input_mode() != GSR2_OFF)
+        VKLOG("SGSR2 present source %dx%d -> picture %dx%d in %ux%u, uses scaled window attachment %d",
+              cw, ch, dw, dh, g_sext.width, g_sext.height, im->gs_presented);
+#endif
     vk_pic_set((float)dx / g_sext.width, (float)dy / g_sext.height, (float)dw / g_sext.width, (float)dh / g_sext.height);
     barrier(cb, tgt, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     VkClearColorValue black = {{0, 0, 0, 1}};
@@ -1607,7 +1690,7 @@ static void present_game_frame(vkimg_t *im, const int crop[4], double period, ui
 // swapchain's fences (a FIFO swapchain blocks there until a vsync); the window texture is not drawn again before its blit, because NVN's acquire waits for
 // its ticket (mtl_present_wait), and the blit's submission comes after the frame's own on the one queue. DM_VK_SYNC_PRESENT=1 presents on the game thread.
 #define PQ_N 4
-static struct { vkimg_t *im; int crop[4], has_crop; uint64_t n, ready_ns; double period; } g_pq[PQ_N];
+static struct { vkimg_t *im, *retained; int crop[4], has_crop; uint64_t n, ready_ns; double period; } g_pq[PQ_N];
 static uint64_t g_pq_head, g_pq_tail, g_pq_done;   // queued [tail, head), presents up to ticket g_pq_done are blitted
 static pthread_mutex_t g_pq_mu = PTHREAD_MUTEX_INITIALIZER; static pthread_cond_t g_pq_cv = PTHREAD_COND_INITIALIZER;
 // While the game is held (the pause menu) no frame comes: dm_overlay_redraw presents the last one again with what the overlay now shows.
@@ -1706,9 +1789,17 @@ static void *present_thread(void *arg) {
         pthread_mutex_unlock(&g_pq_mu);
         pthread_mutex_lock(&g_present_mu);
         if (e.im && swap_make()) {
+
+#if DM_HAS_GSR2_ADAPTER
+            vk_gsr2_surface_release(last.retained);
+#endif
             last = e;
             present_game_frame(e.im, e.has_crop ? e.crop : NULL, e.period, e.n, e.ready_ns, queued);
-        } else { vk_lsfg_forget(); dm_perf_framegen_rate(0); }
+        } else {
+#if DM_HAS_GSR2_ADAPTER
+            vk_gsr2_surface_release(e.retained);
+#endif
+            vk_lsfg_forget(); dm_perf_framegen_rate(0); }
         pthread_mutex_unlock(&g_present_mu);
         pthread_mutex_lock(&g_pq_mu); g_pq_tail++; g_pq_done = e.n; pthread_cond_broadcast(&g_pq_cv); pthread_mutex_unlock(&g_pq_mu);
     }
@@ -1716,6 +1807,14 @@ static void *present_thread(void *arg) {
 }
 static void present_thread_start(void) { pthread_t t; pthread_create(&t, NULL, present_thread, NULL); pthread_detach(t); }
 static uint64_t present_enqueue(vkimg_t *im, const int crop[4], uint64_t n, double period, uint64_t ready_ns) {   // im NULL: still complete its ticket in order
+    vkimg_t *retained = NULL;
+
+#if DM_HAS_GSR2_ADAPTER
+    if (im && im->gs_presented) {
+        retained = im;
+        atomic_fetch_add(&im->gs_refs, 1);
+    }
+#endif
     static int sync = -1; static pthread_once_t once = PTHREAD_ONCE_INIT;
     if (sync < 0) sync = getenv("DM_VK_SYNC_PRESENT") != NULL;
     if (sync || !dm_front_window()) {   // headless: nothing to show; or presenting on this thread
@@ -1727,13 +1826,17 @@ static uint64_t present_enqueue(vkimg_t *im, const int crop[4], uint64_t n, doub
             }
             pthread_mutex_unlock(&g_present_mu);
         }
+
+#if DM_HAS_GSR2_ADAPTER
+        vk_gsr2_surface_release(retained);
+#endif
         pthread_mutex_lock(&g_pq_mu); if (g_pq_tail == g_pq_head) g_pq_done = n; pthread_mutex_unlock(&g_pq_mu);   // done at once (after any queued ones)
         return n;
     }
     pthread_once(&once, present_thread_start);
     pthread_mutex_lock(&g_pq_mu);
     while (g_pq_head - g_pq_tail >= PQ_N) pthread_cond_wait(&g_pq_cv, &g_pq_mu);   // never more than PQ_N frames behind
-    typeof(g_pq[0]) *e = &g_pq[g_pq_head % PQ_N]; e->im = im; e->n = n; e->period = period; e->ready_ns = ready_ns; e->has_crop = crop != NULL; if (crop) memcpy(e->crop, crop, sizeof e->crop);
+    typeof(g_pq[0]) *e = &g_pq[g_pq_head % PQ_N]; e->im = im; e->retained = retained; e->n = n; e->period = period; e->ready_ns = ready_ns; e->has_crop = crop != NULL; if (crop) memcpy(e->crop, crop, sizeof e->crop);
     g_pq_head++; pthread_cond_broadcast(&g_pq_cv);
     pthread_mutex_unlock(&g_pq_mu);
     return n;
@@ -1787,6 +1890,11 @@ uint64_t mtl_present(const tex_t *t, double period, const int crop[4]) {
     if (!im) { no_img++; return present_enqueue(NULL, NULL, n, period, ready_ns); }
     if (im->layout != VK_IMAGE_LAYOUT_GENERAL) { undrawn++; return present_enqueue(NULL, NULL, n, period, ready_ns); }   // never drawn into: nothing to show yet
     shown++; atomic_fetch_add(&g_fps_frames, 1); fg_note();
+
+#if DM_HAS_GSR2_ADAPTER
+    extern uint64_t g_tex_frame;
+    vkimg_t *display = im->gs_stamp == g_tex_frame + 1 && im->gs_final_stamp == im->gs_stamp ? im->gs_scaled : NULL;
+#endif
     if (shot_wanted(n)) shot(im, n);
     { void vk_pass_dump_poll(uint64_t done); uint64_t vk_fence_done(void); vk_pass_dump_poll(vk_fence_done()); void vk_pass_frame(void); vk_pass_frame(); void vk_tex_sweep(void); vk_tex_sweep(); }
 #ifdef DM_FIELD_CHECKPOINT
@@ -1804,6 +1912,15 @@ uint64_t mtl_present(const tex_t *t, double period, const int crop[4]) {
         void dm_vi_layer_crop(int c[4]); dm_vi_layer_crop(vcrop);
         if (vcrop[2] > 0 && vcrop[3] > 0 && vcrop[0] + vcrop[2] <= (int)im->w && vcrop[1] + vcrop[3] <= (int)im->h) crop = vcrop;
     }
+
+#if DM_HAS_GSR2_ADAPTER
+    if (display && dm_gsr2_input_mode() != GSR2_OFF &&
+        !(crop && crop[2] && crop[3] && (crop[0] || crop[1] || crop[2] != (int)im->w || crop[3] != (int)im->h))) {
+        display->gs_presented = 1;
+        im = display;
+        crop = NULL;
+    }
+#endif
     return present_enqueue(im, crop, n, period, ready_ns);
 }
 // OpenGL ES games (gl_android.c): their frames are AHardwareBuffers the device's GL driver drew, imported as images and shown as an NVN window texture is

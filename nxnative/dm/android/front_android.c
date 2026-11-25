@@ -151,6 +151,22 @@ int dm_opmode(void); void dm_set_opmode(int m);   // hle_oe.c: 0 handheld, 1 doc
 // 2 bottom left, 3 bottom right), fps_colour (0 white, 1 yellow, 2 green, 3 cyan, 4 magenta), fps_outline (0 box, 1 none, 2 thin, 3 medium, 4 thick), fps_size (0 small,
 // 1 normal, 2 large, 3 extra large). A value out of range is the default. g_fps_ver counts the changes (dm_menu_state: the panel is drawn again)
 static _Atomic int g_fps_opts = FPSO_DEFAULT, g_fps_ver;
+// An explicit player choice overrides the development environment setting.
+static _Atomic int g_gsr2_input = -1, g_gsr2_percent = 100, g_gsr2_output = 1080;
+int dm_gsr2_input_mode(void) {
+    int mode = atomic_load(&g_gsr2_input);
+    if (mode >= 0) return mode;
+    const char *value = getenv("DM_VK_GSR2");
+    return value && atoi(value) == 2 ? GSR2_AUTO : GSR2_OFF;
+}
+int dm_gsr2_render_height(void) {
+    return dm_gsr2_input_mode() == GSR2_CUSTOM ? 720 * atomic_load(&g_gsr2_percent) / 100 : 0;
+}
+int dm_gsr2_output_height(void) { return atomic_load(&g_gsr2_output); }
+static void menu_gsr2_set(int mode) {
+    atomic_store(&g_gsr2_input, mode);
+    setenv("DM_VK_GSR2", mode == GSR2_OFF ? "0" : "2", 1);
+}
 // FPS_OPTS_BEGIN
 static int fps_opt_parse(const char *line) {   // one settings.txt line: 1 when it was one of the counter's
     int v, o = atomic_load(&g_fps_opts), r = fpso_rows(o), p = fpso_pos(o), c = fpso_colour(o), l = fpso_outline(o), z = fpso_size(o);
@@ -183,8 +199,14 @@ static void settings_load(const char *checkpoint) {
         for (int l = 0; l < 2; ++l) for (int i = 0; i < OV_N; ++i)
             for (int k = 0; k < CUST_K; ++k) atomic_store(&g_cust[0][l][i][k], 0);
     }
+    int mode = -1, legacy_on = -1, legacy_height = 0, percent = 0;
     while (fgets(line, sizeof line, f)) { int v; if (sscanf(line, "overlay=%d", &v) == 1) atomic_store(&g_set_overlay, v != 0); else if (sscanf(line, "rumble=%d", &v) == 1) atomic_store(&g_set_rumble, v != 0);
         else if (sscanf(line, "fps=%d", &v) == 1) atomic_store(&g_set_fps, v != 0);
+        else if (sscanf(line, "gsr2_input=%d", &v) == 1 && v >= GSR2_OFF && v <= GSR2_CUSTOM) mode = v;
+        else if (sscanf(line, "gsr2_percent=%d", &v) == 1 && gsr2_percent_valid(v)) percent = v;
+        else if (sscanf(line, "gsr2_output=%d", &v) == 1 && DM_HAS_GSR2_ADAPTER && gsr2_output_valid(v)) atomic_store(&g_gsr2_output, v);
+        else if (sscanf(line, "gsr2_height=%d", &v) == 1) legacy_height = v == 720 || v == 576 ? v : 0;
+        else if (sscanf(line, "gsr2=%d", &v) == 1 && (v == 0 || v == 1)) legacy_on = v;
         else if (sscanf(line, "framegen=%d", &v) == 1) atomic_store(&g_set_framegen, v != 0);
         else if (sscanf(line, "framegen_target=%d", &v) == 1) atomic_store(&g_set_fg_target, v == 0 || v == 90 ? 0 : 60);   // migrate the old 90 fps choice to no cap
         else if (fps_opt_parse(line)) {}
@@ -207,6 +229,15 @@ static void settings_load(const char *checkpoint) {
         else if (sscanf(line, "menu_y=%d", &v) == 1 && v >= 0 && v <= 10000) { int m = ctl_named("menu"); for (int l = 0; l < 2 && m >= 0; l++) atomic_store(&g_cust[0][l][m][1], v + 1); }   // the editor
     }
     fclose(f);
+    if (DM_HAS_GSR2_ADAPTER) {
+        if (!percent && legacy_height) percent = legacy_height * 100 / 720;
+        if (percent) atomic_store(&g_gsr2_percent, percent);
+        if (mode < 0 && legacy_on >= 0)
+            mode = !legacy_on ? GSR2_OFF : legacy_height ? GSR2_CUSTOM : GSR2_AUTO;
+        // The old menu could save a height while env.txt supplied the switch.
+        if (mode < 0 && legacy_height && dm_gsr2_input_mode() == GSR2_AUTO) mode = GSR2_CUSTOM;
+        if (mode >= 0) menu_gsr2_set(mode);
+    }
     if (checkpoint) atomic_fetch_add(&g_cust_ver, 1);
 }
 static void settings_save(void) {
@@ -216,6 +247,10 @@ static void settings_save(void) {
             atomic_load(&g_set_opacity), atomic_load(&g_set_grid));
     fps_opt_write(f);
     if (atomic_load(&g_set_labels) >= 0) fprintf(f, "labels=%d\n", atomic_load(&g_set_labels));   // (only once the player chose: until then env.txt decides)
+    if (DM_HAS_GSR2_ADAPTER) {
+        if (atomic_load(&g_gsr2_input) >= 0) fprintf(f, "gsr2_input=%d\n", dm_gsr2_input_mode());
+        fprintf(f, "gsr2_percent=%d\ngsr2_output=%d\n", atomic_load(&g_gsr2_percent), dm_gsr2_output_height());
+    }
     fprintf(f, "framegen=%d\nframegen_target=%d\n", atomic_load(&g_set_framegen), atomic_load(&g_set_fg_target));
     for (int l = 0; l < 2; l++) for (int i = 0; i < OV_N; i++) {
         _Atomic int *c = g_cust[0][l][i]; int x = atomic_load(&c[0]), y = atomic_load(&c[1]), z = atomic_load(&c[2]), hid = atomic_load(&c[3]);
@@ -722,7 +757,8 @@ int dm_menu_state(void) {
     if (atomic_load(&g_sp_on)) return OVS_ST | (atomic_load(&g_sp_hi) + 1) << 4 | (atomic_load(&g_sp_ver) & 255) << 20;
     int lossless = vk_lsfg_available(), tab = atomic_load(&g_menu_tab);
     return atomic_load(&g_set_overlay) | atomic_load(&g_set_rumble) << 1 | (dm_opmode() != 0) << 2 | atomic_load(&g_set_fps) << 3 | (atomic_load(&g_menu_hi) + 1) << 4 |
-           (tab & 1) << 8 | (tab >> 1) << 15 | (atomic_load(&g_set_opacity) - OV_OPACITY_MIN) << 9 | atomic_load(&g_sv_st) << 20 | ((tab >= 2 ? atomic_load(&g_fps_ver) : atomic_load(&g_sv_n)) & 1) << 23 |
+           (tab == OVM_GSR2_TAB ? ov_gsr2_page_state(dm_gsr2_input_mode(), atomic_load(&g_gsr2_percent), dm_gsr2_output_height()) :
+            ov_menu_page_state(tab, atomic_load(&g_sv_st)) | (atomic_load(&g_set_opacity) - OV_OPACITY_MIN) << 9) | ((tab >= 2 ? atomic_load(&g_fps_ver) : atomic_load(&g_sv_n)) & 1) << 23 |
            atomic_load(&g_menu_checkpoint_focus) << OVM_CHECKPOINT_FOCUS_BIT | dm_checkpoint_state() << OVM_CHECKPOINT_SHIFT | pad_labels() << 28 |
            (lossless && atomic_load(&g_set_framegen)) << OVM_FRAMEGEN_BIT | lossless << OVM_FG_AVAILABLE_BIT |
            (dm_framegen_target() == 0) << OVM_FG_UNCAPPED_BIT;
@@ -742,7 +778,7 @@ int dm_ui_zh(void) {
     return cur;
 }
 // gfx_vk_present.c draws the counter: not while the menu holds the game, except under the pause menu's Counter and Style tabs, where it shows what they change
-int dm_overlay_fps(void) { return atomic_load(&g_menu) ? atomic_load(&g_menu_tab) >= 2 && !atomic_load(&g_edit) && !atomic_load(&g_sp_on) && !atomic_load(&g_tx_on) : atomic_load(&g_set_fps); }
+int dm_overlay_fps(void) { return atomic_load(&g_menu) ? (atomic_load(&g_menu_tab) == 2 || atomic_load(&g_menu_tab) == 3) && !atomic_load(&g_edit) && !atomic_load(&g_sp_on) && !atomic_load(&g_tx_on) : atomic_load(&g_set_fps); }
 static void menu_open(int hi) {
     if (!atomic_load(&g_running) || atomic_exchange(&g_menu, 1)) return;
     atomic_store(&g_menu_hi, hi); atomic_store(&g_menu_scroll, 0); g_menu_ptr = -1;
@@ -771,6 +807,12 @@ static void menu_close(void) {
 static void menu_opacity(int v) {   // the slider: a new value is drawn at once and saved when the finger lifts (menu_touch) or with each controller step
     v = v < OV_OPACITY_MIN ? OV_OPACITY_MIN : v > OV_OPACITY_MAX ? OV_OPACITY_MAX : v;
     if (atomic_exchange(&g_set_opacity, v) != v) { dm_haptics_android_tap(); dm_overlay_redraw(); }
+}
+static void menu_gsr2_percent(int value) {
+    if (gsr2_percent_valid(value) && atomic_exchange(&g_gsr2_percent, value) != value) {
+        dm_haptics_android_tap();
+        dm_overlay_redraw();
+    }
 }
 static void menu_tab(int t) { t = (t % OVM_TABS + OVM_TABS) % OVM_TABS; if (atomic_exchange(&g_menu_tab, t) != t) { atomic_store(&g_menu_scroll, 0); dm_haptics_android_tap(); } dm_overlay_redraw(); }
 static void menu_set_fg_choice(int choice) {
@@ -810,6 +852,16 @@ static void menu_do(int item) {
     if (item == OVM_OVERLAY) { atomic_store(&g_set_overlay, !atomic_load(&g_set_overlay)); atomic_store(&g_overlay, 1); settings_save(); }
     else if (item == OVM_RUMBLE) { int on = !atomic_load(&g_set_rumble); atomic_store(&g_set_rumble, on); dm_haptics_android_set(on); settings_save(); }
     else if (item == OVM_FPS) { atomic_store(&g_set_fps, !atomic_load(&g_set_fps)); settings_save(); }
+    else if (DM_HAS_GSR2_ADAPTER && item == OVM_GSR2_OUTPUT) {
+        if (dm_gsr2_input_mode() == GSR2_OFF) return;
+        int h = dm_gsr2_output_height();
+        atomic_store(&g_gsr2_output, h == 720 ? 1080 : h == 1080 ? 1440 : 720);
+        settings_save();
+    }
+    else if (DM_HAS_GSR2_ADAPTER && item == OVM_GSR2) {
+        menu_gsr2_set((dm_gsr2_input_mode() + 1) % 3);
+        settings_save();
+    }
     else if (item == OVM_FRAMEGEN) {
         if (!vk_lsfg_available()) { dm_overlay_redraw(); return; }
         atomic_fetch_xor(&g_set_framegen, 1);
@@ -846,17 +898,19 @@ static void menu_touch(AInputEvent *e, float W, float H) {   // a press on a row
         if (g_menu_ptr >= 0) return;
         g_menu_ptr = id; g_menu_row = row;
         g_menu_down_y = y; g_menu_down_scroll = atomic_load(&g_menu_scroll); g_menu_scrolled = 0;
-        g_menu_can_scroll = row > 0 && row < OVM_ROWS - 1 && item != OVM_OPACITY;
+        g_menu_can_scroll = row > 0 && row < OVM_ROWS - 1 && item != OVM_OPACITY && item != OVM_GSR2_SIZE;
         g_menu_choice = ov_menu_fg_choice(item) ? ov_menu_fg_choice_at(x, p, slot) : -1;
         if (row == OVM_ROWS - 1) g_menu_choice = item;
         atomic_store(&g_menu_checkpoint_focus, item == OVM_CHECKPOINT);
         if (item == OVM_TAB) menu_tab(ov_menu_tab_at(x, p));   // a tab opens as the finger touches it
         else if (item == OVM_OPACITY) menu_opacity(ov_menu_track_value(x, p, slot));
+        else if (item == OVM_GSR2_SIZE) menu_gsr2_percent(ov_gsr2_track_value(x, p, slot));
         if (row >= 0) { atomic_store(&g_menu_hi, item >= 0 ? row : -1); dm_overlay_redraw(); }
     } else if (act == AMOTION_EVENT_ACTION_MOVE && g_menu_ptr >= 0 && g_menu_row >= 0) {   // the slider follows the finger; another row's highlight follows it off the row and back
         for (size_t k = 0; k < AMotionEvent_getPointerCount(e); k++) if ((AMotionEvent_getPointerId(e, k) & 31) == g_menu_ptr) {
             float kx = AMotionEvent_getX(e, k), ky = AMotionEvent_getY(e, k);
             if (ov_menu_item(tab, g_menu_row) == OVM_OPACITY) { menu_opacity(ov_menu_track_value(kx, p, ov_menu_scroll_slot(tab, offset, g_menu_row))); continue; }
+            if (ov_menu_item(tab, g_menu_row) == OVM_GSR2_SIZE) { menu_gsr2_percent(ov_gsr2_track_value(kx, p, ov_menu_scroll_slot(tab, offset, g_menu_row))); continue; }
             if (g_menu_can_scroll && (g_menu_scrolled || fabsf(ky - g_menu_down_y) > vr[3] * 0.18f)) {
                 if (!g_menu_scrolled) g_menu_down_y -= copysignf(vr[3] * 0.18f, g_menu_down_y - ky);   // no jump when the gesture first clears touch slop
                 int value = ov_menu_scroll_drag(tab, g_menu_down_scroll, (g_menu_down_y - ky) / vr[3]);
@@ -872,6 +926,7 @@ static void menu_touch(AInputEvent *e, float W, float H) {   // a press on a row
         int down = g_menu_row; g_menu_ptr = -1; atomic_store(&g_menu_hi, -1);
         if (g_menu_scrolled) { atomic_store(&g_menu_scroll, ov_menu_scroll_drag(tab, g_menu_down_scroll, (g_menu_down_y - y) / vr[3])); dm_overlay_redraw(); return; }   // no snapping or activation on release
         if (down >= 0 && ov_menu_item(tab, down) == OVM_OPACITY) { settings_save(); dm_overlay_redraw(); }
+        else if (down >= 0 && ov_menu_item(tab, down) == OVM_GSR2_SIZE) { menu_gsr2_percent(ov_gsr2_track_value(x, p, ov_menu_scroll_slot(tab, offset, down))); settings_save(); dm_overlay_redraw(); }
         else if (row == down && ov_menu_fg_choice(item)) {
             int choice = ov_menu_fg_choice_at(x, p, slot);
             if (choice == g_menu_choice) menu_set_fg_choice(choice);
@@ -893,6 +948,10 @@ static void menu_key(uint64_t bit) {   // a controller key pressed while the men
         for (int k = 0; k < OVM_ROWS; k++) { hi = hi < 0 ? (bit == DM_BTN_UP ? OVM_ROWS - 1 : 1) : (hi + (bit == DM_BTN_UP ? OVM_ROWS - 1 : 1)) % OVM_ROWS; if (ov_menu_item(tab, hi) >= 0) break; }
         atomic_store(&g_menu_hi, hi); atomic_store(&g_menu_scroll, (int)lroundf(ov_menu_scroll_reveal(tab, ov_menu_scroll_rows(atomic_load(&g_menu_scroll)), hi) * OVM_SCROLL_UNITS)); dm_overlay_redraw();
     } else if ((bit == DM_BTN_LEFT || bit == DM_BTN_RIGHT) && item == OVM_OPACITY) { menu_opacity(atomic_load(&g_set_opacity) + (bit == DM_BTN_LEFT ? -5 : 5)); settings_save(); }
+    else if ((bit == DM_BTN_LEFT || bit == DM_BTN_RIGHT) && item == OVM_GSR2_SIZE) {
+        menu_gsr2_percent(atomic_load(&g_gsr2_percent) + (bit == DM_BTN_LEFT ? -GSR2_STEP : GSR2_STEP));
+        settings_save();
+    }
     else if ((bit == DM_BTN_LEFT || bit == DM_BTN_RIGHT) && ov_menu_fg_choice(item)) menu_set_fg_choice(bit == DM_BTN_RIGHT);
     else if ((bit == DM_BTN_LEFT || bit == DM_BTN_RIGHT) && item == OVM_RESUME && dm_checkpoint_state() != DM_CHECKPOINT_DISABLED) {
         atomic_store(&g_menu_checkpoint_focus, bit == DM_BTN_LEFT);
