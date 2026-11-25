@@ -20,7 +20,7 @@ class MenuScroll(unittest.TestCase):
         cc = shutil.which('cc')
         if not cc:
             self.skipTest('a C compiler is required')
-        source = (DM / 'android/gfx_vk_present.c').read_text()
+        source = (DM / 'android/gfx_vk_present.c').read_text(encoding='utf-8')
         draw = csrc.between(source, 'typedef struct { uint8_t *px; uint32_t stride', 'static void ov_menu_icon(')
         menu = csrc.between(source, 'static const uint8_t C_BG', "// The layout editor's toolbar")
         code = r'''
@@ -31,6 +31,7 @@ class MenuScroll(unittest.TestCase):
 #include "overlay_layout.h"
 #include "pixel_font.h"
 static uint8_t *font;
+int dm_ui_zh(void) { return 0; }
 int dm_fps_opts(void) { return FPSO_DEFAULT; }
 const uint8_t *dm_overlay_font(void) { return font; }
 float dm_overlay_scale(void) { return 1; }
@@ -85,7 +86,7 @@ int main(int argc,char **argv) {
             tmp = Path(tmp)
             (tmp/'android_profile.h').write_text(android_profile.header(None))
             src, exe = tmp/'raster.c', tmp/'raster'
-            src.write_text(code)
+            src.write_text(code, encoding='utf-8')
             build = subprocess.run([cc, '-std=gnu11', '-Wall', '-Wextra', '-Werror', '-Wno-unused-function', '-I'+str(tmp), '-I'+str(DM/'android'), '-I'+str(DM/'host'), str(src), '-lm', '-o', str(exe)], capture_output=True, text=True)
             self.assertEqual(build.returncode, 0, build.stderr)
             font = DM/'third_party/fusion-pixel-font/fusion-pixel-12px-proportional-zh_tw.nxpf'
@@ -96,7 +97,7 @@ int main(int argc,char **argv) {
         cc = shutil.which('cc')
         if not cc:
             self.skipTest('a C compiler is required')
-        front = (DM / 'android/front_android.c').read_text()
+        front = (DM / 'android/front_android.c').read_text(encoding='utf-8')
         state = csrc.between(front, 'static _Atomic int g_menu_hi', 'static _Atomic int g_tx_ver')
         code = r'''
 #include <assert.h>
@@ -236,7 +237,7 @@ int main(void) {
             tmp = Path(tmp)
             (tmp / 'android_profile.h').write_text(android_profile.header(None))
             src, exe = tmp / 'check.c', tmp / 'check'
-            src.write_text(code)
+            src.write_text(code, encoding='utf-8')
             build = subprocess.run([cc, '-std=gnu11', '-Wall', '-Wextra', '-Werror', '-I'+str(tmp), '-I'+str(DM/'android'), '-I'+str(DM/'host'), str(src), '-lm', '-o', str(exe)], capture_output=True, text=True)
             self.assertEqual(build.returncode, 0, build.stderr)
             run = subprocess.run([str(exe)], capture_output=True, text=True)
