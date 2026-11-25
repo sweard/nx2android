@@ -1,0 +1,21 @@
+tests/test_vk_present_timing.py
+  s_926c68cc5bacfb::t_0617c98d757f26 158-164
+nxnative/dm/android/gfx_vk_present.c
+  s_926c68cc5bacfb::t_5e46c03e44af09 1208-1209
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "99a463e18f58eafde966f579da3666e8d346a0f4",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
