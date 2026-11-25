@@ -20,9 +20,12 @@ public class GameActivity extends NativeActivity {
     private void offerRuntimeCheckpoint() { checkpoint.offerRuntimeCheckpoint(); }
     private void offerCheckpoint() { checkpoint.offerCheckpoint(); }
 
+    private final GameDriver driver = new GameDriver(this);
+    public void openVulkanDriver() { driver.open(); }
+    public String vulkanDriverForLaunch() { return driver.forLaunch(); }
     public void importLosslessDll() { files.openLossless(); }
     @Override protected void onActivityResult(int request, int result, Intent data) {
-        if (!files.result(request, result, data)) super.onActivityResult(request, result, data);
+        if (!driver.result(request, result, data) && !files.result(request, result, data)) super.onActivityResult(request, result, data);
     }
 
     private static String text(byte[] value) {
@@ -40,5 +43,5 @@ public class GameActivity extends NativeActivity {
         super.onWindowFocusChanged(focused);
         if (focused) checkpoint.saveWhenReady();
     }
-    @Override protected void onDestroy() { checkpoint.close(); files.close(); keyboard.pause(true); super.onDestroy(); }
+    @Override protected void onDestroy() { checkpoint.close(); driver.close(); files.close(); keyboard.pause(true); super.onDestroy(); }
 }

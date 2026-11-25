@@ -53,9 +53,12 @@ public class ExternalActivity extends NativeActivity implements ExternalDisplay.
     private static native int[] externalMenuPixels(int width, int height, int state, int scroll);
     private ExternalDisplay external;
     private final GameFiles files = new GameFiles(this);
+    private final GameDriver driver = new GameDriver(this);
+    public void openVulkanDriver() { driver.open(); }
+    public String vulkanDriverForLaunch() { return driver.forLaunch(); }
     public void importLosslessDll() { files.openLossless(); }
     @Override protected void onActivityResult(int request, int result, Intent data) {
-        if (!files.result(request, result, data)) super.onActivityResult(request, result, data);
+        if (!driver.result(request, result, data) && !files.result(request, result, data)) super.onActivityResult(request, result, data);
     }
     private View pad;
     private Dialog phonePad;
@@ -88,7 +91,7 @@ public class ExternalActivity extends NativeActivity implements ExternalDisplay.
         external.start();
     }
     @Override protected void onDestroy() {
-        files.close();
+        driver.close(); files.close();
         if (external != null) external.stop();
         if (phonePad != null) phonePad.dismiss();
         if (audioDialog != null) audioDialog.dismiss();

@@ -15,6 +15,7 @@
 #include "stick_axis.h"
 #include "pixel_font.h"
 #include "saves_android.h"
+#include <limits.h>
 #include <math.h>
 #include <time.h>
 #include <android/asset_manager.h>
@@ -84,6 +85,10 @@ void front_screen_match(int fps) { (void)fps; }
 static ANativeActivity *g_act;
 static jmethodID g_audio_menu_method;
 static jmethodID g_lossless_import_method;
+static jmethodID g_driver_menu_method;
+static char g_driver_choice[PATH_MAX];
+const char *dm_app_driver_choice(void) { return g_driver_choice; }
+int dm_menu_driver_available(void) { return g_driver_menu_method != NULL; }
 void dm_overlay_redraw(void);
 int vk_lsfg_validate_dll(const void *data, size_t size);
 int dm_menu_audio_available(void) { return g_audio_menu_method != NULL; }
@@ -789,15 +794,15 @@ static void menu_audio(void) {
     if ((*e)->ExceptionCheck(e)) { (*e)->ExceptionClear(e); LOG("[menu] audio selection is unavailable"); }
     if (attached) (*g_act->vm)->DetachCurrentThread(g_act->vm);
 }
-static void menu_lossless_import(void) {
-    if (!g_act || !g_lossless_import_method) return;
+static void menu_document_action(jmethodID method) {
+    if (!g_act || !method) return;
     JNIEnv *e = NULL; int attached = 0;
     if ((*g_act->vm)->GetEnv(g_act->vm, (void **)&e, JNI_VERSION_1_6) != JNI_OK) {
         if ((*g_act->vm)->AttachCurrentThread(g_act->vm, &e, NULL) != JNI_OK) return;
         attached = 1;
     }
-    (*e)->CallVoidMethod(e, g_act->clazz, g_lossless_import_method);
-    if ((*e)->ExceptionCheck(e)) { (*e)->ExceptionClear(e); LOG("[menu] Lossless.dll import is unavailable"); }
+    (*e)->CallVoidMethod(e, g_act->clazz, method);
+    if ((*e)->ExceptionCheck(e)) { (*e)->ExceptionClear(e); LOG("[menu] document action is unavailable"); }
     if (attached) (*g_act->vm)->DetachCurrentThread(g_act->vm);
 }
 static void menu_do(int item) {
@@ -820,7 +825,8 @@ static void menu_do(int item) {
     else if (item == OVM_EXPORT) { if (atomic_load(&g_sv_st) == OVX_BUSY) return; save_export(); }
     else if (item == OVM_IMPORT) { dm_haptics_android_tap(); sp_open(); return; }
     else if (item == OVM_AUDIO) { menu_audio(); }
-    else if (item == OVM_FG_IMPORT) { menu_lossless_import(); }
+    else if (item == OVM_FG_IMPORT) { menu_document_action(g_lossless_import_method); }
+    else if (item == OVM_DRIVER) { menu_document_action(g_driver_menu_method); }
     else if (item == OVM_CHECKPOINT) { dm_checkpoint_request(); }
     if (item >= 0 && item < OVM_N) dm_haptics_android_tap();
     if (item == OVM_RESUME) menu_close(); else dm_overlay_redraw();
@@ -1656,7 +1662,25 @@ __attribute__((visibility("default"))) void ANativeActivity_onCreate(ANativeActi
     if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
     if (activity_class) g_lossless_import_method = (*env)->GetMethodID(env, activity_class, "importLosslessDll", "()V");
     if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
-    if (activity_class) (*env)->DeleteLocalRef(env, activity_class);
+    if (activity_class) {
+        g_driver_menu_method = (*env)->GetMethodID(env, activity_class, "openVulkanDriver", "()V");
+        if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+        if (g_driver_menu_method) {
+            jmethodID get = (*env)->GetMethodID(env, activity_class, "vulkanDriverForLaunch", "()Ljava/lang/String;");
+            jstring value = get ? (*env)->CallObjectMethod(env, act->clazz, get) : NULL;
+            if ((*env)->ExceptionCheck(env)) {
+                (*env)->ExceptionClear(env);
+                strcpy(g_driver_choice, "system");
+            } else if (value) {
+                const char *path = (*env)->GetStringUTFChars(env, value, NULL);
+                snprintf(g_driver_choice, sizeof g_driver_choice, "%s", path && strlen(path) < sizeof g_driver_choice ? path : "system");
+                if (path) (*env)->ReleaseStringUTFChars(env, value, path);
+                if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+                (*env)->DeleteLocalRef(env, value);
+            }
+        }
+        (*env)->DeleteLocalRef(env, activity_class);
+    }
     snprintf(g_root, sizeof g_root, "%s", act->externalDataPath ? act->externalDataPath : act->internalDataPath);
     char p[700];
     snprintf(p, sizeof p, "%s/log.txt", g_root); char prev[720]; snprintf(prev, sizeof prev, "%s/log.prev.txt", g_root); rename(p, prev);

@@ -36,6 +36,7 @@ int dm_fps_opts(void) { return FPSO_DEFAULT; }
 const uint8_t *dm_overlay_font(void) { return font; }
 float dm_overlay_scale(void) { return 1; }
 int dm_overlay_custom(int l,int c,float*x,float*y,float*s) {(void)l;(void)c;(void)x;(void)y;*s=1;return 0;}
+int dm_menu_driver_available(void) { return 0; }
 int dm_menu_audio_available(void) { return 0; }
 int dm_menu_lossless_import_available(void) { return 1; }
 int dm_save_note(char *s,int n) { if(n)s[0]=0;return OVX_IDLE; }
@@ -107,6 +108,7 @@ int main(int argc,char **argv) {
 float dm_overlay_scale(void) { return 1; }
 int dm_overlay_layout(void) { return 0; }
 int dm_overlay_custom(int l, int c, float *x, float *y, float *s) { (void)l; (void)c; (void)x; (void)y; *s=1; return 0; }
+int dm_menu_driver_available(void) { return 0; }
 int dm_menu_audio_available(void) { return 0; }
 int dm_menu_lossless_import_available(void) { return 1; }
 static int checkpoint_state = DM_CHECKPOINT_IDLE;

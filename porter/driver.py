@@ -1,7 +1,7 @@
 # Another Vulkan driver for a port already on the device (python -m porter driver …), without the game's files: the installed APK is pulled, written again with the new
 # driver library by nxnative/dm/android/apk/apkdriver.py and signed with the player's key (the same signer: it installs over the app, its saves stay), and env.txt's
 # DM_VK_DRIVER row names the library (gfx_vk_core.c vk_init loads it through libadrenotools; no row: the device's driver). The game's data on the device is not touched.
-# Only an APK ported with a driver carries libadrenotools: one ported without needs one port with --vulkan-driver first.
+# The APK needs the adrenotools hooks for a custom driver. The in-game Package default selection follows env.txt.
 import json, re, shlex, subprocess, sys, tempfile
 from pathlib import Path
 

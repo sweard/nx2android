@@ -3,7 +3,7 @@
 # host library built again (--host: porter host), without the game's files: every other entry is kept as it is, the ZIP is written and signed again by apksign.py with the
 # player's key (the same signer, so it installs over the app and keeps its saves). --asset NAME=FILE puts FILE in as assets/NAME, replacing an entry of that name (porter host: the
 # overlay's font, which an APK ported before it came lacks).
-# The driver is loaded through libadrenotools and its hook libraries, which only an APK ported with a driver carries (porter port --vulkan-driver): one without them is refused.
+# The driver is loaded through libadrenotools and its hook libraries, also carried by Java-activity ports with in-game driver import. A custom driver needs these hooks.
 # Usage: apkdriver.py <in.apk> <out.apk> <key.json> [--driver <lib.so> | --system] [--host <libdmhost.so>] [--asset NAME=FILE ...]   → prints the driver library's name in the APK ('' with --system)
 import argparse, json, os, sys, zipfile
 

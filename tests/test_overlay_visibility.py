@@ -45,6 +45,7 @@ static _Atomic int g_set_fg_target = 60;
 static int dm_framegen_target(void) { return atomic_load(&g_set_fg_target); }
 static int layout, saves, lossless_available;
 static int vk_lsfg_available(void) { return lossless_available; }
+int dm_menu_driver_available(void) { return 0; }
 int dm_menu_audio_available(void) { return 0; }
 int dm_menu_lossless_import_available(void) { return 1; }
 int dm_overlay_layout(void) { return layout; }
@@ -67,7 +68,8 @@ static void sp_open(void) {}
 static void save_export(void) {}
 static void menu_audio(void) {}
 static int dll_imports;
-static void menu_lossless_import(void) { ++dll_imports; }
+static int g_lossless_import_method = 1, g_driver_menu_method = 2;
+static void menu_document_action(int method) { if (method == g_lossless_import_method) ++dll_imports; }
 void dm_checkpoint_request(void) {}
 int dm_checkpoint_state(void) { return DM_CHECKPOINT_DISABLED; }
 static void menu_close(void) {}

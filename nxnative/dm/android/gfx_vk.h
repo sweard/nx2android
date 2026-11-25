@@ -73,6 +73,8 @@ uint32_t *spv_one_lane(const uint32_t *w, uint32_t nw, uint32_t ops, uint32_t *o
 uint32_t *spv_ubo_component(const uint32_t *w, uint32_t nw, uint32_t *onw, uint32_t *nsites);
 uint32_t *spv_gs_split(const uint32_t *w, uint32_t nw, int mode, uint32_t *onw, char *why, size_t nwhy);
 uint32_t vk_mem_type(uint32_t bits, VkMemoryPropertyFlags want, VkMemoryPropertyFlags avoid);
+const char *dm_app_driver_choice(void);
+void vk_driver_frame_shown(void);
 void vk_init(void);   // once, from mtl_init or the first use
 
 // ---- memory pools (gfx_vk_core.c): the guest's pool memory is GPU memory (AHardwareBuffer mapped over it) ----

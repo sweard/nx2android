@@ -13,6 +13,10 @@
 #include <android/hardware_buffer.h>
 #include <dlfcn.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <sys/stat.h>
+#include <sys/sysmacros.h>
 #include <stdatomic.h>
 #include <string.h>
 #include <math.h>
@@ -116,8 +120,26 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL vk_validation_msg(VkDebugUtilsMessageSever
     return VK_FALSE;
 }
 
+static int imported_driver_mapped(const char *path) {
+    // adrenotools may silently use the system HAL when the imported HAL fails to load.
+    struct stat st;
+    if (stat(path, &st) != 0) return 0;
+    FILE *maps = fopen("/proc/self/maps", "r");
+    if (!maps) return 0;
+    char line[1024];
+    int found = 0;
+    while (fgets(line, sizeof line, maps)) {
+        unsigned maj, min;
+        unsigned long long ino;
+        if (sscanf(line, "%*s %*s %*s %x:%x %llu", &maj, &min, &ino) == 3
+                && ino == st.st_ino && makedev(maj, min) == st.st_dev) { found = 1; break; }
+    }
+    fclose(maps);
+    return found;
+}
+
 // Whether a driver offers a Vulkan 1.3 GPU (DM_VK_DRIVER: a Turnip built for another Adreno generation loads and then has none)
-static int drv_has_gpu(PFN_vkGetInstanceProcAddr g) {
+static int drv_has_gpu(PFN_vkGetInstanceProcAddr g, const char *imported_path) {
     PFN_vkCreateInstance ci = (PFN_vkCreateInstance)g(NULL, "vkCreateInstance"); VkInstance in; int ok = 0;
     VkApplicationInfo app = {VK_STRUCTURE_TYPE_APPLICATION_INFO, NULL, "dmhost", 1, "nxnative", 1, VK_API_VERSION_1_3};
     VkInstanceCreateInfo ici = {VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, NULL, 0, &app, 0, NULL, 0, NULL};
@@ -128,6 +150,10 @@ static int drv_has_gpu(PFN_vkGetInstanceProcAddr g) {
     VkPhysicalDevice pd[8]; uint32_t n = 8;
     if (ep && gp && ep(in, &n, pd) >= 0) for (uint32_t i = 0; i < n && !ok; i++) { VkPhysicalDeviceProperties p; gp(pd[i], &p); ok = p.apiVersion >= VK_API_VERSION_1_3;
         VKLOG("DM_VK_DRIVER: %s, Vulkan %u.%u, driver version 0x%x", p.deviceName, VK_API_VERSION_MAJOR(p.apiVersion), VK_API_VERSION_MINOR(p.apiVersion), p.driverVersion); }
+    if (ok && imported_path && !imported_driver_mapped(imported_path)) {
+        VKLOG("[RED] Imported Vulkan HAL was not mapped by the loader");
+        ok = 0;
+    }
     if (di) di(in, NULL);
     return ok;
 }
@@ -146,6 +172,13 @@ static void driver_row(void) {
     else snprintf(g_vk_driver, sizeof g_vk_driver, "ID %04X %u.%u.%u", vid & 0xffff, d >> 22, d >> 12 & 0x3ff, d & 0xfff);
 }
 
+// A marker spans the first real present. An interrupted imported-driver boot selects
+// the system driver on the next cold start (GameDriver.forLaunch).
+static char driver_pending[PATH_MAX];
+void vk_driver_frame_shown(void) {
+    if (*driver_pending) unlink(driver_pending);
+}
+
 void vk_init(void) {
     static int done; if (done) return; done = 1;
     // DM_VK_DRIVER=<library>: a Vulkan driver the APK carries (Mesa's Turnip for Adreno; porter --vulkan-driver), loaded through libadrenotools (BSD-2-Clause), which the
@@ -154,21 +187,35 @@ void vk_init(void) {
     // of the Kingdom 1.4.3 that also replays NVN on Vulkan, measured its Great Sky Island forest at GPU 16-17 ms a frame on Turnip on an Adreno 830 (docs/FPS-2026-10-31.md),
     // against 22-27 ms here on Qualcomm's driver. A driver that does not load, or offers no Vulkan 1.3 GPU, leaves the system's
     const char *drv = getenv("DM_VK_DRIVER"); void *lib = NULL;
+    const char *choice = dm_app_driver_choice();
+    char imported_dir[PATH_MAX];
+    int imported = choice[0] == '/';
+    if (!strcmp(choice, "system")) drv = NULL;
+    if (imported) {
+        const char *base = strrchr(choice, '/') + 1;
+        snprintf(imported_dir, sizeof imported_dir, "%.*s", (int)(base - choice), choice);
+        int len = snprintf(driver_pending, sizeof driver_pending, "%s.pending", choice);
+        int fd = len < (int)sizeof driver_pending ? open(driver_pending, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600) : -1;
+        if (fd >= 0) { close(fd); drv = base; }
+        else { *driver_pending = 0; drv = NULL; VKLOG("[RED] Could not start Vulkan driver trial; using the system driver"); }
+    }
     if (drv && *drv) {
         Dl_info di; char dir[512] = "", dirs[520] = "";   // the APK's extracted libraries (mkapk.py: extractNativeLibs), where adrenotools finds its hooks and the driver
         if (dladdr((void *)vk_init, &di) && di.dli_fname && strrchr(di.dli_fname, '/')) {
             snprintf(dir, sizeof dir, "%.*s", (int)(strrchr(di.dli_fname, '/') - di.dli_fname), di.dli_fname); snprintf(dirs, sizeof dirs, "%s/", dir); }
+        const char *driver_dir = imported ? imported_dir : dirs;
         void *at = dlopen("libadrenotools.so", RTLD_NOW | RTLD_LOCAL);
         void *(*open_vk)(int, int, const char *, const char *, const char *, const char *, const char *, void **) =
             at ? (void *(*)(int, int, const char *, const char *, const char *, const char *, const char *, void **))dlsym(at, "adrenotools_open_libvulkan") : NULL;
         if (!open_vk || !*dir) VKLOG("[RED] DM_VK_DRIVER %s: no libadrenotools in the APK (%s); the system's driver instead", drv, at ? "no adrenotools_open_libvulkan" : dlerror());
-        else if (!(lib = open_vk(RTLD_NOW | RTLD_LOCAL, 1 /* ADRENOTOOLS_DRIVER_CUSTOM */, NULL, dir, dirs, drv, NULL, NULL)))
-            VKLOG("[RED] DM_VK_DRIVER %s: adrenotools could not load it from %s; the system's driver instead", drv, dir);
-        else if (!(p_vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)dlsym(lib, "vkGetInstanceProcAddr")) || !drv_has_gpu(p_vkGetInstanceProcAddr)) {
+        else if (!(lib = open_vk(RTLD_NOW | RTLD_LOCAL, 1 /* ADRENOTOOLS_DRIVER_CUSTOM */, NULL, dir, driver_dir, drv, NULL, NULL)))
+            VKLOG("[RED] DM_VK_DRIVER %s: adrenotools could not load it from %s; the system's driver instead", drv, driver_dir);
+        else if (!(p_vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)dlsym(lib, "vkGetInstanceProcAddr")) || !drv_has_gpu(p_vkGetInstanceProcAddr, imported ? choice : NULL)) {
             VKLOG("[RED] DM_VK_DRIVER %s: no Vulkan 1.3 GPU through it; the system's driver instead", drv); lib = NULL; }   // (left loaded: a driver does not always unload cleanly)
-        else VKLOG("Vulkan driver %s through adrenotools, not the system's (%s)", drv, dir);
+        else VKLOG("Vulkan driver %s through adrenotools (%s)", drv, driver_dir);
     }
     if (!lib) {
+        *driver_pending = 0;   // keep the marker on disk when the trial fell back
         if (!(lib = dlopen("libvulkan.so", RTLD_NOW | RTLD_LOCAL))) die("[vk] libvulkan.so: %s", dlerror());
         p_vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)dlsym(lib, "vkGetInstanceProcAddr");
     }

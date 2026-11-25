@@ -912,7 +912,7 @@ class Port:
         PROG.stage('host', step=f'NDK {self.tools["ndk"].name}')
         out = self.aw / ('host-debug' if self.o.debug else 'host')
         nsp.run([PY, DM / 'android/build.py', '--game', self.g.id, '--ndk', self.tools['ndk'], '--out', out, '--lib', '--jobs', str(self.o.jobs)] + ([] if self.o.debug else ['--release'])
-                + (['--field-checkpoint'] if self.o.field_checkpoint else []) + (['--adrenotools'] if self.o.vulkan_driver else []), self.logs / 'android_host.log', env=self.env)
+                + (['--field-checkpoint'] if self.o.field_checkpoint else []) + (['--adrenotools'] if self.o.vulkan_driver or self.o.native_keyboard or self.o.external_display else []), self.logs / 'android_host.log', env=self.env)
         self.so = out / 'libdmhost.so'
         if not self.so.is_file(): raise BuildError(f'build.py made no {self.so}')
         ph = out / 'gen' / self.g.id / 'game_profile.h'   # the profile the host was built from, for the data pack (porter host compares it with its checkout's)
@@ -932,11 +932,14 @@ class Port:
         if driver and driver.name != driver_lib_name(driver):   # packed under a lib*.so name (driver_lib_name), copied beside the host library
             driver = self.so.parent / driver_lib_name(driver); shutil.copyfile(self.o.vulkan_driver, driver)
             say(f'--vulkan-driver: {self.o.vulkan_driver.name} is packed as {driver.name} (Android extracts only lib*.so libraries)')
+        extra_libs = [driver] if driver else []
+        if driver or external:
+            extra_libs.extend(self.so.parent / name for name in ADRENOTOOLS_LIBS)
         nsp.run([PY, DM / 'android/apk/mkapk.py', self.so, self.apk_path, paths.signing_key(), '--package', self.package, '--label', self.app_name, '--lib', 'dmhost',
                  '--version-code', str(code), '--version-name', self.display]
                 + (['--landscape'] if self.ap.landscape else []) + icon + self.theme() + self.ui_font() + external + ([] if self.o.debug else ['--release'])
                 + (['--game-mode-performance'] if getattr(self, 'gl', None) is False else [])   # only NVN implements the mode's pacing policy; GL keeps OEM interventions
-                + [a for f in ([driver] + [self.so.parent / n for n in ADRENOTOOLS_LIBS] if driver else []) for a in ('--extra-so', str(f))],
+                + [a for f in extra_libs for a in ('--extra-so', str(f))],
                 self.logs / 'android_apk.log', env=self.env)
         self.result['apk'] = str(self.apk_path)
         PROG.end(f'{self.apk_path.name}, {self.apk_path.stat().st_size / 2**20:.1f} MB')

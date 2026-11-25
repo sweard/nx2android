@@ -23,6 +23,8 @@ class OverlayLayout(unittest.TestCase):
 #include "overlay_layout.h"
 static int custom_faces, custom_a, custom_x, hidden_ctl = -1, audio_available, ui_zh;
 int dm_ui_zh(void) { return ui_zh; }
+static int driver_menu;
+int dm_menu_driver_available(void) { return driver_menu; }
 int dm_menu_audio_available(void) { return audio_available; }
 static int import_available;
 int dm_menu_lossless_import_available(void) { return import_available; }
@@ -103,6 +105,7 @@ int main(void) {
     assert(ov_menu_item(1, OVM_ROWS - 5) == OVM_FRAMEGEN && ov_menu_item(1, OVM_ROWS - 4) == OVM_FG_TARGET);
     assert(ov_menu_item(1, OVM_ROWS - 3) == -1);
     assert(ov_menu_item(1, OVM_ROWS - 2) == -1);
+    driver_menu = 1; assert(ov_menu_item(1, OVM_ROWS - 3) == OVM_DRIVER); driver_menu = 0;
     import_available = 1;
     assert(ov_menu_item(1, OVM_ROWS - 2) == OVM_FG_IMPORT);
     assert(ov_menu_item(1, OVM_ROWS - 1) == OVM_RESUME);

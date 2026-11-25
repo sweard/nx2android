@@ -228,14 +228,14 @@ static inline int fpso_pack(int rows, int pos, int colour, int outline, int size
 static inline int fpso_scale(int base, int size) { return size == FPSO_SMALL ? (base > 1 ? base - 1 : 1) : size == FPSO_LARGE ? base + 1 : size == FPSO_XL ? 2 * base : base; }
 // ---- the pause menu: a panel in the middle of the window: a row of tabs, the open tab's rows, and Resume. Everything is placed in a panel rectangle p
 // (x, y, width, height: the window's for touches, the raster's for drawing), so the touches and the drawing agree ----
-enum { OVM_OVERLAY, OVM_OPACITY, OVM_EDIT, OVM_RUMBLE, OVM_FPS, OVM_MODE, OVM_EXPORT, OVM_IMPORT, OVM_PAD, OVM_AUDIO, OVM_FRAMEGEN, OVM_FG_TARGET, OVM_FG_IMPORT, OVM_ROW_FPS, OVM_ROW_SOC, OVM_ROW_BAT, OVM_ROW_DRV, OVM_ROW_GRAPH, OVM_POS, OVM_COLOUR, OVM_OUTLINE, OVM_SIZE, OVM_RESUME, OVM_TAB, OVM_CHECKPOINT, OVM_N };   // OVM_TAB: the tabs' row;
+enum { OVM_OVERLAY, OVM_OPACITY, OVM_EDIT, OVM_RUMBLE, OVM_FPS, OVM_MODE, OVM_EXPORT, OVM_IMPORT, OVM_PAD, OVM_AUDIO, OVM_FRAMEGEN, OVM_FG_TARGET, OVM_FG_IMPORT, OVM_ROW_FPS, OVM_ROW_SOC, OVM_ROW_BAT, OVM_ROW_DRV, OVM_ROW_GRAPH, OVM_POS, OVM_COLOUR, OVM_OUTLINE, OVM_SIZE, OVM_RESUME, OVM_TAB, OVM_CHECKPOINT, OVM_DRIVER, OVM_N };   // OVM_TAB: the tabs' row;
             // OVM_EDIT: the layout editor; OVM_MODE: handheld (performance) or docked (resolution); OVM_EXPORT, OVM_IMPORT: the save manager (saves_android.c);
             // OVM_PAD: a controller's face buttons by their position or by their label (front_android.c pad_labels)
 #define OVM_TABS 4
 #define OVM_PER_TAB 9
 static const int OVM_TAB_ITEMS[OVM_TABS][OVM_PER_TAB] = {
     {OVM_OVERLAY, OVM_OPACITY, OVM_EDIT, OVM_RUMBLE, OVM_PAD, -1, -1, -1, -1},
-    {OVM_FPS, OVM_MODE, OVM_EXPORT, OVM_IMPORT, OVM_AUDIO, OVM_FRAMEGEN, OVM_FG_TARGET, -1, OVM_FG_IMPORT},
+    {OVM_FPS, OVM_MODE, OVM_EXPORT, OVM_IMPORT, OVM_AUDIO, OVM_FRAMEGEN, OVM_FG_TARGET, OVM_DRIVER, OVM_FG_IMPORT},
     {OVM_ROW_FPS, OVM_ROW_SOC, OVM_ROW_BAT, OVM_ROW_DRV, OVM_ROW_GRAPH, -1, -1, -1, -1},
     {OVM_POS, OVM_COLOUR, OVM_OUTLINE, OVM_SIZE, -1, -1, -1, -1, -1},
 };
@@ -265,10 +265,12 @@ static inline int fpso_step(int o, int item) {   // the options after a press on
     }
     return fpso_pack(r, p, c, l, z);
 }
+int dm_menu_driver_available(void);
 int dm_menu_audio_available(void);
 int dm_menu_lossless_import_available(void);
 static inline int ov_menu_item(int tab, int row) {
     int item = row == 0 ? OVM_TAB : row == OVM_ROWS - 1 ? OVM_RESUME : row > 0 && row < OVM_ROWS - 1 ? OVM_TAB_ITEMS[tab & (OVM_TABS - 1)][row - 1] : -1;
+    if (item == OVM_DRIVER && !dm_menu_driver_available()) return -1;
     if (item == OVM_AUDIO && !dm_menu_audio_available()) return -1;
     return item == OVM_FG_IMPORT && !dm_menu_lossless_import_available() ? -1 : item;
 }

@@ -65,6 +65,8 @@ A game whose profile lists the shared font titles (`0100000000000811` and `01000
 
 A game slowed by its draw calls in busy scenes: tick **Multithread replay** on the Port tab (`--mt-replay`). The game's Vulkan commands are then recorded on a thread of their own. It stays on until you port the game again without it.
 
+To try another Android Vulkan driver, open **Game → Vulkan driver → Import .so** and select a trusted arm64 driver file for your GPU. Fully close and reopen the game to apply it. **Package default** follows the port's configured driver, and **System driver** selects the phone's driver. Each game keeps its own selection. If a launch with an imported driver stops before the first game frame, the next launch uses the system driver. The game data pack can be reused.
+
 For experimental 2× Lossless frame generation, open the pause menu's **Game** tab and use **Lossless.dll → Import** to select your own DLL. You can also copy it next to `settings.txt` in the game's `Android/data/<package>/files/` folder. Use a DLL with the LSFG 3.1 Performance Vulkan shaders, such as Lossless Scaling 3.2.2. The APK carries the [lsfg-vk MIT license](nxnative/dm/android/apk/lsfg-vk-LICENSE.txt) for its integration code. Supply the DLL separately.
 
 Turn on **Frame generation** after importing a compatible DLL. The switch is off by default and unavailable when the renderer cannot use the DLL. If the file becomes unavailable during play, the game returns to ordinary presentation and retains your switch setting. Swipe the menu's list to reach more settings. The tabs and **Resume** stay visible, and controller navigation scrolls to the selected item.

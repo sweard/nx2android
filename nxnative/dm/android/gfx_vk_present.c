@@ -444,6 +444,7 @@ static const char *ovm_label(int it) {
     case OVM_AUDIO: return TR("Audio output", "音频输出");
     case OVM_FRAMEGEN: return TR("Frame generation", "帧生成");
     case OVM_FG_TARGET: return TR("Target FPS", "目标帧率");
+    case OVM_DRIVER: return TR("Vulkan driver", "Vulkan 驱动");
     case OVM_FG_IMPORT: return "Lossless.dll";
     case OVM_ROW_FPS: return TR("FPS row", "帧率行");
     case OVM_ROW_SOC: return TR("SOC row", "SoC 行");
@@ -463,7 +464,7 @@ static const char *ovm_button(int it) {
     case OVM_EDIT: return TR("Edit", "编辑");
     case OVM_EXPORT: return TR("Export", "导出");
     case OVM_FG_IMPORT: case OVM_IMPORT: return TR("Import", "导入");
-    case OVM_AUDIO: return TR("Select", "选择");
+    case OVM_DRIVER: case OVM_AUDIO: return TR("Select", "选择");
     default: return NULL;
     }
 }
@@ -1407,7 +1408,7 @@ static enum present_result present_window(vkimg_t *im, const int crop[4], double
     pthread_mutex_unlock(&g_vk_queue_mu);
     if (r >= 0) {
         static int first_game_frame;
-        if (ticket && !generated && !first_game_frame) { first_game_frame = 1; dm_checkpoint_frame_shown(); }
+        if (ticket && !generated && !first_game_frame) { first_game_frame = 1; vk_driver_frame_shown(); dm_checkpoint_frame_shown(); }
         if (generated) ++g_generated_presented; else if (ticket) ++g_real_presented;
         if (generated && !framegen_display_clock()) g_fg_cpu_present_ns = mono_ns();
     }
