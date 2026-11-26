@@ -223,6 +223,8 @@ VkImage vk_gsr2_record(VkCommandBuffer cb, VkImageView color, VkImageView depth,
     return im[OUTPUT].image;
 }
 
+VkImageView vk_gsr2_result_view(void) { return gsr.images[OUTPUT].view; }
+
 VkImageView vk_gsr2_capture_depth(VkCommandBuffer cb, vkimg_t *source, uint32_t w, uint32_t h) {
     static work_image snapshot;
     static uint32_t width, height;

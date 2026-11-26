@@ -40,6 +40,18 @@ static int temporal_ot2(uint64_t key, vk_temporal_frame *frame) {
     return 1;
 }
 
+static int temporal_fe3h(uint64_t key, vk_temporal_frame *frame) {
+    const fe3h_camera_pass *pass = fe3h_camera_for_fragment(key);
+    if (!pass) return 0;
+    const vk_temporal_bindings scene = {
+        .color = -1, .depth = (int)pass->depth_slot, .motion = -1, .output = 0, .jitter = {-1, 0},
+        .current_view_projection = {-1, 0}, .previous_view_projection = {-1, 0},
+    };
+    frame->pass = VK_TEMPORAL_SCENE_INPUTS;
+    temporal_read_bindings(&scene, frame);
+    return 1;
+}
+
 static int temporal_ue(uint64_t key, vk_temporal_frame *frame) {
     const gsr2_ue_pass *rule = gs_profile->ue;
     if (key != rule->depth_fragment) return 0;

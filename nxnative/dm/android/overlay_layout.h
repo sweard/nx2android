@@ -229,19 +229,20 @@ static inline int fpso_pack(int rows, int pos, int colour, int outline, int size
 static inline int fpso_scale(int base, int size) { return size == FPSO_SMALL ? (base > 1 ? base - 1 : 1) : size == FPSO_LARGE ? base + 1 : size == FPSO_XL ? 2 * base : base; }
 // ---- the pause menu: a panel in the middle of the window: a row of tabs, the open tab's rows, and Resume. Everything is placed in a panel rectangle p
 // (x, y, width, height: the window's for touches, the raster's for drawing), so the touches and the drawing agree ----
-enum { OVM_OVERLAY, OVM_OPACITY, OVM_EDIT, OVM_RUMBLE, OVM_FPS, OVM_MODE, OVM_EXPORT, OVM_IMPORT, OVM_PAD, OVM_AUDIO, OVM_FRAMEGEN, OVM_FG_TARGET, OVM_FG_IMPORT, OVM_ROW_FPS, OVM_ROW_SOC, OVM_ROW_BAT, OVM_ROW_DRV, OVM_ROW_GRAPH, OVM_POS, OVM_COLOUR, OVM_OUTLINE, OVM_SIZE, OVM_RESUME, OVM_TAB, OVM_CHECKPOINT, OVM_DRIVER, OVM_GSR2, OVM_GSR2_SIZE, OVM_GSR2_OUTPUT, OVM_N };   // OVM_TAB: the tabs' row;
+enum { OVM_OVERLAY, OVM_OPACITY, OVM_EDIT, OVM_RUMBLE, OVM_FPS, OVM_MODE, OVM_EXPORT, OVM_IMPORT, OVM_PAD, OVM_AUDIO, OVM_FRAMEGEN, OVM_FG_TARGET, OVM_FG_IMPORT, OVM_ROW_FPS, OVM_ROW_SOC, OVM_ROW_BAT, OVM_ROW_DRV, OVM_ROW_GRAPH, OVM_POS, OVM_COLOUR, OVM_OUTLINE, OVM_SIZE, OVM_RESUME, OVM_TAB, OVM_CHECKPOINT, OVM_DRIVER, OVM_GSR2, OVM_GSR2_SIZE, OVM_GSR2_OUTPUT, OVM_SR, OVM_SHARP, OVM_N };   // OVM_TAB: the tabs' row;
             // OVM_EDIT: the layout editor; OVM_MODE: handheld (performance) or docked (resolution); OVM_EXPORT, OVM_IMPORT: the save manager (saves_android.c);
+            // OVM_SR: Super resolution (the present pass upscales the game's picture into a larger window); OVM_SHARP: its Sharpness slider (0 to 100 percent by 25);
             // OVM_PAD: a controller's face buttons by their position or by their label (front_android.c pad_labels)
 #define OVM_GSR2_TAB 4
 #define OVM_TABS (4 + DM_HAS_GSR2_ADAPTER)
-#define OVM_PER_TAB 9
+#define OVM_PER_TAB 10
 static const int OVM_TAB_ITEMS[OVM_TABS][OVM_PER_TAB] = {
-    {OVM_OVERLAY, OVM_OPACITY, OVM_EDIT, OVM_RUMBLE, OVM_PAD, -1, -1, -1, -1},
-    {OVM_FPS, OVM_MODE, OVM_EXPORT, OVM_IMPORT, OVM_AUDIO, OVM_FRAMEGEN, OVM_FG_TARGET, OVM_DRIVER, OVM_FG_IMPORT},
-    {OVM_ROW_FPS, OVM_ROW_SOC, OVM_ROW_BAT, OVM_ROW_DRV, OVM_ROW_GRAPH, -1, -1, -1, -1},
-    {OVM_POS, OVM_COLOUR, OVM_OUTLINE, OVM_SIZE, -1, -1, -1, -1, -1},
+    {OVM_OVERLAY, OVM_OPACITY, OVM_EDIT, OVM_RUMBLE, OVM_PAD, OVM_AUDIO, -1, -1, -1, -1},
+    {OVM_FPS, OVM_SR, OVM_SHARP, OVM_MODE, OVM_EXPORT, OVM_IMPORT, OVM_FRAMEGEN, OVM_FG_TARGET, OVM_DRIVER, OVM_FG_IMPORT},
+    {OVM_ROW_FPS, OVM_ROW_SOC, OVM_ROW_BAT, OVM_ROW_DRV, OVM_ROW_GRAPH, -1, -1, -1, -1, -1},
+    {OVM_POS, OVM_COLOUR, OVM_OUTLINE, OVM_SIZE, -1, -1, -1, -1, -1, -1},
 #if DM_HAS_GSR2_ADAPTER
-    {OVM_GSR2, OVM_GSR2_SIZE, OVM_GSR2_OUTPUT, -1, -1, -1, -1, -1, -1},
+    {OVM_GSR2, OVM_GSR2_SIZE, OVM_GSR2_OUTPUT, -1, -1, -1, -1, -1, -1, -1},
 #endif
 };
 static const char *const OVM_TAB_NAMES_EN[] = {"Gamepad", "Game", "Counter", "Style", "GSR2"};
@@ -288,7 +289,7 @@ static inline int ov_menu_item(int tab, int row) {
 #define OV_OPACITY_MIN 20    // the gamepad's opacity, percent (the Opacity slider, settings.txt opacity=)
 #define OV_OPACITY_MAX 80
 // what the menu shows (-1 = closed): bit 0 the gamepad is on, bit 1 rumble is on, bit 2 docked, bit 3 the frame rate shown, bits 4..7 the highlighted row + 1
-// (0 = none), bits 8 and 15 the open tab, bits 9..14 the opacity above OV_OPACITY_MIN, bits 20..22 the last export's outcome (OVX_*), bit 23 the export or counter settings edit parity,
+// (0 = none), bits 8 and 15 the open tab, bits 9..14 the opacity above OV_OPACITY_MIN (Game tab: bit 9 SR, bits 10..12 sharpness), bits 20..22 the last export's outcome (OVX_*), bit 23 the export or counter settings edit parity,
 // bits 24..26 the manual checkpoint state. Continuous scroll position is part of the separate raster cache key.
 // Bit 16: text entry; bit 17: layout editor (OVE_ST_*); bit 18: save picker (OVS_ST)
 #define OVM_CHECKPOINT_FOCUS_BIT 19
@@ -388,6 +389,10 @@ static inline void ov_menu_track(const float p[4], float row, float t[3]) { floa
 static inline int ov_menu_track_value(float x, const float p[4], float row) {   // the opacity a finger at x sets, whole 5 percents
     float t[3]; ov_menu_track(p, row, t); float f = (x - t[0]) / t[2]; f = f < 0 ? 0 : f > 1 ? 1 : f;
     return OV_OPACITY_MIN + 5 * (int)lroundf(f * (OV_OPACITY_MAX - OV_OPACITY_MIN) / 5);
+}
+static inline int ov_menu_track_pct(float x, const float p[4], float row) {   // the same track as a percent of its width 0..100 (the Sharpness slider)
+    float t[3]; ov_menu_track(p, row, t); float f = (x - t[0]) / t[2]; f = f < 0 ? 0 : f > 1 ? 1 : f;
+    return (int)lroundf(f * 100.0f);
 }
 
 // Reserve the right half of the scale row for the percentage and pixel extent.

@@ -5,7 +5,6 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
-extern int dm_gsr2_custom_percent(void);
 extern int vk_gsr2_has_profile(void);
 static int read_field(uintptr_t addr, void *out, size_t size) {
     struct iovec local = {out, size}, remote = {(void *)addr, size};

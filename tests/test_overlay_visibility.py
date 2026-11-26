@@ -40,7 +40,7 @@ class OverlayVisibility(unittest.TestCase):
 #include "stick_axis.h"
 static _Atomic int g_set_overlay, g_overlay, g_pads, g_edit, g_menu_btn = 1;
 static _Atomic int g_cust[2][2][OV_N][4];
-static _Atomic int g_set_rumble, g_set_fps, g_set_framegen, g_set_labels, g_menu_tab, g_sv_st;
+static _Atomic int g_set_sr, g_set_rumble, g_set_fps, g_set_framegen, g_set_labels, g_menu_tab, g_sv_st;
 static _Atomic int g_set_fg_target = 60;
 static int dm_framegen_target(void) { return atomic_load(&g_set_fg_target); }
 static _Atomic int g_gsr2_output = 1080, g_gsr2_input;

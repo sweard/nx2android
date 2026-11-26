@@ -33,6 +33,7 @@ static int digimon_collect(const vk_temporal_dispatch *dispatch, gsr2_frame_inpu
     (void)dispatch; (void)frame; return 0;
 }
 static void digimon_recorded(void) {}
+static void fe3h_observe_draw(void) {}
 static void ot2_observe_draw(void) {}
 static void ue_observe_draw(void) {}
 #include "gfx_vk_exec_temporal.inc"
@@ -111,6 +112,14 @@ int main(void) {
     assert(vk_temporal_current_draw(&frame) && !frame.jitter.bytes);
     shader.key = 42;
     assert(!vk_temporal_current_draw(&frame) && !frame.depth.texture.serial && !frame.fragment_key);
+    assert(!gsr2_profile_for_build(GSR2_FE3H_ID, GSR2_OT2_BUILD));
+    gs_profile = gsr2_profile_for_build(GSR2_FE3H_ID, GSR2_FE3H_BUILD);
+    assert(gs_profile && !gsr2_bundle_matches(gs_profile, bundle_stage));
+    assert(gsr2_composite_for_keys(gs_profile, UINT64_C(0x7a14dbc4a0902f17), UINT64_C(0xd173c968bf96d599))->sample == 2);
+    S.tex[1][2] = 2;
+    shader.key = UINT64_C(0x29e98c0cf34da3f1);
+    assert(vk_temporal_current_draw(&frame) && frame.depth.texture.serial == 2);
+    assert(!frame.motion.texture.serial && !frame.previous_view_projection.bytes);
     gs_profile = gsr2_profile_for_build(GSR2_OT2_ID, GSR2_OT2_BUILD);
     assert(gs_profile && !gs_profile->compute_count);
     assert(!gsr2_bundle_matches(gs_profile, bundle_stage)); // the Digimon fixture contains no OT2 depth shader

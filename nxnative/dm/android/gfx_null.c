@@ -13,6 +13,9 @@
 #include <string.h>
 #include <time.h>
 
+// Headless shader capture links the Android front end without a Vulkan renderer.
+int vk_lsfg_validate_dll(const void *data, size_t size) { (void)data; (void)size; return 0; }
+
 uint64_t guest_ns(void);
 static uint64_t gpu_ticks(void) { uint64_t g = guest_ns(); if (!g) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); g = (uint64_t)t.tv_sec * 1000000000ull + (uint64_t)t.tv_nsec; } return g * 12 / 625; }
 

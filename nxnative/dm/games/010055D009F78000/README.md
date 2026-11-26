@@ -15,6 +15,9 @@ The profile sets these for you (`android.tsv`); a player changes the pause menu 
 
 | Row | What it does |
 |---|---|
+| `docked=1` | pause menu default on first launch: docked mode (1) or handheld mode (0) |
+| `gsr2_output=1080` | pause menu default on first launch: GSR2 output height in pixels |
+| `gsr2_input=1` | pause menu default on first launch: GSR2 input mode (0 off, 1 automatic, 2 custom) |
 | `DM_AUDREN_CATCHUP_FRAMES=200` | catch-up frames (a frame rendered on the updating thread when nothing was rendered since the last update) only while fewer than this many frames have been … |
 | `DM_VK_X_FENCES=1` | submissions signal a ring of fences instead of a timeline semaphore, as on a Vulkan 1.1 driver without timeline semaphores (the Adreno 618 / 619 of 2021, issue … |
 
@@ -41,7 +44,8 @@ Read the profile's porting log in the comment header of [`android.tsv`](android.
 
 ## Options
 
-- None: the default options work. Use the device's own Vulkan driver: Turnip draws the game too but takes about three times the GPU time.
+- GSR2 Auto uses KTGL scene depth and camera motion to reconstruct the HDR scene before the game draws its HUD. The verified docked output is 1920×1080. At a 1920×1080 scene input this is native-resolution temporal reconstruction. Passes without matching scene resources use the game renderer.
+- Use the device's own Vulkan driver: Turnip draws the game too but takes about three times the GPU time.
 - The port boots the game once on the device to capture the 9 shaders the game compiles when it starts, so connect the device (USB debugging on) even when you port without installing.
 
 ## Quirks and known issues
