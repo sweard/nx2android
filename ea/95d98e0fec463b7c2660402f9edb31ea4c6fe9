@@ -1,0 +1,73 @@
+nxnative/dm/games/010062E01FE0C000/android.tsv
+  s_c84cb0b533a36d::t_e8a102e279a710 27
+nxnative/dm/android/gfx_vk_exec_xfb.inc
+  s_c84cb0b533a36d::t_e8a102e279a710 509
+  s_c84cb0b533a36d::t_0028b6317ce5e8 510-511
+nxnative/dm/android/gfx_vk_gsr2.c
+  s_c84cb0b533a36d::t_e8a102e279a710 1-2
+  s_c84cb0b533a36d::t_da1a0aabe70639 3-265
+tests/test_menu_scroll.py
+  s_c84cb0b533a36d::t_e8a102e279a710 40
+nxnative/dm/android/tools/android_profile.py
+  s_c84cb0b533a36d::t_e8a102e279a710 46,142-144,192-199
+nxnative/dm/android/gfx_vk_exec.c
+  s_c84cb0b533a36d::t_e8a102e279a710 10,29-32
+  s_c84cb0b533a36d::t_20d62c6672170c 33
+tests/test_overlay_visibility.py
+  s_c84cb0b533a36d::t_e8a102e279a710 45-46,390-398,450-451
+  s_c84cb0b533a36d::t_a7ffafa427e4b6 29-30,452
+nxnative/dm/android/gfx_vk_present.c
+  s_c84cb0b533a36d::t_e8a102e279a710 406,531-532
+  s_c84cb0b533a36d::t_f832a9a030b22f 405,533
+tests/arch_rules.py
+  s_c84cb0b533a36d::t_e8a102e279a710 58
+nxnative/dm/android/gfx_vk_gsr2_scene.inc
+  s_c84cb0b533a36d::t_e8a102e279a710 1-77
+nxnative/dm/android/front_android.c
+  s_c84cb0b533a36d::t_e8a102e279a710 84,132,662-665,674,692-693,747,750-751
+  s_c84cb0b533a36d::t_ef0b5f581304d2 83,748-749
+docs/ARCHITECTURE.md
+  s_c84cb0b533a36d::t_e8a102e279a710 162-163,232
+nxnative/dm/android/gfx_vk_exec_gsr2.inc
+  s_c84cb0b533a36d::t_e8a102e279a710 51-182,185
+  s_c84cb0b533a36d::t_9150527b369813 1-50,183-184,186-190
+nxnative/dm/android/gfx_vk_exec_draws.inc
+  s_c84cb0b533a36d::t_e8a102e279a710 155-156
+  s_c84cb0b533a36d::t_d05a5a143a89e4 157
+nxnative/dm/android/apk/apkdriver.py
+  s_c84cb0b533a36d::t_6b6192b319bea6 46-48
+nxnative/dm/android/apk/mkapk.py
+  s_c84cb0b533a36d::t_311ecb343917f5 7,179
+nxnative/dm/android/apk/sgsr2-LICENSE.txt
+  s_c84cb0b533a36d::t_bbf7df8b8713b6 1-30
+nxnative/dm/android/gfx_null.c
+  s_c84cb0b533a36d::t_2fcc0467ba959a 125-126
+nxnative/dm/android/gfx_vk.h
+  s_c84cb0b533a36d::t_b952666496959a 39
+nxnative/dm/android/gfx_vk_gsr2.h
+  s_c84cb0b533a36d::t_1744ef1d9b6224 1-20
+nxnative/dm/android/gfx_vk_gsr2_camera.h
+  s_c84cb0b533a36d::t_6dbff915f5ac9a 1-40
+nxnative/dm/android/shaders/sgsr2_convert.comp
+  s_c84cb0b533a36d::t_d4811232ed75ca 1-119
+nxnative/dm/android/shaders/sgsr2_upscale.comp
+  s_c84cb0b533a36d::t_d3da15df998843 1-332
+tests/test_sgsr2_camera.py
+  s_c84cb0b533a36d::t_cf6d6921fb2e94 1-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ea95d98e0fec463b7c2660402f9edb31ea4c6fe9",
+  "prompts": {},
+  "sessions": {
+    "s_c84cb0b533a36d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2169c-e769-7d70-b468-862ddbcd5ee3",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
