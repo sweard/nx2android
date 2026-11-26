@@ -116,6 +116,13 @@ int main(void) {
         writable = 1;
         assert(dm_gsr2_release_resolution());
         assert(!memcmp(steps, kt_native_steps, sizeof kt_native_steps) && !memcmp(modes, native_modes, sizeof native_modes));
+        kt_scene_extent captured = rows[1];
+        kt_layout_checked = 0; kt_base = 0;
+        atomic_store(&kt_prepared_percent, 0);
+        set_resolution(preference);
+        assert(kt_base && *modes == bank && *current == bank);
+        assert(!memcmp(rows+1, &captured, sizeof captured));
+        assert(dm_gsr2_release_resolution());
     }
     free(image);
 }

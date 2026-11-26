@@ -2,6 +2,7 @@
 // recorded NVN binds. Actual VkImageView/VkSampler handles are process-local.
 // The replay and registration threads must be stopped by the caller.
 #include "checkpoint_memory.h"
+#include "checkpoint_descriptor_pools.h"
 typedef struct {
     char magic[8];
     uint32_t textures, samplers, texture_slots, sampler_slots;
@@ -32,15 +33,32 @@ static int checkpoint_binding_valid(const treg_ver *v) {
         (!t->pool || checkpoint_binding_range((uintptr_t)t->pool, sizeof *t->pool));
 }
 
+// NVN IDs are local to a pool. Host registration indices include its base.
+static int descriptor_pools_valid(const checkpoint_descriptor_pools *p, uint32_t per_pool) {
+    if (p->count > CHECKPOINT_DESCRIPTOR_POOLS || (!p->count && p->next)) return 0;
+    for (unsigned i = 0; i < p->count; ++i) {
+        uint32_t base = p->entry[i].base, end = i+1 < p->count ? p->entry[i+1].base : p->next;
+        if ((!i && base) || ((base | end) & 255) || end <= base || end-base > per_pool ||
+            p->entry[i].reserved || !checkpoint_binding_range(p->entry[i].address, 1)) return 0;
+        for (unsigned j = 0; j < i; ++j)
+            if (p->entry[j].address == p->entry[i].address) return 0;
+    }
+    return 1;
+}
+
 int dm_checkpoint_bindings_save(int fd) {
     struct stat st;
     if (fstat(fd, &st) || !S_ISREG(st.st_mode) || st.st_size) return -EINVAL;
     checkpoint_stream io = {.fd = fd};
     pthread_mutex_lock(&g_rmu);
-    binding_header h = {.magic = "NX2ABN1", .texture_slots = g_ntreg, .sampler_slots = g_nsreg, .sampler_sequence = g_sregs};
+    binding_header h = {.magic = "NX2ABN2", .texture_slots = g_ntreg, .sampler_slots = g_nsreg, .sampler_sequence = g_sregs};
     for (int i = 0; i < g_ntreg; ++i) h.textures += g_treg[i].cur.ok || g_treg[i].old;
     for (int i = 0; i < g_nsreg; ++i) h.samplers += !!g_sreg_ok[i];
-    int rc = checkpoint_io(&io, &h, sizeof h);
+    checkpoint_descriptor_pools pools[2] = {0};
+    dm_checkpoint_descriptor_pools(pools, 0);
+    int rc = descriptor_pools_valid(&pools[0], 1u << 20) && descriptor_pools_valid(&pools[1], 1u << 12)
+        ? checkpoint_io(&io, &h, sizeof h) : -ENOTSUP;
+    if (!rc) rc = checkpoint_io(&io, pools, sizeof pools);
     for (int i = 0; !rc && i < g_ntreg; ++i) {
         const treg_t *binding = &g_treg[i];
         if (!binding->cur.ok && !binding->old) continue;
@@ -74,13 +92,17 @@ int dm_checkpoint_bindings_restore(int fd) {
     checkpoint_stream io = {.fd = fd, .loading = 1};
     int rc = checkpoint_io(&io, &h, sizeof h);
     if (rc) return rc;
-    // NVN texture and sampler handles encode 20 and 12 bits. Allow the
-    // backend's extra allocation step at the top of each table.
-    if (fstat(fd, &st) || memcmp(h.magic, "NX2ABN1", 8) ||
-        h.texture_slots > (1u << 20) + 1024 || h.sampler_slots > (1u << 12) + 256 ||
+    int multi = !memcmp(h.magic, "NX2ABN2", 8);
+    if (!multi && memcmp(h.magic, "NX2ABN1", 8)) return -EBADMSG;
+    checkpoint_descriptor_pools pools[2] = {0};
+    if (multi && (rc = checkpoint_io(&io, pools, sizeof pools))) return rc;
+    if (!descriptor_pools_valid(&pools[0], 1u << 20) || !descriptor_pools_valid(&pools[1], 1u << 12)) return -EBADMSG;
+    unsigned tex_limit = pools[0].count ? pools[0].next : 1u << 20;
+    unsigned samp_limit = pools[1].count ? pools[1].next : 1u << 12;
+    if (fstat(fd, &st) || h.texture_slots > tex_limit + 1024 || h.sampler_slots > samp_limit + 256 ||
         h.textures > h.texture_slots || h.samplers > h.sampler_slots ||
-        st.st_size != (off_t)(sizeof h + sizeof(texture_binding) * h.textures +
-                                    sizeof(sampler_binding) * h.samplers + 4)) return -EBADMSG;
+        st.st_size != io.off + (off_t)(sizeof(texture_binding) * h.textures +
+                                      sizeof(sampler_binding) * h.samplers + 4)) return -EBADMSG;
     unsigned nt = h.texture_slots, ns = h.sampler_slots;
     treg_t *textures = nt ? calloc(nt, sizeof *textures) : NULL;
     samp_par *samplers = ns ? calloc(ns, sizeof *samplers) : NULL;
@@ -122,6 +144,7 @@ int dm_checkpoint_bindings_restore(int fd) {
     pthread_mutex_lock(&g_rmu);
     if (!rc && (g_ntreg || g_nsreg)) rc = -EBUSY;
     if (!rc) {
+        if (multi) dm_checkpoint_descriptor_pools(pools, 1);
         g_treg = textures; g_ntreg = nt;
         g_sreg = samplers; g_samp = handles; g_sreg_ok = valid; g_sseq = sequence; g_sold = older; g_nsreg = ns;
         __atomic_store_n(&g_sregs, h.sampler_sequence, __ATOMIC_RELEASE);
