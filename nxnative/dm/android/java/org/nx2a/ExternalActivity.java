@@ -231,7 +231,7 @@ public class ExternalActivity extends NativeActivity implements ExternalDisplay.
             menuRaster.setPixels(pixels, 2, pixels[0], 0, 0, pixels[0], pixels[1]);
             rasterState = state; rasterScroll = scroll; rasterWidth = W; rasterHeight = H; return menuRaster;
         }
-        private float menuRows(float[] data) { return data[5 + names.length * 9]; }   // overlay_layout.h OVM_ROWS: the menu's rows
+        private float menuRows(float[] data) { return data[5 + names.length * 9]; }   // overlay_layout.h OVM_VIEW_ROWS: the panel's visible rows
         private void drawMenu(Canvas c, float[] data) {
             Bitmap bitmap = menuRaster(menuState); if (bitmap == null) return;
             float rows = menuRows(data), W = getWidth(), H = getHeight(), scale = Math.min(data[1], .92f / (rows * .115f + 2 * .03f));
