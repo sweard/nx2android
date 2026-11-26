@@ -90,6 +90,20 @@ int main(int argc,char **argv) {
         memset(pixels,0,(size_t)w*h*4);ov_menu_panel(&cv,saving,0,3);
         assert(memcmp(fixed,pixels,footer)==0);
         assert(memcmp(fixed+footer,pixels+footer,(size_t)w*h*4-footer)!=0);
+        // A disabled checkpoint leaves a single filled Resume button, centered across the footer.
+        memset(pixels,0,(size_t)w*h*4);ov_menu_panel(&cv,1<<8,0,0);
+        unsigned cy=(unsigned)(last[1]+last[3]/2);
+        for(int side=1;side<=3;side+=2) {
+            unsigned x=(unsigned)(last[0]+last[2]*side/4);
+            assert(memcmp(pixels+4*((size_t)cy*w+x),C_ACCENT,4)==0);
+        }
+        unsigned min_x=w,max_x=0;
+        for(unsigned y=(unsigned)(cy-last[3]*.22f);y<cy+last[3]*.22f;y++) for(unsigned x=0;x<w;x++)
+            if(!memcmp(pixels+4*((size_t)y*w+x),C_WHITE,4)) {
+                if(x<min_x) min_x=x;
+                if(x>max_x) max_x=x;
+            }
+        assert(max_x>min_x && fabsf((min_x+max_x)*.5f-w*.5f)<last[3]*.15f);
         free(fixed);free(pixels);
     }
     free(font);return 0;
@@ -254,6 +268,15 @@ int main(void) {
         checkpoint_state=DM_CHECKPOINT_SAVED;
         touch(AMOTION_EVENT_ACTION_DOWN,right,y,W,H); touch(AMOTION_EVENT_ACTION_UP,right,y,W,H);
         assert(actions==before+5 && last_action==OVM_RESUME);
+        checkpoint_state=DM_CHECKPOINT_DISABLED;
+        touch(AMOTION_EVENT_ACTION_DOWN,left,y,W,H); touch(AMOTION_EVENT_ACTION_UP,right,y,W,H);
+        assert(actions==before+6 && last_action==OVM_RESUME);
+        touch(AMOTION_EVENT_ACTION_DOWN,left,y,W,H); touch(AMOTION_EVENT_ACTION_UP,left,y,W,H);
+        assert(actions==before+7 && last_action==OVM_RESUME);
+        atomic_store(&g_menu_hi,OVM_ROWS-1);
+        atomic_store(&g_menu_checkpoint_focus,1);
+        menu_key(DM_BTN_LEFT); menu_key(DM_BTN_A);
+        assert(actions==before+8 && last_action==OVM_RESUME);
         checkpoint_state=DM_CHECKPOINT_IDLE;
     }
     return 0;

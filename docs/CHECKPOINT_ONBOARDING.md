@@ -6,7 +6,7 @@
 
 ## 先取得同一次尝试的两份日志
 
-1. 确认游戏能正常进入可操作场景。记录 Title ID、包名、宿主构建、数据包版本、设备和 Vulkan 驱动。记录实际数据包 `mods/main.fixups.tsv` 和（如有）`mods/sdk.fixups.tsv` 中的 `# BUILD_ID`。区服、更新版本或 SDK 变化时分别记录。新包使用单屏 NVN/Vulkan、默认原生键盘 GameActivity 和 `--field-checkpoint`。没有菜单入口时先查打包选项、Activity 和已装宿主；尚未发生现场捕获。[模块身份来源](../nxnative/dm/host/loader.c) · [已装 APK 能力检查](../porter/host.py)
+1. 确认游戏能正常进入可操作场景。记录 Title ID、包名、宿主构建、数据包版本、设备和 Vulkan 驱动。记录实际数据包 `mods/main.fixups.tsv` 和（如有）`mods/sdk.fixups.tsv` 中的 `# BUILD_ID`。区服、更新版本或 SDK 变化时分别记录。使用默认原生键盘 GameActivity 的单屏 NVN/Vulkan 包按[检查点版本表](../nxnative/dm/games/checkpoint_builds.tsv)自动启用。接入时可先在本地表中加入待测 Title ID 和 main Build ID 并重新打包，完成下文验收后再发布该条目。没有菜单入口时先查版本匹配、打包选项、Activity 和已装宿主；尚未发生现场捕获。[模块身份来源](../nxnative/dm/host/loader.c) · [已装 APK 能力检查](../porter/host.py)
 2. 在一个容易辨认的场景点“保存检查点”，记下角色位置或菜单状态、是否开启固定分辨率、UI 结果。保存进程的 `log.txt` 应在下一次启动前复制。失败时本轮保存到此为止；已有旧快照的恢复结果不能证明这轮保存成功。
 3. 保存成功后结束游戏进程，重新启动并选择恢复，再复制新进程的 `log.txt`。宿主把 stderr 写到应用文件目录；每次新进程启动会将上一份轮换为 `log.prev.txt`。如果刚好只冷启动了一次，仍能一起取回。发生 Android 崩溃时补同一时间的 logcat。保留完整日志，恢复阶段多条 `refused` 行直接写 stderr，没有 `[snapshot]` 前缀。[日志打开和轮换](../nxnative/dm/android/front_android.c)
 

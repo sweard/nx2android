@@ -271,13 +271,19 @@ class HostTest(unittest.TestCase):   # porter host's update(): its refusals, the
             adb = Mock()
             adb.shell.side_effect = [PKG + '/' + launcher, shaders]
             with self.assertRaisesRegex(BuildError, error): self.host.checkpoint_build(adb, PKG, apk, True)
-        with self.assertRaisesRegex(BuildError, 'activity'):
-            self.host.update(HostDevice(self.t / 'a.apk', self.files()), PKG, field_checkpoint=True)
-        self.assertEqual(self.builds, [])
+        # Even an explicit request cannot enable an unregistered game.
+        out = self.host.update(HostDevice(self.t / 'a.apk', self.files()), PKG, field_checkpoint=True)
+        self.assertFalse(out['field_checkpoint'])
+        self.assertNotIn('--field-checkpoint', self.builds[0])
 
     def test_checkpoint_host_update_passes_the_build_option(self):
         from unittest.mock import patch
-        dev = HostDevice(self.t / 'a.apk', self.files())
+        title = '010062E01FE0C000'
+        files = self.files(title_id=title, version='v262144', profile_h=self.host.profile_hash(title))
+        files['mods/main.fixups.tsv'] = '# BUILD_ID\t135c83cdea06aec2d858e1bc7d53d72f\n'
+        dev = HostDevice(self.t / 'a.apk', files)
+        with self.assertRaisesRegex(BuildError, 'activity'):
+            self.host.update(dev, PKG, field_checkpoint=True)
         with patch.object(self.host, 'checkpoint_build', return_value=True) as detect:
             out = self.host.update(dev, PKG, field_checkpoint=True)
         self.assertTrue(detect.call_args.args[-1])

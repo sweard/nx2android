@@ -368,7 +368,8 @@ class Misc(unittest.TestCase):
     def test_checkpoint_options(self):
         from porter import cli
         parse = cli._parser().parse_args
-        self.assertFalse(pipeline.Options.from_args(parse(['port', 'game'])).field_checkpoint)
+        self.assertIsNone(pipeline.Options.from_args(parse(['port', 'game'])).field_checkpoint)
+        self.assertFalse(pipeline.Options.from_args(parse(['port', 'game', '--no-field-checkpoint'])).field_checkpoint)
         self.assertTrue(pipeline.Options.from_args(parse(['port', 'game', '--field-checkpoint'])).field_checkpoint)
         self.assertIsNone(parse(['host']).field_checkpoint)
         self.assertTrue(parse(['host', '--field-checkpoint']).field_checkpoint)

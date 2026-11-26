@@ -104,6 +104,10 @@ CFLAGS = [TARGET, f'-O{a.O}'] + DBG + ['-fPIC', '-fno-omit-frame-pointer', '-ffi
 if a.manual_checkpoint: CFLAGS.append('-DDM_MANUAL_CHECKPOINT=1')
 if a.field_checkpoint:
     CFLAGS.append('-DDM_FIELD_CHECKPOINT=1')
+    sys.path.insert(0, str(DM / 'android/tools'))
+    from android_profile import checkpoint_builds
+    builds = checkpoint_builds(a.game)
+    if builds: CFLAGS.append('-DDM_CHECKPOINT_BUILDS=' + ','.join(f'"{b}"' for b in builds))
     PORT.remove(DM / 'android/checkpoint_android.c')
     PORT += srcs('android/checkpoint/*.c')
     # A derived profile can reuse its upstream constructor rows. The loader

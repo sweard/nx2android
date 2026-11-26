@@ -25,7 +25,7 @@
 #include <sys/stat.h>
 static const char *survey_files, *survey_private;
 static int diagnostic_samples;
-static _Atomic int checkpoint_state = DM_CHECKPOINT_IDLE;
+static _Atomic int checkpoint_state = DM_CHECKPOINT_DISABLED;
 static _Atomic int sample_image;
 void dm_overlay_redraw(void);
 
@@ -163,6 +163,7 @@ static void *survey_threads(void *unused) {
 }
 
 void dm_checkpoint_request(void) {
+    if (dm_checkpoint_state() == DM_CHECKPOINT_DISABLED) return;
     int previous = atomic_exchange(&checkpoint_state, DM_CHECKPOINT_SAVING);
     if (previous == DM_CHECKPOINT_SAVING) return;
     dm_checkpoint_notify(DM_CHECKPOINT_SAVING);
@@ -219,6 +220,7 @@ void dm_checkpoint_load_modules(const char *dir, const char **mods, int count) {
 }
 
 void dm_checkpoint_after_texture_sweep(void) {
+    if (!survey_private) return;
     static unsigned frames;
     if (atomic_exchange(&sample_image, 0)) {
         char path[1024], staging[1024];
@@ -242,10 +244,35 @@ void dm_checkpoint_after_texture_sweep(void) {
     dm_checkpoint_report_images();
 }
 
+// Check the installed pack before offering a slot or reserving checkpoint memory.
+static int supported_pack(const char *files_root) {
+#ifdef DM_CHECKPOINT_BUILDS
+    static const char *const supported[] = {DM_CHECKPOINT_BUILDS};
+    char path[1024], line[256], build[34];
+    if (snprintf(path, sizeof path, "%s/mods/main.fixups.tsv", files_root) >= (int)sizeof path) return 0;
+    FILE *f = fopen(path, "r");
+    if (!f) return 0;
+    int matches = 0;
+    while (fgets(line, sizeof line, f)) {
+        if (sscanf(line, "# BUILD_ID %33s", build) != 1) continue;
+        for (size_t i = 0; i < sizeof supported / sizeof supported[0]; ++i)
+            if (!strcmp(build, supported[i])) matches = 1;
+        break;
+    }
+    fclose(f);
+    return matches;
+#else
+    (void)files_root;
+    return 0;
+#endif
+}
+
 int dm_checkpoint_init(const char *private_root, const char *files_root) {
+    if (!supported_pack(files_root)) return 0;
     survey_private = private_root;
     survey_files = files_root;
     char opt[1024];
     diagnostic_samples = snprintf(opt, sizeof opt, "%s/.runtime-survey-enable-core", files_root) < (int)sizeof opt && !access(opt, F_OK);
+    atomic_store(&checkpoint_state, DM_CHECKPOINT_IDLE);
     return dm_checkpoint_slot_init(private_root, files_root);
 }

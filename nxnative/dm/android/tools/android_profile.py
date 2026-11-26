@@ -54,6 +54,17 @@ class ProfileError(Exception):
     pass
 
 
+def checkpoint_builds(title):
+    builds = []
+    table = ANDROID.parent / 'games/checkpoint_builds.tsv'
+    for line in table.read_text(encoding='utf-8').splitlines():
+        if not line or line.startswith('#'): continue
+        game_id, build, _ = line.split('\t')
+        if not re.fullmatch('[0-9a-f]{32}', build): raise ProfileError(f'{table}: invalid main build {build!r}')
+        if game_id == title.upper(): builds.append(build)
+    return builds
+
+
 LAYOUTS = ('tablet', 'phone')
 THEMES = ANDROID / 'themes'
 

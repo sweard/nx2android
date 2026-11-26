@@ -588,7 +588,7 @@ static void ov_menu_panel(const ov_canvas *cv, int st, int position, int checkpo
         float shift = in_body ? top : 0, slot = ov_menu_scroll_slot(tab, offset, row), paint_p[4] = {p[0], p[1] - shift, p[2], p[3]};
         r[1] -= shift; float cy = r[1] + rh / 2, x1 = r[0] + rw - rh * 0.15f;
         if (it < 0) continue;
-        if (row == sel && (it != OVM_RESUME || !checkpoint)) cv_rrect(target, r[0], r[1] + rh * 0.08f, r[0] + rw, r[1] + rh * 0.92f, rh * 0.14f, C_HI);
+        if (row == sel && it != OVM_RESUME) cv_rrect(target, r[0], r[1] + rh * 0.08f, r[0] + rw, r[1] + rh * 0.92f, rh * 0.14f, C_HI);
         if (it == OVM_TAB) {   // the tabs: a segmented bar, the open one filled
             int tabs = ov_menu_tabs();
             float th = rh * 0.62f, tw = rw / tabs;
@@ -603,10 +603,11 @@ static void ov_menu_panel(const ov_canvas *cv, int st, int position, int checkpo
         }
         if (it == OVM_RESUME) {
             cv_rrect(target, r[0], r[1], r[0] + rw, r[1] + 1, 0.5f, C_LINE);
+            float pad = rh * 0.12f, width = checkpoint ? rw * 0.5f : rw;
+            float b[4] = {r[0] + pad, cy - rh * 0.30f, width - 2 * pad, rh * 0.60f};
+            int focus = checkpoint && (st >> OVM_CHECKPOINT_FOCUS_BIT & 1);
             if (checkpoint) {
                 const char *label = checkpoint_label(checkpoint);
-                int focus = st >> OVM_CHECKPOINT_FOCUS_BIT & 1;
-                float pad = rh * 0.12f, b[4] = {r[0] + pad, cy - rh * 0.30f, rw * 0.5f - 2 * pad, rh * 0.60f};
                 if (checkpoint_saving(st)) {
                     float radius = b[3] * 0.18f, step = b[3] * 0.16f;
                     int scale = (int)fmaxf(1, roundf(b[3] * 0.40f / PF_CAP));
@@ -622,11 +623,9 @@ static void ov_menu_panel(const ov_canvas *cv, int st, int position, int checkpo
                 } else {
                     cv_button(target, b, label, 0, row == sel && focus);
                 }
-                b[0] += rw * 0.5f;
-                cv_button(target, b, ovm_label(OVM_RESUME), checkpoint != DM_CHECKPOINT_SAVING, row == sel && !focus && checkpoint != DM_CHECKPOINT_SAVING);
-            } else {
-                cv_text(target, r[0] + (rw - cv_text_w(ovm_label(OVM_RESUME), is)) / 2, cy, ovm_label(OVM_RESUME), is, C_ACCENT);
+                b[0] += width;
             }
+            cv_button(target, b, ovm_label(OVM_RESUME), checkpoint != DM_CHECKPOINT_SAVING, row == sel && !focus && checkpoint != DM_CHECKPOINT_SAVING);
             continue;
         }
         const char *lbl = ovm_label(it), *btn = ovm_button(it);

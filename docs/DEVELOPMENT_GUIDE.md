@@ -368,7 +368,7 @@ resets each submission; the counter remains cumulative for the host process.
 
 ### Runtime checkpoints
 
-For a single-screen NVN/Vulkan game, build with `python -m porter port <folder> --field-checkpoint`. This enables the **Save checkpoint** action and cold-start restore in `org.nx2a.GameActivity`. Use the default native keyboard activity. External-display activities and the code-less controller-keyboard APK lack the checkpoint dialogs.
+For a single-screen NVN/Vulkan game, `python -m porter port <folder>` enables **Save checkpoint** and cold-start restore in `org.nx2a.GameActivity` when the Title ID and main Build ID match [the checkpoint build list](../nxnative/dm/games/checkpoint_builds.tsv). Other builds show one full-width **Resume** button. Use `--no-field-checkpoint` to disable checkpoints for a registered build. Use the default native keyboard activity. External-display activities and the code-less controller-keyboard APK lack the checkpoint dialogs.
 
 For an installed port with matching modules and a registered profile, `python -m porter host --package <package>` preserves its current checkpoint capability. Pass `--field-checkpoint` to enable it on an APK that already has the checkpoint UI, or `--no-field-checkpoint` to disable it. Host updates replace the native library in the installed APK and retain its activity. An older APK without the UI needs a new APK from `porter port`. These flags do not change the data pack format.
 

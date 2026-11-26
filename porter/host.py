@@ -14,7 +14,7 @@ from porter import datapack, paths, toolchain
 from porter.adb import AdbError
 from porter.driver import installed_apk
 from porter.paths import DM
-from porter.upstream import BuildError, gsr2_package, say
+from porter.upstream import BuildError, android_profile, gsr2_package, say
 
 
 def module_tables(cuts_tsv, obs_tsv):
@@ -170,8 +170,7 @@ def checkpoint_build(adb, package, src, requested):
     return True
 
 
-def device_gsr2_build(adb, files, title):
-    build = gsr2_package.main_build(adb.read_text(f'{files}/mods/main.fixups.tsv'))
+def device_gsr2_build(adb, files, title, build):
     if not gsr2_package.required(title, build):
         return ''
     bundle = shlex.quote(f'{files}/shaders.dmsv')
@@ -208,10 +207,12 @@ def update(adb, package, jobs=os.cpu_count() or 8, *, field_checkpoint=None):
     if not ndk: raise BuildError('no Android NDK found: python -m porter tools --download')
     with tempfile.TemporaryDirectory(prefix='nx2a_host_') as t:
         src, out = Path(t) / 'installed.apk', Path(t) / 'host.apk'
-        build = device_gsr2_build(adb, files, title_id)
+        main = gsr2_package.main_build(adb.read_text(f'{files}/mods/main.fixups.tsv'))
+        build = device_gsr2_build(adb, files, title_id, main)
         say(f'GSR2: {build or "no matching game build and shader bundle"}')
         adb.run('pull', installed_apk(adb, package), src, timeout=600)
-        enabled = checkpoint_build(adb, package, src, field_checkpoint)
+        enabled = main in android_profile.checkpoint_builds(title_id) and checkpoint_build(adb, package, src, field_checkpoint)
+        say(f'Runtime checkpoints: {"enabled" if enabled else "disabled"} for {title_id} / {main or "unknown build"}')
         say(f'{package}: building the host of {title_id} ({"debug" if debug else "release"} build)')
         r = subprocess.run([sys.executable, str(DM / 'android/build.py'), '--game', title_id, '--ndk', str(ndk), '--out', t, '--gsr2-build', build, '--lib', '--jobs', str(jobs)] + ([] if debug else ['--release']) + (['--field-checkpoint'] if enabled else []),
                            capture_output=True, text=True, errors='replace', env=clean_env())

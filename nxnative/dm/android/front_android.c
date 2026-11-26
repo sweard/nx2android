@@ -1009,7 +1009,7 @@ static void menu_key(uint64_t bit) {   // a controller key pressed while the men
         if (hi > 0 && ov_menu_item(atomic_load(&g_menu_tab), hi) < 0) atomic_store(&g_menu_hi, OVM_ROWS - 1);   // (the other tab has fewer rows)
     }
     else if (bit == DM_BTN_A) {
-        if (item == OVM_RESUME && atomic_load(&g_menu_checkpoint_focus)) item = OVM_CHECKPOINT;
+        if (item == OVM_RESUME && dm_checkpoint_state() != DM_CHECKPOINT_DISABLED && atomic_load(&g_menu_checkpoint_focus)) item = OVM_CHECKPOINT;
         menu_do(hi < 0 ? OVM_RESUME : item);
     }
     else if (bit == DM_BTN_B || bit == DM_BTN_PLUS) menu_close();

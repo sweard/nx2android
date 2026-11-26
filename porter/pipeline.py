@@ -71,7 +71,7 @@ class Options:
     touch: bool = False                # a game played by touch: the on-screen gamepad starts hidden (TOUCH_SETTINGS), so it takes none of the game's touches
     no_menu_button: bool = False       # no on-screen menu button: DM_MENU_BUTTON=0 in env.txt (dm/android/front_android.c g_menu_btn); Back opens the menu (issue #397)
     native_keyboard: bool = True       # Unicode Android IME by default (requires SDK/JDK); --no-native-keyboard keeps the controller keyboard
-    field_checkpoint: bool = False     # experimental Vulkan runtime checkpoints in the single-screen GameActivity
+    field_checkpoint: bool | None = None   # auto for registered single-screen Vulkan builds
     external_display: bool = False     # compile the optional external-screen activity with the Android SDK
     vercode_offset: int = 0            # added to the APK's versionCode: a rebuild of the same game version installs over a build with a higher one (version_code)
     alias_headroom: int = None         # GB more alias region (alias_headroom); None: ALIAS_HEADROOM for a version the profile was not brought up on, none for one it was
@@ -1000,10 +1000,14 @@ class Port:
     def host(self):
         PROG.stage('host', step=f'NDK {self.tools["ndk"].name}')
         out = self.aw / ('host-debug' if self.o.debug else 'host')
-        build = gsr2_package.verify(self.g.id, nsp.build_id(self.game / 'ExeFS/main'), self.dmsv)
+        main = nsp.build_id(self.game / 'ExeFS/main')
+        build = gsr2_package.verify(self.g.id, main, self.dmsv)
         say(f'GSR2: {build or "no matching game build and shader bundle"}')
+        checkpoint = (self.o.field_checkpoint is not False and self.o.native_keyboard and not self.o.external_display
+                      and not self.gl and main in android_profile.checkpoint_builds(self.g.id))
+        say(f'Runtime checkpoints: {"enabled" if checkpoint else "disabled"} for {self.g.id} / {main}')
         nsp.run([PY, DM / 'android/build.py', '--game', self.g.id, '--ndk', self.tools['ndk'], '--out', out, '--gsr2-build', build, '--lib', '--jobs', str(self.o.jobs)] + ([] if self.o.debug else ['--release'])
-                + (['--field-checkpoint'] if self.o.field_checkpoint else []) + (['--adrenotools'] if self.o.vulkan_driver or self.o.native_keyboard or self.o.external_display else []), self.logs / 'android_host.log', env=self.env)
+                + (['--field-checkpoint'] if checkpoint else []) + (['--adrenotools'] if self.o.vulkan_driver or self.o.native_keyboard or self.o.external_display else []), self.logs / 'android_host.log', env=self.env)
         self.so = out / 'libdmhost.so'
         if not self.so.is_file(): raise BuildError(f'build.py made no {self.so}')
         ph = out / 'gen' / self.g.id / 'game_profile.h'   # the profile the host was built from, for the data pack (porter host compares it with its checkout's)
