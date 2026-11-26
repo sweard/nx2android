@@ -147,9 +147,6 @@ static int tex_desc_for(int st, const dmsv_bind *b, uint64_t h, VkDescriptorImag
     if (tid && g_var_now != 3 && !g_tracing && !logfs && g_tvc[ck].epoch == g_set_epoch && g_tvc[ck].gen == g_tex_gen && g_tvc[ck].tid == tid && g_tvc[ck].dim == b->dim && g_tvc[ck].arr == (b->flags & 1) && g_tvc[ck].sc == sc) {
         // (no last_use here: the entry was made in this submission, whose fence the miss below already gave the image; the fence changes only at the commit.
         // Writing it again touched a scattered image record per binding, ~77,000 a frame in Sifu)
-#if DM_HAS_GSR2_ADAPTER
-        if (storage && g_tvc[ck].im) g_tvc[ck].im->gs_stamp = 0;
-#endif
         ii->imageView = g_tvc[ck].v; vk_texdump_note(g_tvc[ck].im); g_tvc_hit++;
         if (g_tvc[ck].num && !storage) ii->sampler = samp_for(st, b, h, 1);
         return g_tvc[ck].num;
@@ -164,9 +161,6 @@ static int tex_desc_for(int st, const dmsv_bind *b, uint64_t h, VkDescriptorImag
         VkFormat vf = 0; const vkfmt_t *tf = sc && !view_num(t, v) ? vk_fmt(v && v->set_format ? v->format : t->d.format) : NULL;
         if (tf && !tf->compressed && !tf->dec && !tf->depth && !tf->stencil) vf = vk_int_fmt(tf->bpb, sc == 2);
         vkimg_t *im = NULL; ii->imageView = vf ? vk_tex_view_as(t, v, b->dim, b->flags & 1, 0, &im, vf) : vk_tex_view(t, v, b->dim, b->flags & 1, 0, &im); if (storage && im) im->gpu_w = 1;
-#if DM_HAS_GSR2_ADAPTER
-        if (storage && im) im->gs_stamp = 0;
-#endif
         if (vf && ii->imageView && vk_view_fmt == vf) { static int once; if (!once++) VKLOG("storage image: nvn format %#x viewed as vk %d for a %s image binding", t->d.format, vf, sc == 1 ? "uint" : "int"); }
         // DM_VK_BIND_DUMP=<pixel shader key hex>:<binding>: write the storage of the texture that binding really resolved to (slots alone are polluted by stale
         // entries from earlier draws and say nothing about which binding reads which); deswizzle it offline with the dimensions in the line
@@ -506,15 +500,6 @@ static VkDescriptorSet stage_set(int st, vkshader_t *s, uint32_t *dofs, VkDescri
         if (d != RD_UBO && d != RD_SAMPLED && d != RD_TBUF && d != RD_IMAGE && d != RD_SAMPLER) { vk_readback_unknown(); break; }
     }
     int memo = st < 3 && !g_x_nosetmemo && !g_tracing && !g_var_now && !g_x_nosetc && !g_x_nodrvc && !g_ubolog_key && g_td_off < 0 && set_memo_ok(s), verify = 0;
-#if DM_HAS_GSR2_ADAPTER
-    const gsr2_composite_pass *composite = st == 1 && gs_color ? gs_composite_stage() : NULL;
-#if DM_GAME_PROGRAM_ID == GSR2_FE3H_ID
-    const gsr2_composite_pass *fe3h_scene = st == 1 && g_gsr2_mode == 2 && fe3h_scene_view ? gs_composite_stage() : NULL;
-    if (fe3h_scene) memo = 0;
-#endif
-    if (composite) memo = 0;
-#endif
-
     uint32_t vd[96]; uint64_t vum = 0, vim = 0;   // verify: what the memo gave
     if (!memo) g_memo_why[5]++;
     // the constant buffer descriptors now, unless the last set holds without looking at them (nothing moved since)
@@ -542,22 +527,7 @@ static VkDescriptorSet stage_set(int st, vkshader_t *s, uint32_t *dofs, VkDescri
         wr->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET; wr->dstSet = set; wr->dstBinding = b->binding; wr->descriptorCount = 1;
         VkBuffer buf; VkDeviceSize off, len;
         switch (b->kind) {
-        case RK_SUPPORT:
-#if DM_HAS_GSR2_ADAPTER
-            if (composite && gs_profile->ue && composite == gs_profile->composite &&
-                gs_profile->ue->composite_uses_fragcoord && S.pass_w != gs_color->w) {
-                // This fullscreen shader reads only render_scale[0].x at byte 192.
-                // Convert scaled gl_FragCoord to guest pixels before it computes UV.
-                const size_t size = 208;
-                float *support = vk_scratch(size, V.props.limits.minUniformBufferOffsetAlignment, &buf, &off);
-                memset(support, 0, size);
-                support[192 / sizeof(float)] = (float)S.pass_w / gs_color->w;
-                bi[nw] = (VkDescriptorBufferInfo){buf, off, size};
-                break;
-            }
-#endif
-            bi[nw] = (VkDescriptorBufferInfo){vk_support_buffer(), 0, 65536};
-            break;
+        case RK_SUPPORT: bi[nw] = (VkDescriptorBufferInfo){vk_support_buffer(), 0, 65536}; break;
         case RK_C1: vk_shader_c1(s, &buf, &off, &len); bi[nw] = (VkDescriptorBufferInfo){buf, off, len}; break;
         case RK_CBUF: if (have_cbd && i < CBD_MAX) bi[nw] = cbd[i]; else cbuf_desc(st, s, b, &bi[nw]); if (ncb < MEMO_CB) { mci[ncb] = (uint8_t)i; mcd[ncb++] = bi[nw]; } break;
         case RK_DRV: {
@@ -593,22 +563,6 @@ static VkDescriptorSet stage_set(int st, vkshader_t *s, uint32_t *dofs, VkDescri
                              b->kind == RK_TEX_UBO ? mem_handle(ubo_word(st, b->reg, b->off + 8 * k)) : (b->off >= 0 ? c2_handle(st, b->off + 8 * k) : 0);
                 g_tex_sseq = b->kind == RK_TEX && b->reg >= 0 && b->reg < 256 ? S.tex_sseq[st][b->reg] : 0;
                 int num = tex_desc_for(st, b, h, &ii[nii + k], 0);
-#if DM_HAS_GSR2_ADAPTER
-#if DM_GAME_PROGRAM_ID == GSR2_FE3H_ID
-                if (fe3h_scene && !num && !k && b->kind == RK_TEX && b->reg == (int)fe3h_scene->sample && h == fe3h_scene_handle) {
-                    ii[nii + k].imageView = fe3h_scene_view;
-                    if (!(g_tex_frame % 120)) VKLOG("SGSR2 pass %016llx samples reconstructed scene into %ux%u window", (unsigned long long)s->key, S.pass_w, S.pass_h);
-                }
-#endif
-                if (composite && !num && b->kind == RK_TEX && b->reg == (int)composite->sample && !k) {
-                    vkimg_t *source = gs_current_source(h);
-                    if (source && source != gs_color) {
-                        ii[nii + k].imageView = source->gs_scaled->full;
-                        if (composite->final_window) gs_window_draw = 1;
-                    }
-                }
-#endif
-
                 if (num && i < 64) { if (num == 1) g_num_um |= 1ull << i; else g_num_im |= 1ull << i; }
             }
             wr->pImageInfo = &ii[nii]; nii += (uint32_t)cnt; wr->descriptorCount = (uint32_t)cnt; wr->descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; nw++;

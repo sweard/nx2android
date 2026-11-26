@@ -24,19 +24,7 @@ ap.add_argument('--release', action='store_true', help='a build to keep installe
 ap.add_argument('--manual-checkpoint', '--background-checkpoint', action='store_true', help='experimental manual checkpoints on GameActivity')
 ap.add_argument('--adrenotools', action='store_true', help='also libadrenotools.so and its hooks (third_party/libadrenotools), which the APK carries with a custom Vulkan driver')
 ap.add_argument('--field-checkpoint', action='store_true', help='restore an Android Vulkan game session across process restarts (experimental)')
-gsr2 = ap.add_mutually_exclusive_group()
-gsr2.add_argument('--gsr2-build', default='', help='main build ID verified against the shader bundle by the porter')
-gsr2.add_argument('--gsr2-data', type=Path, help='check an existing data pack before building a replacement host')
 a = ap.parse_args()
-if a.gsr2_data:
-    sys.path.insert(0, str(DM / 'android/tools'))
-    import gsr2_package
-    fixups = a.gsr2_data / 'mods/main.fixups.tsv'
-    build = gsr2_package.main_build(fixups.read_text(encoding='utf-8')) if fixups.is_file() else ''
-    a.gsr2_build = gsr2_package.verify(a.game, build, a.gsr2_data / 'shaders.dmsv')
-    print(f'GSR2: {a.gsr2_build or "no matching game build and shader bundle"}', flush=True)
-if a.gsr2_build and not re.fullmatch('[0-9a-f]{32}', a.gsr2_build):
-    ap.error('invalid verified GSR2 build ID')
 if a.field_checkpoint:
     if a.gfx != 'vk' or not a.lib:
         ap.error('--field-checkpoint requires a Vulkan shared library (--lib)')
@@ -62,11 +50,6 @@ obj = out / 'obj'; gen = out / 'gen'; obj.mkdir(parents=True, exist_ok=True); (g
 subprocess.run([sys.executable, str(DM / 'games/game.py'), 'header', a.game, str(gen / a.game / 'game_profile.h')], check=True)
 # and its Android keys (android.tsv): the on-screen gamepad's layout
 subprocess.run([sys.executable, str(DM / 'android/tools/android_profile.py'), 'header', a.game, str(gen / a.game / 'android_profile.h')], check=True)
-# A missing approval disables reconstruction. Only the replay translation unit needs this header.
-gsr2_header = gen / a.game / 'gsr2_package.h'
-gsr2_text = f'#define DM_GSR2_PACKAGED_BUILD "{a.gsr2_build}"\n'
-if not gsr2_header.exists() or gsr2_header.read_text() != gsr2_text:
-    gsr2_header.write_text(gsr2_text, encoding='ascii')
 # the settings registry's names (nxnative/dm/settings.tsv) for dm_settings.c: a setting outside it is logged as a typo
 def _settings_names():
     names = sorted(l.split('\t', 1)[0] for l in (DM / 'settings.tsv').read_text(encoding='utf-8').splitlines() if l.startswith('DM_'))

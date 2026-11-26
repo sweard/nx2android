@@ -4,7 +4,6 @@
 #pragma once
 #include <math.h>
 #include "checkpoint_android.h"
-#include "gsr2_profile.h"
 #include <stdlib.h>
 #include "dm_input.h"
 // The overlay's UI language (implemented in front_android.c: DM_UI_LANG=zh|en, else device locale).
@@ -235,25 +234,20 @@ static inline int fpso_pack(int rows, int pos, int colour, int outline, int size
 static inline int fpso_scale(int base, int size) { return size == FPSO_SMALL ? (base > 1 ? base - 1 : 1) : size == FPSO_LARGE ? base + 1 : size == FPSO_XL ? 2 * base : base; }
 // ---- the pause menu: a panel in the middle of the window: a row of tabs, the open tab's rows, and Resume. Everything is placed in a panel rectangle p
 // (x, y, width, height: the window's for touches, the raster's for drawing), so the touches and the drawing agree ----
-enum { OVM_OVERLAY, OVM_OPACITY, OVM_EDIT, OVM_RUMBLE, OVM_FPS, OVM_MODE, OVM_EXPORT, OVM_IMPORT, OVM_PAD, OVM_AUDIO, OVM_FRAMEGEN, OVM_FG_TARGET, OVM_FG_IMPORT, OVM_ROW_FPS, OVM_ROW_SOC, OVM_ROW_BAT, OVM_ROW_DRV, OVM_ROW_GRAPH, OVM_POS, OVM_COLOUR, OVM_OUTLINE, OVM_SIZE, OVM_RESUME, OVM_TAB, OVM_CHECKPOINT, OVM_DRIVER, OVM_GSR2, OVM_GSR2_SIZE, OVM_GSR2_OUTPUT, OVM_SR, OVM_SHARP, OVM_ZONE, OVM_N };   // OVM_TAB: the tabs' row;
+enum { OVM_OVERLAY, OVM_OPACITY, OVM_EDIT, OVM_RUMBLE, OVM_FPS, OVM_MODE, OVM_EXPORT, OVM_IMPORT, OVM_PAD, OVM_AUDIO, OVM_FRAMEGEN, OVM_FG_TARGET, OVM_FG_IMPORT, OVM_ROW_FPS, OVM_ROW_SOC, OVM_ROW_BAT, OVM_ROW_DRV, OVM_ROW_GRAPH, OVM_POS, OVM_COLOUR, OVM_OUTLINE, OVM_SIZE, OVM_RESUME, OVM_TAB, OVM_CHECKPOINT, OVM_DRIVER, OVM_SR, OVM_SHARP, OVM_ZONE, OVM_N };   // OVM_TAB: the tabs' row;
             // OVM_EDIT: the layout editor; OVM_MODE: handheld (performance) or docked (resolution); OVM_EXPORT, OVM_IMPORT: the save manager (saves_android.c);
             // OVM_SR: Super resolution (the present pass upscales the game's picture into a larger window); OVM_SHARP: its Sharpness slider (0 to 100 percent by 25);
             // OVM_PAD: a controller's face buttons by their position or by their label (front_android.c pad_labels)
-#define OVM_GSR2_TAB 4
-#define OVM_TABS (4 + DM_HAS_GSR2_ADAPTER)
-static inline int ov_menu_tabs(void) { return 4 + (DM_HAS_GSR2_ADAPTER && vk_gsr2_available()); }
+#define OVM_TABS 4
 #define OVM_PER_TAB 10
 static const int OVM_TAB_ITEMS[OVM_TABS][OVM_PER_TAB] = {
     {OVM_OVERLAY, OVM_OPACITY, OVM_EDIT, OVM_ZONE, OVM_RUMBLE, OVM_PAD, OVM_AUDIO, -1, -1, -1},
     {OVM_FPS, OVM_SR, OVM_SHARP, OVM_MODE, OVM_EXPORT, OVM_IMPORT, OVM_FRAMEGEN, OVM_FG_TARGET, OVM_DRIVER, OVM_FG_IMPORT},
     {OVM_ROW_FPS, OVM_ROW_SOC, OVM_ROW_BAT, OVM_ROW_DRV, OVM_ROW_GRAPH, -1, -1, -1, -1, -1},
     {OVM_POS, OVM_COLOUR, OVM_OUTLINE, OVM_SIZE, -1, -1, -1, -1, -1, -1},
-#if DM_HAS_GSR2_ADAPTER
-    {OVM_GSR2, OVM_GSR2_SIZE, OVM_GSR2_OUTPUT, -1, -1, -1, -1, -1, -1, -1},
-#endif
 };
-static const char *const OVM_TAB_NAMES_EN[] = {"Gamepad", "Game", "Counter", "Style", "GSR2"};
-static const char *const OVM_TAB_NAMES_ZH[] = {"手柄", "游戏", "计数", "样式", "GSR2"};
+static const char *const OVM_TAB_NAMES_EN[OVM_TABS] = {"Gamepad", "Game", "Counter", "Style"};
+static const char *const OVM_TAB_NAMES_ZH[OVM_TABS] = {"手柄", "游戏", "计数", "样式"};
 #define OVM_TAB_NAMES (dm_ui_zh() ? OVM_TAB_NAMES_ZH : OVM_TAB_NAMES_EN)
 #define OVM_ROWS (OVM_PER_TAB + 2)   // logical row capacity: tabs, body actions, Resume
 #define OVM_VISIBLE 5              // fixed-size body viewport; extra items scroll instead of shrinking all text
@@ -282,11 +276,7 @@ int dm_menu_driver_available(void);
 int dm_menu_audio_available(void);
 int dm_menu_lossless_import_available(void);
 static inline int ov_menu_item(int tab, int row) {
-    if (tab == OVM_GSR2_TAB && tab >= ov_menu_tabs()) return -1;
-    int item = row == 0 ? OVM_TAB : row == OVM_ROWS - 1 ? OVM_RESUME : row > 0 && row < OVM_ROWS - 1 ? OVM_TAB_ITEMS[tab >= 0 && tab < OVM_TABS ? tab : 0][row - 1] : -1;
-#if DM_HAS_GSR2_ADAPTER
-    if (item == OVM_GSR2_SIZE && dm_gsr2_input_mode() != GSR2_CUSTOM) return -1;
-#endif
+    int item = row == 0 ? OVM_TAB : row == OVM_ROWS - 1 ? OVM_RESUME : row > 0 && row < OVM_ROWS - 1 ? OVM_TAB_ITEMS[tab & (OVM_TABS - 1)][row - 1] : -1;
     if (item == OVM_DRIVER && !dm_menu_driver_available()) return -1;
     if (item == OVM_AUDIO && !dm_menu_audio_available()) return -1;
     return item == OVM_FG_IMPORT && !dm_menu_lossless_import_available() ? -1 : item;
@@ -308,18 +298,6 @@ static inline int ov_menu_item(int tab, int row) {
 #define OVT_ST 0x10000   // the mode bits of dm_menu_state, one each: OVT_ST the text entry, OVE_ST the layout editor, OVS_ST the save picker (tests/test_menu_bits.py)
 int dm_menu_state(void);
 enum { OVX_IDLE, OVX_BUSY, OVX_DONE, OVX_NOSAVE, OVX_FAILED };   // Export save: the button; copying; the export's name; the game has not saved yet; failed
-// GSR2 reuses the export and opacity fields on its own page. Including its
-// three choices in the raster key keeps slider dragging and mode changes live.
-static inline int ov_gsr2_page_state(int mode, int percent, int output) {
-    return ((5 + mode) << 20) | ((percent - GSR2_MIN_PERCENT) / GSR2_STEP << 9) |
-           ((output == 720 ? 0 : output == 1440 ? 2 : 1) << 13);
-}
-static inline int ov_menu_page_state(int tab, int export_state) {
-    return ((tab & 1) << 8) | ((tab >> 1) << 15) | (export_state << 20);
-}
-static inline int ov_menu_page(int st) {
-    return ((st >> 20) & 7) >= 5 ? OVM_GSR2_TAB : ((st >> 8) & 1) | (((st >> 15) & 1) << 1);
-}
 int dm_save_note(char *out, int cap);   // front_android.c: the outcome (OVX_*) and the last export's name, or why it failed
 static inline float ov_menu_scale(void) { float s = dm_overlay_scale(), fit = 0.92f / (OVM_VIEW_ROWS * OV_MENU_ROW + 2 * OV_MENU_PAD); return s < fit ? s : fit; }
 static inline void ov_menu_rect(float W, float H, float r[4]) {   // x, y, width, height in window pixels
@@ -379,7 +357,7 @@ static inline int ov_menu_scroll_drag(int tab, int start, float delta_rows) {
     int value = start + (int)lroundf(delta_rows * OVM_SCROLL_UNITS), limit = ov_menu_scroll_limit(tab) * OVM_SCROLL_UNITS;
     return value < 0 ? 0 : value > limit ? limit : value;
 }
-static inline int ov_menu_tab_at(float x, const float p[4]) { float r[4]; ov_menu_view_rowrect(p, 0, r); int tabs = ov_menu_tabs(), t = (int)((x - r[0]) / (r[2] / tabs)); return t < 0 ? 0 : t >= tabs ? tabs - 1 : t; }
+static inline int ov_menu_tab_at(float x, const float p[4]) { float r[4]; ov_menu_view_rowrect(p, 0, r); int t = (int)((x - r[0]) / (r[2] / OVM_TABS)); return t < 0 ? 0 : t >= OVM_TABS ? OVM_TABS - 1 : t; }
 static inline int ov_menu_fg_choice(int item) { return item == OVM_FG_TARGET; }
 static inline float ov_menu_fg_choice_width(const float row[4]) { return row[2] * 0.30f; }
 static inline int ov_menu_fg_choice_at(float x, const float panel[4], float index) {
@@ -397,19 +375,6 @@ static inline int ov_menu_track_value(float x, const float p[4], float row) {   
 static inline int ov_menu_track_pct(float x, const float p[4], float row) {   // the same track as a percent of its width 0..100 (the Sharpness slider)
     float t[3]; ov_menu_track(p, row, t); float f = (x - t[0]) / t[2]; f = f < 0 ? 0 : f > 1 ? 1 : f;
     return (int)lroundf(f * 100.0f);
-}
-
-// Reserve the right half of the scale row for the percentage and pixel extent.
-static inline void ov_gsr2_track(const float panel[4], float slot, float track[3]) {
-    float row[4]; ov_menu_view_rowrect(panel, slot, row);
-    track[0] = row[0] + row[2] * 0.30f;
-    track[1] = row[1] + row[3] * 0.5f;
-    track[2] = row[2] * 0.25f;
-}
-static inline int ov_gsr2_track_value(float x, const float panel[4], float slot) {
-    float t[3]; ov_gsr2_track(panel, slot, t);
-    float fraction = fminf(1, fmaxf(0, (x - t[0]) / t[2]));
-    return GSR2_MIN_PERCENT + GSR2_STEP * (int)lroundf(fraction * ((GSR2_MAX_PERCENT - GSR2_MIN_PERCENT) / GSR2_STEP));
 }
 
 // ---- the layout editor (front_android.c, from the menu's Edit layout): the game stays held; every control (the menu button too) can be dragged, and

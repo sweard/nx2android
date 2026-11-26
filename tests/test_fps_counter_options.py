@@ -26,9 +26,6 @@ class FpsCounterOptions(unittest.TestCase):
 #include <stdlib.h>
 #include <string.h>
 #include "overlay_layout.h"
-static int gsr2_mode, available;
-int vk_gsr2_available(void) { return available; }
-int dm_gsr2_input_mode(void) { return gsr2_mode; }
 static _Atomic int g_fps_opts = FPSO_DEFAULT, g_fps_ver;
 int dm_menu_lossless_import_available(void) { return 1; }
 int dm_ui_zh(void) { return 0; }
@@ -42,27 +39,9 @@ static int parse(const char *line) { return fps_opt_parse(line); }
 int main(int argc, char **argv) {
     assert(argc == 2);   // a scratch file in the test's own folder (tmpfile() on MinGW with msvcrt makes it in the drive's root)
     // four tabs, five visible body rows; the Counter tab: the five rows (FPS, SOC, BAT, driver, graph); the Style tab: the four choices then a blank
-    assert(ov_menu_tabs() == 4 && ov_menu_item(4, 1) == -1);
-    available = 1; // Off still offers the tab on a verified device.
-    assert(ov_menu_tabs() == OVM_TABS);
-    assert(OVM_TABS == (DM_HAS_GSR2_ADAPTER ? 5 : 4) && OVM_VISIBLE == 5 && OVM_VIEW_ROWS == 7);
+    assert(OVM_TABS == 4 && OVM_VISIBLE == 5 && OVM_VIEW_ROWS == 7);
     assert(ov_menu_item(0, 0) == OVM_TAB && ov_menu_item(3, OVM_ROWS - 1) == OVM_RESUME);
     assert(ov_menu_item(1, 1) == OVM_FPS && ov_menu_item(0, 7) == OVM_AUDIO && ov_menu_item(0, 4) == OVM_ZONE && ov_menu_item(1, 2) == OVM_SR && ov_menu_item(1, 3) == OVM_SHARP);
-    for (int t = 0; t < OVM_TABS; t++) {
-        const int heights[] = {720, 1080, 1440};
-        for (gsr2_mode = 0; gsr2_mode <= 2; ++gsr2_mode) for (int h = 0; h < 3; h++) {
-            for (int p = 50; p <= 100; p += 5) {
-                int state = t == OVM_GSR2_TAB ? ov_gsr2_page_state(gsr2_mode, p, heights[h]) : ov_menu_page_state(t, OVX_FAILED);
-                assert(ov_menu_page(state) == t && !(state & (OVT_ST | OVS_ST | OVE_ST)));
-                if (t == OVM_GSR2_TAB) {
-                    assert((state >> 20 & 7) == 5 + gsr2_mode && (state >> 13 & 3) == h);
-                    assert((state >> 9 & 15) == (p - 50) / 5 && ov_menu_item(t, 1) == OVM_GSR2);
-                    assert(ov_menu_item(t, 2) == (gsr2_mode == GSR2_CUSTOM ? OVM_GSR2_SIZE : -1));
-                    assert(ov_menu_item(t, 3) == OVM_GSR2_OUTPUT);
-                } else assert((state >> 20 & 7) == OVX_FAILED);
-            }
-        }
-    }
     const int counter[5] = {OVM_ROW_FPS, OVM_ROW_SOC, OVM_ROW_BAT, OVM_ROW_DRV, OVM_ROW_GRAPH}, style[5] = {OVM_POS, OVM_COLOUR, OVM_OUTLINE, OVM_SIZE, -1};
     for (int r = 0; r < 5; r++) { assert(ov_menu_item(2, r + 1) == counter[r]); assert(ov_menu_item(3, r + 1) == style[r]); }
     assert(ov_menu_item(2, 6) == -1 && ov_menu_item(2, 7) == -1 && ov_menu_item(3, 5) == -1 && ov_menu_item(3, 6) == -1 && ov_menu_item(3, 7) == -1 && ov_menu_item(1, 7) == OVM_FRAMEGEN);
@@ -116,13 +95,11 @@ int main(int argc, char **argv) {
             (tmp / 'android_profile.h').write_text(android_profile.header(None), encoding='utf-8')
             c, exe = tmp / 'check.c', tmp / 'check'
             c.write_text(harness, encoding='utf-8')
-            for flags in ([], ['-DDM_GAME_PROGRAM_ID=0x010062e01fe0c000ull']):
-                result = subprocess.run([cc, *flags, '-std=gnu11', '-Wall', '-Wextra', '-Werror', f'-I{tmp}', f'-I{DM / "android"}', f'-I{DM / "host"}',
-                                         str(c), '-lm', '-o', str(exe)], capture_output=True, text=True)
-                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                result = subprocess.run([str(exe), str(tmp / 'settings.txt')], capture_output=True, text=True)
-                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-
+            result = subprocess.run([cc, '-std=gnu11', '-Wall', '-Wextra', '-Werror', f'-I{tmp}', f'-I{DM / "android"}', f'-I{DM / "host"}',
+                                     str(c), '-lm', '-o', str(exe)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            result = subprocess.run([str(exe), str(tmp / 'settings.txt')], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_driver_name_and_glyphs(self):
         core = (DM / 'android/gfx_vk_core.c').read_text(encoding='utf-8')
@@ -138,11 +115,6 @@ int main(int argc, char **argv) {
     def test_profile_settings(self):
         for k, v in (('fps_rows', '31'), ('fps_pos', '3'), ('fps_colour', '4'), ('fps_outline', '0'), ('fps_size', '2')):
             self.assertIn(v, android_profile.SETTINGS[k])
-        self.assertEqual(android_profile.SETTINGS['gsr2'], ('0', '1'))
-        self.assertEqual(android_profile.SETTINGS['gsr2_height'], ('0', '720', '576'))
-        self.assertEqual(android_profile.SETTINGS['gsr2_input'], ('0', '1', '2'))
-        self.assertEqual(android_profile.SETTINGS['gsr2_percent'], tuple(str(p) for p in range(50, 101, 5)))
-        self.assertEqual(android_profile.SETTINGS['gsr2_output'], ('720', '1080', '1440'))
         self.assertIn('16', android_profile.SETTINGS['fps_rows'])
         self.assertNotIn('32', android_profile.SETTINGS['fps_rows'])
         self.assertNotIn('4', android_profile.SETTINGS['fps_pos'])

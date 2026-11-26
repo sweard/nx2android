@@ -13,7 +13,6 @@
 #include <stdatomic.h>
 #include <stdint.h>
 #include "dm.h"
-#include "gsr2_profile.h"
 #include "nvn_obj.h"
 #include "nvn_mtl.h"
 
@@ -24,7 +23,7 @@
 // ---- Vulkan entry points (loaded from libvulkan.so) ----
 #define VK_FNS(X) \
     X(vkCreateInstance) X(vkEnumeratePhysicalDevices) X(vkGetPhysicalDeviceProperties) X(vkGetPhysicalDeviceProperties2) X(vkGetPhysicalDeviceFeatures2) \
-    X(vkGetPhysicalDeviceMemoryProperties) X(vkGetPhysicalDeviceQueueFamilyProperties) X(vkGetPhysicalDeviceFormatProperties) X(vkGetPhysicalDeviceImageFormatProperties) X(vkCreateDevice) X(vkGetDeviceProcAddr) \
+    X(vkGetPhysicalDeviceMemoryProperties) X(vkGetPhysicalDeviceQueueFamilyProperties) X(vkGetPhysicalDeviceFormatProperties) X(vkCreateDevice) X(vkGetDeviceProcAddr) \
     X(vkEnumerateDeviceExtensionProperties) X(vkGetPhysicalDeviceSurfaceCapabilitiesKHR) X(vkGetPhysicalDeviceSurfaceFormatsKHR) X(vkGetPhysicalDeviceSurfacePresentModesKHR) \
     X(vkCreateAndroidSurfaceKHR) X(vkDestroySurfaceKHR) X(vkGetPhysicalDeviceSurfaceSupportKHR)
 #define VK_DEV_FNS(X) \
@@ -75,7 +74,6 @@ uint32_t *spv_ubo_component(const uint32_t *w, uint32_t nw, uint32_t *onw, uint3
 uint32_t *spv_gs_split(const uint32_t *w, uint32_t nw, int mode, uint32_t *onw, char *why, size_t nwhy);
 uint32_t vk_mem_type(uint32_t bits, VkMemoryPropertyFlags want, VkMemoryPropertyFlags avoid);
 const char *dm_app_driver_choice(void);
-uint64_t vk_gsr2_last_extent(void);  // last validated scene/output widths and heights, packed as four 16-bit values
 void vk_driver_frame_shown(void);
 void vk_init(void);   // once, from mtl_init or the first use
 
@@ -114,12 +112,6 @@ const vkfmt_t *vk_fmt(int nvn_format);   // NULL when the format has no Vulkan c
 void vk_bc_decode(const vkfmt_t *f, const uint8_t *src, size_t pitch, uint32_t w, uint32_t h, uint32_t z, uint8_t *dst);   // (f->dec) gfx_vk_tex.c bc_decode
 typedef struct vkimg vkimg_t;
 struct vkimg {
-#if DM_HAS_GSR2_ADAPTER
-    vkimg_t *gs_scaled;
-    uint64_t gs_stamp, gs_final_stamp;
-    _Atomic int gs_refs;
-    _Atomic int gs_presented;
-#endif
 #ifdef DM_MANUAL_CHECKPOINT
     nvn_texdesc checkpoint_desc;
 #endif
@@ -157,12 +149,6 @@ struct vkimg {
     struct vkimg *ovl[8]; int novl;   // the other images over some of the same memory (a texture of another description over it: on the Switch it sees these texels)
     uint64_t wseq, rseen;             // when it was last rendered to (gfx_vk_tex.c g_wseq); the newest overlapping write already reported
 };
-#if DM_HAS_GSR2_ADAPTER
-vkimg_t *vk_gsr2_surface(VkCommandBuffer cb, vkimg_t *owner, uint32_t w, uint32_t h);
-int vk_gsr2_prepare_ms_hud(void);
-void vk_gsr2_surface_release(vkimg_t *s);
-void vk_gsr2_surface_blit(VkCommandBuffer cb, vkimg_t *src, vkimg_t *dst);
-#endif
 vkimg_t *vk_tex(const tex_t *t);                                 // the image of a texture object (created, uploaded or refreshed as needed)
 void vk_lrz_forget(vkimg_t *im);                                 // an image is being dropped: the pass code forgets it (gfx_vk_exec.c)
 int vk_window_bottom_up(void);                                   // the game draws in lower-left origin mode: its window image is stored bottom-up (gfx_vk_exec.c)
@@ -206,7 +192,6 @@ typedef struct {
     int gs_split; VkShaderModule gs_mod[2]; // 1: effects/raster modules ready, 2: cannot safely separate, 0: not checked
 } vkshader_t;
 vkshader_t *vk_shader(uint64_t key, int stage);   // NULL when the bundle has no such shader
-int vk_shader_stage(uint64_t key);
 vkshader_t *vk_shader_gs_topo(vkshader_t *gs, VkPrimitiveTopology topo);   // the geometry shader translated for the draw's input primitive (shader_vk.py gs_variant_key); gs when there is none
 VkShaderModule vk_shader_module(vkshader_t *s, uint64_t um, uint64_t im, uint32_t xo, int fd, uint64_t vi);   // the module, or its variant (integer views; extra outputs; fragment depth written)
 int vk_shader_gs_split_ready(vkshader_t *s); // both modules exist before either pass may be recorded

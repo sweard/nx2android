@@ -24,7 +24,6 @@ ROOT = Path(__file__).resolve().parents[1]
 TOOLS = ROOT / 'nxnative/dm/android/tools'
 sys.path.insert(0, str(TOOLS))
 import dmsv
-import temporal_candidates
 
 
 def reflection(key='0000000000000001', stage='cs'):
@@ -85,7 +84,7 @@ class ExportChecks(unittest.TestCase):
             try: numeric[name] = importlib.import_module(name)
             except ModuleNotFoundError: numeric[name] = None
         env = dict(**numeric, collections=collections, cf=cf, os=os, json=json, struct=struct,
-                   tempfile=tempfile, subprocess=subprocess, dmsv=dmsv, temporal_candidates=temporal_candidates, Path=Path, re=re,
+                   tempfile=tempfile, subprocess=subprocess, dmsv=dmsv, Path=Path, re=re,
                    shader_products=products, GAME=game, MAP=str(table), XLATE_DLL='translator.dll',
                    a=SimpleNamespace(pkg=str(self.root/'pkg'), out=str(self.out), capture=None, keys='',
                                      jobs=self.jobs, dotnet='dotnet', zstd=0, report=str(self.report)),

@@ -266,7 +266,6 @@ DM_VK_DYN_UBO	bool		debug	start	gfx_vk_shader.c	no dynamic uniform-buffer offset
 DM_VK_FDZ	bool	1	profile	live	gfx_vk_exec.c	no fragment-depth variants: draws that test a depth buffer a fragment shader wrote through `gl_FragDepth` (in the last two presents) normally get a variant of their fragment shader that writes `gl_FragDepth = gl_FragCoord.z`, the same depth tested after the shader, out of Adreno's early culling, whi
 DM_VK_FLIPY	bool		debug	live	gfx_vk_exec.c	the old clip-space y convention (pictures flip)
 DM_VK_FRONT	int		debug	start	gfx_vk_exec.c	2`
-DM_VK_GSR2	int	0	debug	live	gfx_vk_exec_gsr2.inc	Experimental SGSR2: 0 off, 1 independent output, 2 composite validated frames.
 DM_VK_GS_SPLIT	bool	0	profile	live	gfx_vk_exec.c	1 = split geometry-shader draws (gfx_vk_gs_split.c)
 DM_VK_IMG_BLOCKS	bool		debug	start	gfx_vk_core.c	small images take a slot of a shared memory block (default); 0: every image gets memory of its own (A/B)
 DM_VK_LIN_BACK	bool		debug	live	gfx_vk_exec.c	what the GPU draws into a linear render target (NVN `LINEAR_RENDER_TARGET`) stays in the Vulkan image, as before (default: copied back to the texture's pool memory after the pass, so the CPU can read it; Super Mario Odyssey's ground fog reads its wave surface this way)
@@ -344,7 +343,6 @@ DM_VK_SUBGROUP_ONE_LANE	bool		debug	start	gfx_vk_shader.c	no shader module is re
 DM_VK_SUBGROUP_PIN	int		debug	start	gfx_vk_core.c	game pipelines' fragment and compute stages run at that subgroup size (`VkPipelineShaderStageRequiredSubgroupSizeCreateInfo`), where the device's `requiredSubgroupSizeStages` allows it; a compute workgroup larger than `maxComputeWorkgroupSubgroups` such subgroups keeps the driver's size. Off by defa
 DM_VK_SUBMIT_SPLIT	bool		debug	live	gfx_vk_core.c	don't submit the pieces early
 DM_VK_SYNC_PRESENT	str		debug	start	gfx_vk_present.c	present on the game thread instead of the present thread
-DM_VK_TEMPORAL_PROBE	bool	0	debug	live	gfx_vk_exec_temporal.inc	Log temporal input bindings at known guest draws.
 DM_VK_TEXBIND	str		debug	start	gfx_vk_exec.c	once per matching pipeline, a log line for every texture the draw has bound (stage, slot, ID, size, NVN format, levels, pool and offset). `all`: every draw that samples something, one group per pixel shader
 DM_VK_TEXBIND_DUMP	int		debug	start	gfx_vk_exec.c	writes the storage of that group's first mipmapped texture (`all`: the first 6 slots) as the GPU has it, block-linear, to `$DM_ROOT/texbind_<vs>_<fs>_s<slot>.bin`; the log line beside it has the dimensions and format to deswizzle it offline
 DM_VK_TEXDUMP	hex		debug	start	gfx_vk_exec.c	during the dump, the first sampled image at that pool offset (the trace prints both) is blitted to RGBA16F and dumped with the passes (level 0, up to 6 layers, pass number −100 − layer): a compressed texture such as a BC6H cube map, decoded by the GPU

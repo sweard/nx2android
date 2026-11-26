@@ -26,5 +26,3 @@ env	DM_AUDREN_CATCHUP_FRAMES=200
 # Adreno 740); with the fence ring the submit takes 0.05 ms. On Qualcomm's driver the ring cost nothing measurable (settings.tsv DM_VK_X_FENCES)
 env	DM_VK_X_FENCES=1
 setting	docked=1
-setting	gsr2_output=1080
-setting	gsr2_input=1

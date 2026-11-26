@@ -10,7 +10,6 @@ from porter.paths import DM, NXNATIVE
 for d in (DM / 'games', DM / 'tools', DM / 'android/tools', DM / 'gfx/tools'):
     if str(d) not in sys.path: sys.path.insert(0, str(d))
 
-import gsr2_package      # noqa: E402
 import android_profile   # noqa: E402
 import game              # noqa: E402
 import nacp              # noqa: E402

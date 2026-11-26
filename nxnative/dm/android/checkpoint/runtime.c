@@ -1,6 +1,5 @@
 // Opt-in Android runtime checkpoint capture and startup.
 #include "dm.h"
-#include "gsr2_profile.h"
 #include "checkpoint_memory.h"
 #include "checkpoint_android.h"
 #include "saves_android.h"
@@ -139,9 +138,6 @@ static void *survey_threads(void *unused) {
         }
     }
     LOG("[snapshot] thread sample: handles=%u kernel waits=%u clock readers=%u result=%d", count, n, clocks, rc);
-#if DM_HAS_GSR2_INPUT_CONTROL
-    if (!rc && !dm_gsr2_release_resolution()) rc = -EAGAIN;
-#endif
     if (!rc) {
         dm_checkpoint_report_files();
         dm_checkpoint_report_audio();
