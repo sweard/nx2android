@@ -1,0 +1,21 @@
+.claude/skills/nx2android-checkpoint-triage/SKILL.md
+  s_c84cb0b533a36d::t_df4bdff3c43b2e 12
+.claude/skills/nx2android-checkpoint-triage/SKILL.en.md
+  s_c84cb0b533a36d::t_df4bdff3c43b2e 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "db22b826a5653d9fd463d97ea5c208faa90539cd",
+  "prompts": {},
+  "sessions": {
+    "s_c84cb0b533a36d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2169c-e769-7d70-b468-862ddbcd5ee3",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
