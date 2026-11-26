@@ -19,6 +19,7 @@
 #include "rot_vert.spv.h"
 #include "rot_frag.spv.h"
 static int framegen_display_clock(void);
+int dm_opmode(void);
 #include "sr_vert.spv.h"
 #include "sr_frag.spv.h"
 
@@ -215,6 +216,10 @@ static int swap_make(void) {
     static int rejected_height;
     int height = !dm_external_active() && ww >= wh && dm_gsr2_input_mode() != GSR2_OFF &&
                  vk_gsr2_has_profile() ? dm_gsr2_output_height() : 0;
+#if DM_GAME_PROGRAM_ID == GSR2_FE3H_ID
+    // Keep the docked 16:9 picture at 1080p even when reconstruction is off.
+    if (!height && ww >= wh && !dm_external_active() && dm_opmode() == 1) height = 1080;
+#endif
     if (ww != (int)gs_window_extent.width || wh != (int)gs_window_extent.height || gs_swap_requested != height) {
         if (g_swap) swap_destroy();
         rejected_height = 0;
@@ -1730,7 +1735,6 @@ static void log_framegen_rate(uint64_t now, enum framegen_outcome outcome, uint6
 static void present_game_frame(vkimg_t *im, const int crop[4], double period, uint64_t ticket, uint64_t ready_ns, int queued) {
     static int was_docked;
     extern uint8_t *dm_fps_state;
-    int dm_opmode(void);
     int docked = dm_opmode();
     int movie = dm_fps_state && __atomic_load_n((uint32_t *)(dm_fps_state + 4), __ATOMIC_RELAXED);
     if (vk_lsfg_poll(mono_ns())) g_fg_sample_ns = 0;

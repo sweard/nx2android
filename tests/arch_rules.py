@@ -71,6 +71,8 @@ bad = []
 for f in files:
     m = re.match(r'nxnative/dm/games/([^/]+)/(.+)', f)
     if not m: continue
+    # Shared temporal profiles are included by the Android renderer across multiple builds.
+    if m.group(1) == 'temporal' and m.group(2) in {'builds.h', 'digimon_122.inc', 'fe3h_120.inc', 'ot2_111.inc', 'ue_resolution.inc', 'ue_titles.inc'}: continue
     if not re.fullmatch(r'0100[0-9A-F]{12}', m.group(1)): bad.append(f'{f} (folder is not a title ID)')
     elif m.group(2) not in GAME_FILES: bad.append(f + (' (rename to README.md)' if m.group(2) == 'ANDROID.md' else ''))
 check('game folders hold only known profile files', not bad, ', '.join(bad))

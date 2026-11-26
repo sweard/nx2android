@@ -25,6 +25,7 @@ TEMPLATE = REPO / 'docs/GAME_README_TEMPLATE.md'
 PER_ROW = 3
 TO_REPO = '../../../../'   # from nxnative/dm/games/<title ID>/ to the repository root
 MENU = {'overlay': 'on-screen gamepad shown (1) or hidden (0)', 'rumble': 'rumble on (1) or off (0)', 'docked': 'docked mode (1) or handheld mode (0)',
+        'gsr2_input': 'GSR2 input mode (0 off, 1 automatic, 2 custom)', 'gsr2_output': 'GSR2 output height in pixels',
         'fps': 'frame-rate counter shown (1) or hidden (0)', 'opacity': 'on-screen gamepad opacity, percent'}
 SYSDATA = {'0100000000000802': 'MiiModel', '0100000000000810': 'shared font (Nintendo extension)', '0100000000000811': 'shared font (standard)',
            '0100000000000812': 'shared font (Korean)', '0100000000000813': 'shared font (traditional Chinese)', '0100000000000814': 'shared font (simplified Chinese)'}

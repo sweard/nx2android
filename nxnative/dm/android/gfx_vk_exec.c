@@ -21,6 +21,11 @@ void vk_sub_update(uint64_t dst, const void *data, uint64_t n);
 int prog_key(const prog_t *p, unsigned st, uint8_t key[8]);
 
 #include "gfx_vk_gsr2_profile.h"
+#if DM_GAME_PROGRAM_ID == GSR2_FE3H_ID
+// Replay-thread override for the current tone-map draw. Reset before each draw.
+static VkImageView fe3h_scene_view;
+static uint64_t fe3h_scene_handle;
+#endif
 static const gsr2_profile *gs_profile;  // Replay thread, selected at submission start.
 
 // A running APK has one guest build and one immutable DMSV mapping. Wait until

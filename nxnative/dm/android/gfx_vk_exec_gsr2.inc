@@ -191,5 +191,6 @@ static int gsr2_replace_dispatch(VkCommandBuffer cb, const p_dispatch *groups) {
 }
 
 #include "gfx_vk_gsr2_ot2.inc"
+#include "gfx_vk_gsr2_fe3h.inc"
 
 #include "gfx_vk_gsr2_ue.inc"

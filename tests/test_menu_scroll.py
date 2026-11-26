@@ -125,7 +125,7 @@ typedef struct { int action; float x, y; } AInputEvent;
 #define AMotionEvent_getX(e,i) ((void)(i),(e)->x)
 #define AMotionEvent_getY(e,i) ((void)(i),(e)->y)
 static _Atomic int g_edit, g_sp_on, g_set_opacity = 60, g_set_fg_target = 60;
-static _Atomic int g_gsr2_percent = 100;
+static _Atomic int g_gsr2_percent = 100, g_set_sharp;
 static int actions, last_action = -1;
 static void dm_overlay_redraw(void) {}
 static void dm_haptics_android_tap(void) {}
@@ -135,7 +135,7 @@ static void menu_do(int item) { actions++; last_action=item; }
 static void menu_close(void) {}
 static void ed_key(uint64_t bit) { (void)bit; }
 static void sp_key(uint64_t bit) { (void)bit; }
-''' + state + csrc.function(front, 'static void menu_opacity(') + csrc.function(front, 'static void menu_gsr2_percent(') + csrc.between(front, 'static void menu_tab(int t)', 'static void menu_set_fg_choice(') + csrc.function(front, 'static void menu_set_fg_choice(') + csrc.function(front, 'static void menu_touch(') + csrc.function(front, 'static void menu_key(') + r'''
+''' + state + csrc.function(front, 'static void menu_sharp(') + csrc.function(front, 'static void menu_opacity(') + csrc.function(front, 'static void menu_gsr2_percent(') + csrc.between(front, 'static void menu_tab(int t)', 'static void menu_set_fg_choice(') + csrc.function(front, 'static void menu_set_fg_choice(') + csrc.function(front, 'static void menu_touch(') + csrc.function(front, 'static void menu_key(') + r'''
 static void touch(int action, float x, float y, float W, float H) {
     AInputEvent e={action,x,y}; menu_touch(&e,W,H);
 }
@@ -145,16 +145,16 @@ int main(void) {
         float W=screens[n][0], H=screens[n][1], p[4], r[4]; ov_menu_rect(W,H,p);
         assert(p[0]>=0 && p[1]>=0 && p[2]<=W && p[3]<=H);
         atomic_store(&g_menu_tab,1); atomic_store(&g_menu_scroll,0); g_menu_ptr=-1; actions=0;
-        assert(ov_menu_body_count(1)==7 && ov_menu_scroll_limit(1)==2);
+        assert(ov_menu_body_count(1)==9 && ov_menu_scroll_limit(1)==4);
         assert(ov_menu_scroll_limit(0)==0);
-        for (int offset=0;offset<=2;offset++) for (int slot=0;slot<OVM_VIEW_ROWS;slot++) {
+        for (int offset=0;offset<=4;offset++) for (int slot=0;slot<OVM_VIEW_ROWS;slot++) {
             ov_menu_view_rowrect(p,slot,r);
             int row=slot==0?0:slot==OVM_VIEW_ROWS-1?OVM_ROWS-1:ov_menu_body_row(1,offset+slot-1);
             assert(ov_menu_scroll_row_at(r[0]+r[2]/2,r[1]+r[3]/2,W,H,1,offset)==row);
             assert(ov_menu_scroll_slot(1,offset,row)==slot);
             assert(ov_menu_item(1,row)>=0);  // the unavailable audio action consumes no space
         }
-        ov_menu_view_rowrect(p,3,r); float x=r[0]+r[2]*.2f, y=r[1]+r[3]/2, rh=r[3];
+        ov_menu_view_rowrect(p,4,r); float x=r[0]+r[2]*.2f, y=r[1]+r[3]/2, rh=r[3];
         touch(AMOTION_EVENT_ACTION_DOWN,x,y,W,H);
         int previous=0;
         for(int step=0;step<3;step++) {
@@ -166,18 +166,18 @@ int main(void) {
         touch(AMOTION_EVENT_ACTION_UP,x,y-.48f*rh,W,H);
         assert(atomic_load(&g_menu_scroll)==previous && actions==0); // release does not snap
         float fraction=ov_menu_scroll_rows(previous);
-        assert(ov_menu_scroll_rowrect(p,1,fraction,3,r));
+        assert(ov_menu_scroll_rowrect(p,1,fraction,4,r));
         x=r[0]+r[2]*.2f;y=r[1]+r[3]/2;
         touch(AMOTION_EVENT_ACTION_DOWN,x,y,W,H);touch(AMOTION_EVENT_ACTION_UP,x,y,W,H);
-        assert(last_action==OVM_EXPORT && actions==1); // hit test follows a fractionally shifted row
+        assert(last_action==OVM_MODE && actions==1); // hit test follows a fractionally shifted row
         atomic_store(&g_menu_scroll,0);actions=0;
-        ov_menu_view_rowrect(p,3,r);x=r[0]+r[2]*.2f;y=r[1]+r[3]/2;
+        ov_menu_view_rowrect(p,4,r);x=r[0]+r[2]*.2f;y=r[1]+r[3]/2;
         touch(AMOTION_EVENT_ACTION_DOWN,x,y,W,H);
-        touch(AMOTION_EVENT_ACTION_MOVE,x,y-3.3f*rh,W,H);
-        touch(AMOTION_EVENT_ACTION_UP,x,y-3.3f*rh,W,H);
-        assert(atomic_load(&g_menu_scroll)==2*OVM_SCROLL_UNITS && actions==0); // no accidental export on swipe
-        int goal_row = ov_menu_body_row(1, 5);
-        assert(ov_menu_item(1,goal_row)==OVM_FG_TARGET && ov_menu_scroll_rowrect(p,1,2,goal_row,r));
+        touch(AMOTION_EVENT_ACTION_MOVE,x,y-5.3f*rh,W,H);
+        touch(AMOTION_EVENT_ACTION_UP,x,y-5.3f*rh,W,H);
+        assert(atomic_load(&g_menu_scroll)==4*OVM_SCROLL_UNITS && actions==0); // no accidental mode change on swipe
+        int goal_row = ov_menu_body_row(1, 7);
+        assert(ov_menu_item(1,goal_row)==OVM_FG_TARGET && ov_menu_scroll_rowrect(p,1,4,goal_row,r));
         x=r[0]+r[2]-r[3]*.15f-ov_menu_fg_choice_width(r)*.5f; y=r[1]+r[3]/2;
         touch(AMOTION_EVENT_ACTION_DOWN,x,y,W,H); touch(AMOTION_EVENT_ACTION_UP,x,y,W,H);
         assert(atomic_load(&g_set_fg_target)==0 && actions==0);

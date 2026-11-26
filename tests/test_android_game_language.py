@@ -27,7 +27,8 @@ class AndroidGameLanguage(unittest.TestCase):
                     manifest = datapack.build(pack, profile=profile, version='v0', display='1.0', patched=None,
                                               romfs=None, shaders=None, language=language, languages=supported)
                     self.assertEqual(manifest['language'], language)
-                    self.assertEqual((pack / 'env.txt').read_text(encoding='utf-8').splitlines()[1:], expected)
+                    rows = (pack / 'env.txt').read_text(encoding='utf-8').splitlines()
+                    self.assertEqual([row for row in rows if row.startswith('DM_LANG')], expected)
 
     @unittest.skipUnless(CC, 'a host C compiler is required')
     def test_locale_mapping(self):

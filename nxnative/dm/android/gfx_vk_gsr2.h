@@ -16,5 +16,7 @@ typedef struct {
 VkImage vk_gsr2_record(VkCommandBuffer cb, VkImageView color, VkImageView depth, const vk_gsr2_params *params,
                        uint64_t frame);
 
+VkImageView vk_gsr2_result_view(void);
+
 // GPU copy of the active upper-left subrectangle, before later guest passes reuse depth.
 VkImageView vk_gsr2_capture_depth(VkCommandBuffer cb, vkimg_t *source, uint32_t w, uint32_t h);
