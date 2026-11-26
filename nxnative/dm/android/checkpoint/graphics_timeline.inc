@@ -4,6 +4,19 @@ int dm_checkpoint_present_begin(int report_busy);
 void dm_checkpoint_present_end(void);
 int dm_checkpoint_present_ticket(uint64_t *value, int restore);
 
+static uint64_t checkpoint_present_limit;
+
+// The display queue was drained before capture. Its old window deadlines use
+// the previous host's monotonic clock, which can start over after a reboot.
+static void checkpoint_reset_window_pace(win_t *w) {
+    if (!checkpoint_present_limit || !w->pace) return;
+    for (int i = 0; i < w->ntex; ++i) {
+        if (__atomic_load_n(&w->ticket[i], __ATOMIC_ACQUIRE) >= checkpoint_present_limit) return;
+    }
+    w->pace = 0;
+    memset(w->avail, 0, sizeof w->avail);
+}
+
 // ProgramSetShaders owns the only reliable lifetime for the control section.
 // Persist keys captured at registration, plus the allocator high-water mark
 // so later programs and textures cannot collide with restored serials.
@@ -65,6 +78,7 @@ int dm_checkpoint_graphics_timeline(int fd, int restore) {
         ((t.frame | t.jobs | t.device | t.ticket) & ASYNC_FENCE) ||
         g_frame || g_job_enq || g_job_done) return -EBADMSG;
     if ((rc = dm_checkpoint_present_ticket(&t.ticket, 1))) return rc;
+    checkpoint_present_limit = t.ticket + 1;
     if (has_modes) {
         mtl_set_origin_lower_left((modes >> 1) & 1);
         mtl_set_depth_zero(modes & 1);

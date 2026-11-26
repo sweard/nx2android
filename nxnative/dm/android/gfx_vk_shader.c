@@ -207,6 +207,114 @@ static uint32_t *spv_vs_init(const uint32_t *w, uint32_t nw, uint32_t *onw) {
 fail:
     free(ptr); free(loc); return NULL;
 }
+// Look up a four-word type declaration preceding its use.
+static const uint32_t *spv_type4(const uint32_t *w, uint32_t end, uint32_t op, uint32_t id) {
+    for (uint32_t i = 5; i < end; i += w[i] >> 16)
+        if (w[i] == ((4u << 16) | op) && w[i + 1] == id) return w + i;
+    return NULL;
+}
+// Three Houses indexes an array of interpolated vec4s in its eye shader.
+// On the Adreno 840 those input loads produced noisy irises and black tiles in
+// the following bloom passes. Copy the interpolated values once per fragment
+// as separate locations matching the vertex outputs, then index a private copy.
+static uint32_t *spv_private_varyings(const uint32_t *w, uint32_t nw, uint32_t *onw) {
+    uint32_t fn = 0, entry = 0, input = 0, array = 0, scalar = 0, vector = 0, length_id = 0;
+    uint32_t entry_start = 0, copy_at = 0;
+    for (uint32_t i = 5; i < nw;) {
+        uint32_t n = w[i] >> 16, op = w[i] & 0xffff;
+        if (!n || n > nw - i) return NULL;
+        if (op == 15 && n >= 4 && w[i + 1] == 4) entry = w[i + 2]; // Fragment
+        if (!fn && op == 59 && n == 4 && w[i + 3] == 1) {
+            const uint32_t *ptr = spv_type4(w, i, 32, w[i + 1]);
+            const uint32_t *arr = ptr ? spv_type4(w, i, 28, ptr[3]) : NULL;
+            const uint32_t *vec = arr ? spv_type4(w, i, 23, arr[2]) : NULL;
+            if (vec && vec[3] == 4) {
+                if (input) return NULL;
+                input = w[i + 2];
+                array = arr[1];
+                vector = vec[1];
+                scalar = vec[2];
+                length_id = arr[3];
+            }
+        }
+        if (op == 54 && n == 5) {
+            if (!fn) fn = i;
+            if (w[i + 2] == entry) entry_start = i;
+        }
+        if (entry_start && !copy_at && op == 248) copy_at = i + n;
+        else if (copy_at == i && (op == 59 || op == 8 || op == 317)) copy_at += n;
+        i += n;
+    }
+    if (!input || !fn || !copy_at || copy_at >= nw) return NULL;
+    uint32_t scalar_ptr = 0, count = 0, index_type = 0, location = UINT32_MAX;
+    for (uint32_t i = 5; i < fn; i += w[i] >> 16) {
+        if (w[i] == ((4u << 16) | 32) && w[i + 2] == 1 && w[i + 3] == scalar) scalar_ptr = w[i + 1];
+        if (w[i] == ((4u << 16) | 43) && w[i + 2] == length_id) { count = w[i + 3]; index_type = w[i + 1]; }
+        if ((w[i] & 0xffff) == 71 && w[i + 1] == input) {
+            if (w[i] != ((4u << 16) | 71) || w[i + 2] != 30) return NULL; // only ordinary smooth inputs
+            location = w[i + 3];
+        }
+    }
+    if (!scalar_ptr || !count || count > 16 || location > 32 - count) return NULL;
+    uint32_t *out = malloc(((size_t)nw + 32 * count + 32) * sizeof *out);
+    if (!out) return NULL;
+    memcpy(out, w, 5 * sizeof *out);
+    uint32_t pos = 5, next = w[3], input_ptr = next++, private_array = next++;
+    uint32_t private_scalar = next++, private_vec = next++, vars = next;
+    next += count;
+    uint32_t indices = next;
+    next += count;
+#define SPV_EMIT(...) do { const uint32_t words[] = {__VA_ARGS__}; memcpy(out + pos, words, sizeof words); pos += sizeof words / sizeof *words; } while (0)
+    for (uint32_t i = 5; i < nw;) {
+        uint32_t n = w[i] >> 16, op = w[i] & 0xffff;
+        if (i == fn) {
+            SPV_EMIT(4u << 16 | 32, input_ptr, 1, vector);
+            SPV_EMIT(4u << 16 | 32, private_array, 6, array);
+            SPV_EMIT(4u << 16 | 32, private_scalar, 6, scalar);
+            SPV_EMIT(4u << 16 | 32, private_vec, 6, vector);
+            SPV_EMIT(4u << 16 | 59, private_array, input, 6);
+            for (uint32_t k = 0; k < count; k++) {
+                SPV_EMIT(4u << 16 | 59, input_ptr, vars + k, 1);
+                SPV_EMIT(4u << 16 | 43, index_type, indices + k, k);
+            }
+        }
+        if (i == copy_at) {
+            for (uint32_t k = 0; k < count; k++) {
+                uint32_t value = next++, element = next++;
+                SPV_EMIT(4u << 16 | 61, vector, value, vars + k);
+                SPV_EMIT(5u << 16 | 65, private_vec, element, input, indices + k);
+                SPV_EMIT(3u << 16 | 62, element, value);
+            }
+        }
+        if (op == 15 && w[i + 2] == entry) {
+            uint32_t begin = pos;
+            memcpy(out + pos, w + i, n * sizeof *out);
+            pos += n;
+            // Interface ids follow the NUL-terminated entry point name.
+            uint32_t k = 3;
+            while (k < n && !memchr(w + i + k++, 0, 4)) {}
+            while (k < n && w[i + k] != input) k++;
+            if (k == n) { free(out); return NULL; }
+            out[begin + k] = vars;
+            for (uint32_t a = 1; a < count; a++) out[pos++] = vars + a;
+            out[begin] = (n + count - 1) << 16 | op;
+        } else if (op == 71 && w[i + 1] == input) {
+            for (uint32_t k = 0; k < count; k++) SPV_EMIT(4u << 16 | 71, vars + k, 30, location + k);
+        } else if (!(op == 59 && w[i + 2] == input)) {
+            memcpy(out + pos, w + i, n * sizeof *out);
+            if ((op == 65 || op == 66) && n == 6 && w[i + 3] == input) {
+                if (w[i + 1] != scalar_ptr) { free(out); return NULL; }
+                out[pos + 1] = private_scalar;
+            }
+            pos += n;
+        }
+        i += n;
+    }
+#undef SPV_EMIT
+    out[3] = next;
+    *onw = pos;
+    return out;
+}
 static uint32_t *spv_add_outputs(const uint32_t *w, uint32_t nw, uint32_t mask, uint32_t *onw) {
     uint32_t fn = nw, ep = 0, lastdec = 0, bound = w[3], f32 = 0, v4 = 0, pv4 = 0;
     for (uint32_t i = 5; i < nw;) { uint32_t n = w[i] >> 16, op = w[i] & 0xffff; if (!n) return NULL; if (op == 54) { fn = i; break; }
@@ -343,6 +451,11 @@ static vkshader_t *vk_shader_q(uint64_t key, int stage, int quiet) {
       if (w2) { free(w); w = w2; nw = n2; VKLOG("shader %016llx (stage %d): subgroups of one invocation (the device's subgroup operations in this stage: %#x)", (unsigned long long)key, stage, ops); }
       else if (why[0]) VKLOG("[RED] shader %016llx (stage %d) uses subgroup operations the device lacks in this stage (it has %#x), and %s is not covered by the one-invocation rewrite: left as it is", (unsigned long long)key, stage, ops, why); }
     if (stage == 0) { uint32_t n2 = 0, *w2 = spv_vs_init(w, nw, &n2); if (w2) { free(w); w = w2; nw = n2; } }
+    if (stage == 1 && key == UINT64_C(0xc57860cc962189e9) &&
+        V.props.vendorID == 0x5143 && V.props.deviceID == 0x44050a31) {
+        uint32_t n2, *w2 = spv_private_varyings(w, nw, &n2);
+        if (w2) { free(w); w = w2; nw = n2; VKLOG("Three Houses eye shader: split indexed fragment inputs"); }
+    }
     // Maxwell's FMNMX returns the operand that is a number when the other is NaN, and its saturate turns NaN into 0 (IEEE minNum / maxNum, as Metal's fmin / fmax).
     // The translator emits GLSL.std.450 FMin / FMax / FClamp, whose result is undefined for a NaN operand, and Adreno passes the NaN on: their NaN-aware forms NMin /
     // NMax / NClamp give Maxwell's results. Xenoblade Chronicles 3's fur pixel shaders (4fd6e9e891e821cf, f8cc7339c930dc07) take max(0, sqrt(1 - x² - y²)) of

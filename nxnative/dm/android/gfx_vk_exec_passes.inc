@@ -107,10 +107,41 @@ static void lrz_touch(vkimg_t *im, int write) {
 // GPU +1 ms), as did writing back only the one a pass switches away from (0 genuine drops in about 140 frames, GPU +0.6-0.8 ms of 13-18)
 static vkimg_t *g_lrz_prev;
 void vk_lrz_forget(vkimg_t *im) { if (g_lrz_prev == im) g_lrz_prev = NULL; }   // an image dropped (gfx_vk_tex.c img_drop)
+// Three Houses reuses its full scene D24S8 with a smaller R32F shadow map. On the stock Adreno 840
+// driver the subsequent lighting stencil test splits Sothis at x=1024. Use matching attachment extents
+// for that pass, copying both guest aspects over its render area on load and back on store.
+static vkimg_t *shadow_guest_depth;
+static void copy_shadow_area(vkimg_t *src, vkimg_t *dst) {
+    VkImageCopy regions[2] = {0};
+    for (unsigned i = 0; i < 2; i++) {
+        VkImageAspectFlags aspect = i ? VK_IMAGE_ASPECT_STENCIL_BIT : VK_IMAGE_ASPECT_DEPTH_BIT;
+        regions[i].srcSubresource = regions[i].dstSubresource = (VkImageSubresourceLayers){aspect, 0, 0, 1};
+        regions[i].extent = (VkExtent3D){1024, 1024, 1};
+    }
+    VkCommandBuffer cb = vk_cmd();
+    vk_img_barrier_all(cb);
+    vkCmdCopyImage(cb, src->img, VK_IMAGE_LAYOUT_GENERAL, dst->img, VK_IMAGE_LAYOUT_GENERAL, 2, regions);
+    vk_img_barrier_all(cb);
+}
 // 0: no pass could be begun (no render pass or framebuffer, and no dynamic rendering to fall back on): the caller records nothing that needs one
 static int pass_commit(void) {
     if (S.pass_open != 2) return S.pass_open == 1;
     vkimg_t *dim = S.daspect ? P_att[8].im : NULL;
+    vkimg_t *guest_depth = dim;
+    if (DM_GAME_PROGRAM_ID == 0x010055D009F78000ull && g_vk_gpu.driver == VK_DRIVER_ID_QUALCOMM_PROPRIETARY &&
+        V.props.deviceID == 0x44050a31 && S.ncol == 1 &&
+        dim && dim->fmt == VK_FORMAT_D24_UNORM_S8_UINT && dim->levels == 1 && dim->layers == 1 && dim->samples == 1 &&
+        (dim->w > 1024 || dim->h > 1024) && S.pass_w == 1024 && S.pass_h == 1024 && S.cfmt[0] == VK_FORMAT_R32_SFLOAT) {
+        vkimg_t *scratch = vk_three_houses_shadow_depth();
+        if (scratch) {
+            vk_tex_prepare(vk_cmd(), scratch);
+            copy_shadow_area(dim, scratch);
+            dim = scratch;
+            P_da.imageView = P_sa.imageView = scratch->full;
+            P_att[8].im = scratch; P_att[8].w = scratch->w; P_att[8].h = scratch->h;
+            P_att[8].usage = scratch->usage;
+        }
+    }
     if ((g_lrz_touch & LRZ_SWITCH) && dim && g_lrz_prev && g_lrz_prev != dim) lrz_touch(g_lrz_prev, 1);
     if (dim) g_lrz_prev = dim;
     if ((g_lrz_touch & LRZ_READ) && dim && P_da.loadOp == VK_ATTACHMENT_LOAD_OP_LOAD) lrz_touch(dim, 0);
@@ -138,6 +169,7 @@ static int pass_commit(void) {
         else if (V.has_dynrender) { vkCmdBeginRendering(vk_cmd(), &P_ri); S.rp_pass = 0; }
         else { VKRED_ONCE(76, "render pass or framebuffer failed without dynamic rendering: pass skipped"); return 0; }   // (still pass_open 2: vk_end_pass drops it)
     } else { vkCmdBeginRendering(vk_cmd(), &P_ri); S.rp_pass = 0; }
+    shadow_guest_depth = dim != guest_depth ? guest_depth : NULL;
     S.pass_open = 1; g_vkst.passes++; g_sub_pass++; g_pass_wmem = 0;
     for (int i = 0; i < 9; i++) { vkimg_t *a = P_att[i].im; if (a && a->rt_last != g_tex_frame + 1) { a->rt_frames = a->rt_last == g_tex_frame ? a->rt_frames + 1 : 1; a->rt_last = g_tex_frame + 1; } }   // (async_pipe)
     { extern uint64_t g_cmd_gen; g_cmd_gen++; }   // the bind cache starts empty in each pass: Adreno does not keep the state a pass's draws set for the next pass (XC3 drew its lighting black)
@@ -419,7 +451,12 @@ static void bc_draw_back(void) {
 void vk_end_pass(void) {
     if (g_x_listpasses && S.pass_open == 1) { Dl_info di; void *ra = __builtin_return_address(0); uintptr_t base = dladdr((void *)vk_end_pass, &di) ? (uintptr_t)di.dli_fbase : 0; VKLOG("    ended from %#llx (%llu draws)", (unsigned long long)((uintptr_t)ra - base), (unsigned long long)g_pass_draws); list_reads("it"); }   // (DM_VK_TRACE_PASS=-2: who ends each pass)
     if (S.pass_open == 2 && P_cleared) (void)pass_commit();   // only clears: the pass still runs, for its load ops
-    if (S.pass_open == 1) { if (S.rp_pass) vkCmdEndRenderPass(vk_cmd()); else vkCmdEndRendering(vk_cmd()); bc_draw_back(); void vk_pass_ts(int end, uint32_t w, uint32_t h, uint32_t fmt, uint32_t draws); vk_pass_ts(1, S.pass_w, S.pass_h, (uint32_t)S.cfmt[0], (uint32_t)g_pass_draws | (g_pass_draws ? (uint32_t)((g_pass_bb[2] - g_pass_bb[0]) & 0xffff) << 16 : 0));  pass_dump(); if (g_x_tracepass >= 0 && g_sub_pass - 1 == g_x_tracepass) { setenv("DM_VK_TRACE_PASS", "-1", 1); g_x_tracepass = -1; } }
+    if (S.pass_open == 1) { if (S.rp_pass) vkCmdEndRenderPass(vk_cmd()); else vkCmdEndRendering(vk_cmd());
+        if (shadow_guest_depth) {
+            copy_shadow_area(P_att[8].im, shadow_guest_depth);
+            shadow_guest_depth = NULL;
+        }
+        bc_draw_back(); void vk_pass_ts(int end, uint32_t w, uint32_t h, uint32_t fmt, uint32_t draws); vk_pass_ts(1, S.pass_w, S.pass_h, (uint32_t)S.cfmt[0], (uint32_t)g_pass_draws | (g_pass_draws ? (uint32_t)((g_pass_bb[2] - g_pass_bb[0]) & 0xffff) << 16 : 0));  pass_dump(); if (g_x_tracepass >= 0 && g_sub_pass - 1 == g_x_tracepass) { setenv("DM_VK_TRACE_PASS", "-1", 1); g_x_tracepass = -1; } }
     if (S.pass_open == 1 && g_lin_back && g_pass_draws) lin_back();
     if (S.pass_open == 1) crumb_mark(0);
     S.pass_open = 0; S.bound_pipe = VK_NULL_HANDLE; g_tf_in_pass = 0;

@@ -283,6 +283,25 @@ static vkimg_t *img_new(const tex_t *t, const vkfmt_t *f) {
     im->layout = VK_IMAGE_LAYOUT_UNDEFINED;
     return im;
 }
+// Render-thread scratch for Three Houses' 1024-square shadow pass. It is separate from guest images and checkpoint storage.
+vkimg_t *vk_three_houses_shadow_depth(void) {
+    static vkimg_t *im;
+    if (im) return im;
+    tex_t t = {.d = {.width = 1024, .height = 1024, .depth = 1, .levels = 1,
+        .target = NVN_TEXTURE_TARGET_2D, .format = NVN_FORMAT_DEPTH24_STENCIL8}};
+    im = img_new(&t, vk_fmt(t.d.format));
+    if (!im) return NULL;
+    VkImageViewCreateInfo ci = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = im->img, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = im->fmt,
+        .subresourceRange = {im->aspect, 0, 1, 0, 1}};
+    if (vkCreateImageView(V.dev, &ci, NULL, &im->full)) {
+        if (im->sub) vk_defer_free_image_sub(im->img, im->sub);
+        else vk_defer_free_image(im->img, im->mem);
+        free(im);
+        im = NULL;
+    }
+    return im;
+}
 void vk_tex_prepare(VkCommandBuffer cb, vkimg_t *im) {
     if (im->layout == VK_IMAGE_LAYOUT_GENERAL) return;
     VkImageMemoryBarrier b = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, NULL, 0, VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
