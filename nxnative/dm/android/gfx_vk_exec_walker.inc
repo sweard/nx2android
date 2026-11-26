@@ -188,8 +188,13 @@ static void exec_ops(const uint8_t *p) {
         case OP_DISPATCH: dispatch((const p_dispatch *)a); break;
         case OP_BARRIER: {   // the pass ends at every barrier: kept across XC3's fragment- and primitive-order barriers (0x1 0x2 0x4) its characters drew torn in some frames
             int32_t bits = *(const int32_t *)a;
-            int keep = g_order_keep && S.pass_open == 1 && !(bits & ~0x7) && !g_rd_sync_nwrites;
-            if (g_x_listpasses) VKLOG("    barrier %#x%s", bits, keep ? " (order only: decided at the next draw)" : "");
+            int order_only = !(bits & ~0x7) && !g_rd_sync_nwrites;
+            // A deferred pass has only folded loadOp clears, which already precede the first draw.
+            int deferred = order_only && S.pass_open == 2;
+            int keep = order_only && g_order_keep && S.pass_open == 1;
+            if (g_x_listpasses) VKLOG("    barrier %#x%s", bits, deferred ? " (deferred pass: kept for loadOp clear)" :
+                                      keep ? " (order only: decided at the next draw)" : "");
+            if (deferred) break;
             if (keep) { g_order_pending = 1; break; }   // (g_order_keep)
             vk_end_pass(); vk_img_barrier_all(vk_cmd());
             if (g_rd_sync_nwrites) {
