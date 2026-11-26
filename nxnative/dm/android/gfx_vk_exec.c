@@ -21,6 +21,8 @@ void vk_sub_update(uint64_t dst, const void *data, uint64_t n);
 int prog_key(const prog_t *p, unsigned st, uint8_t key[8]);
 
 #include "gfx_vk_gsr2_profile.h"
+#include "gfx_vk_gsr2.h"
+#include "gsr2_package.h"
 #if DM_GAME_PROGRAM_ID == GSR2_FE3H_ID
 // Replay-thread override for the current tone-map draw. Reset before each draw.
 static VkImageView fe3h_scene_view;
@@ -28,21 +30,31 @@ static uint64_t fe3h_scene_handle;
 #endif
 static const gsr2_profile *gs_profile;  // Replay thread, selected at submission start.
 
-// A running APK has one guest build and one immutable DMSV mapping. Wait until
-// main is known before caching the inventory check; presentation can start early.
+// Only replay initializes pipelines. UI, presentation and guest input scaling read the published result.
+static _Atomic int gsr2_available;
+int vk_gsr2_available(void) { return atomic_load(&gsr2_available); }
+
 static const gsr2_profile *gsr2_current_profile(void) {
-    if (!DM_HAS_GSR2_ADAPTER) return NULL;
-    const gsr2_profile *p = gsr2_profile_for_build(DM_GAME_PROGRAM_ID, dm_main_build());
-    if (!p) return NULL;
-    static _Atomic int matches;
-    int state = atomic_load(&matches);
-    if (!state) {
-        state = gsr2_bundle_matches(p, vk_shader_stage) ? 1 : -1;
-        atomic_store(&matches, state);
+    static int checked;
+    if (checked) return gs_profile;
+    if (!DM_HAS_GSR2_ADAPTER || !DM_GSR2_PACKAGED_BUILD[0]) return NULL;
+    const char *build = dm_main_build();
+    if (!*build || !V.dev) return NULL;
+    checked = 1;
+    const gsr2_profile *p = gsr2_profile_for_build(DM_GAME_PROGRAM_ID, build);
+    if (!p || strcmp(build, DM_GSR2_PACKAGED_BUILD) ||
+        !gsr2_bundle_matches(DM_GAME_PROGRAM_ID, vk_gsr2_shader_stage)) {
+        VKLOG("GSR2 unavailable: loaded build or shader bundle differs from packaged adapter");
+        return NULL;
     }
-    return state > 0 ? p : NULL;
+    if (!vk_gsr2_prepare(p->multisample_hud)) {
+        VKLOG("GSR2 unavailable on %s (driver %#x)", V.props.deviceName, V.props.driverVersion);
+        return NULL;
+    }
+    atomic_store(&gsr2_available, 1);
+    VKLOG("GSR2 available: build %s, GPU %s, driver %#x", build, V.props.deviceName, V.props.driverVersion);
+    return p;
 }
-int vk_gsr2_has_profile(void) { return gsr2_current_profile() != NULL; }
 
 #include "gfx_vk_exec_state.inc"   // the NVN state shadow: what the game set, read by the walker and the draws
 #include "gfx_vk_exec_render_cond.inc"   // conditional rendering (profile render_cond)

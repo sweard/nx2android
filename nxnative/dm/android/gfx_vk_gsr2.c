@@ -71,14 +71,31 @@ static int make_sampler(VkFilter filter, VkSampler *sampler) {
     return vkCreateSampler(V.dev, &ci, NULL, sampler) == VK_SUCCESS;
 }
 
-static int init(void) {
+static int supports_image(VkFormat format, VkImageUsageFlags usage, VkSampleCountFlagBits samples) {
+    VkImageFormatProperties properties;
+    return vkGetPhysicalDeviceImageFormatProperties(V.pd, format, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+               usage, 0, &properties) == VK_SUCCESS && (properties.sampleCounts & samples);
+}
+
+int vk_gsr2_prepare(int multisample_hud) {
     if (gsr.initialized) return gsr.initialized > 0;
     gsr.initialized = -1;
+    VkImageUsageFlags copy = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    VkFormat depth = multisample_hud ? VK_FORMAT_D32_SFLOAT : VK_FORMAT_D24_UNORM_S8_UINT;
+    if (!supports_image(depth, copy, VK_SAMPLE_COUNT_1_BIT) ||
+        !supports_image(VK_FORMAT_R32_UINT, copy | VK_IMAGE_USAGE_STORAGE_BIT, VK_SAMPLE_COUNT_1_BIT) ||
+        !supports_image(VK_FORMAT_R16G16B16A16_SFLOAT, copy | VK_IMAGE_USAGE_STORAGE_BIT, VK_SAMPLE_COUNT_1_BIT)) return 0;
+#if DM_HAS_GSR2_ADAPTER
+    if (multisample_hud &&
+        (!supports_image(depth, copy | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_SAMPLE_COUNT_4_BIT) ||
+         !supports_image(VK_FORMAT_B10G11R11_UFLOAT_PACK32, copy | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_SAMPLE_COUNT_4_BIT) ||
+         !vk_gsr2_prepare_ms_hud())) return 0;
+#endif
     VkFormatProperties fp;
     VkFormatFeatureFlags common = VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
     vkGetPhysicalDeviceFormatProperties(V.pd, VK_FORMAT_R32_UINT, &fp);
     if ((fp.optimalTilingFeatures & common) != common) return 0;
-    common |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+    common |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT | VK_FORMAT_FEATURE_BLIT_SRC_BIT;
     vkGetPhysicalDeviceFormatProperties(V.pd, VK_FORMAT_R16G16B16A16_SFLOAT, &fp);
     if ((fp.optimalTilingFeatures & common) != common) return 0;
     if (!make_pass(&gsr.convert, sgsr2_convert_comp_spv, sizeof sgsr2_convert_comp_spv, (unsigned[]){1, 2}, 2) ||
@@ -194,7 +211,7 @@ static void record_pass(VkCommandBuffer cb, const compute_pass *pass, VkDescript
 
 VkImage vk_gsr2_record(VkCommandBuffer cb, VkImageView color, VkImageView depth, const vk_gsr2_params *p, uint64_t frame) {
     uint32_t size[] = {p->render[0], p->render[1], p->display[0], p->display[1]};
-    if (!color || !depth || !size[0] || !size[1] || !size[2] || !size[3] || !init()) return VK_NULL_HANDLE;
+    if (!color || !depth || !size[0] || !size[1] || !size[2] || !size[3] || gsr.initialized != 1) return VK_NULL_HANDLE;
     int reset = p->reset || frame != gsr.last_frame + 1 || memcmp(size, gsr.extent, sizeof size);
     if (!resize(cb, size)) return VK_NULL_HANDLE;
     VkDescriptorBufferInfo ubo = {.range = sizeof *p};

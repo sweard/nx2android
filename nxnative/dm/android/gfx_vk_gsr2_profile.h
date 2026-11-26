@@ -46,7 +46,12 @@ typedef struct {
     const gsr2_composite_pass *composite;
     size_t composite_count;
     const gsr2_ue_pass *ue;
+    int multisample_hud;
 } gsr2_profile;
+
+#define GSR2_SHADER(title, name, stage, key) enum { title##_##name = UINT64_C(key) };
+#include "../games/gsr2_shaders.inc"
+#undef GSR2_SHADER
 
 #include "../games/gsr2_digimon_122.inc"
 #include "../games/gsr2_ot2_111.inc"
@@ -61,17 +66,20 @@ static inline const gsr2_profile *gsr2_profile_for_build(uint64_t title, const c
     return title == GSR2_DIGIMON_ID && build && !strcmp(build, GSR2_DIGIMON_BUILD) ? &digimon_profile : NULL;
 }
 
-static inline int gsr2_bundle_matches(const gsr2_profile *profile, int (*stage)(uint64_t)) {
-    if (profile->ue && (stage(profile->ue->depth_vertex) != 0 || stage(profile->ue->depth_fragment) != 1)) return 0;
-    if (profile == &fe3h_profile)
-        for (size_t i = 0; i < sizeof fe3h_cameras / sizeof *fe3h_cameras; ++i)
-            if (stage(fe3h_cameras[i].vertex) != 0 || stage(fe3h_cameras[i].fragment) != 1) return 0;
-    if (profile == &ot2_profile && stage(OT2_DEPTH_FS) != 1) return 0;
-    for (size_t i = 0; i < profile->compute_count; ++i)
-        if (stage(profile->compute[i].key) != 5) return 0;
-    for (size_t i = 0; i < profile->composite_count; ++i)
-        if (stage(profile->composite[i].vertex) != 0 || stage(profile->composite[i].fragment) != 1) return 0;
-    return 1;
+static inline int gsr2_bundle_matches(uint64_t title, int (*stage)(uint64_t)) {
+    enum { VS = 0, FS = 1, CS = 5 };
+    static const struct { uint64_t title, key; int stage; } required[] = {
+#define GSR2_SHADER(game, name, kind, key) { GSR2_##game##_ID, game##_##name, kind },
+#include "../games/gsr2_shaders.inc"
+#undef GSR2_SHADER
+    };
+    int matched = 0;
+    for (size_t i = 0; i < sizeof required / sizeof *required; ++i) {
+        if (required[i].title != title) continue;
+        if (stage(required[i].key) != required[i].stage) return 0;
+        matched = 1;
+    }
+    return matched;
 }
 
 static inline const gsr2_compute_pass *gsr2_compute_for_key(const gsr2_profile *p, uint64_t key) {

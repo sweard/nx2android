@@ -8,15 +8,7 @@ static VkPipelineLayout ms_layout;
 static VkDescriptorSetLayout ms_set_layout;
 static VkPipeline ms_pipeline[2];
 
-static int ms_prepare(vkimg_t *im) {
-    int depth = im->aspect == VK_IMAGE_ASPECT_DEPTH_BIT;
-    if (!V.has_dynrender || im->samples != 4 ||
-        im->fmt != (depth ? VK_FORMAT_D32_SFLOAT : VK_FORMAT_B10G11R11_UFLOAT_PACK32)) return 0;
-    if (!im->full) {
-        VkImageViewCreateInfo ci = {.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image=im->img,
-            .viewType=VK_IMAGE_VIEW_TYPE_2D, .format=im->fmt, .subresourceRange={im->aspect,0,1,0,1}};
-        if (vkCreateImageView(V.dev, &ci, NULL, &im->full)) return 0;
-    }
+static int ms_prepare_pipeline(VkFormat format, int depth) {
     if (ms_pipeline[depth]) return 1;
     if (!ms_layout) {
         VkPhysicalDeviceFeatures2 features = {.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
@@ -55,7 +47,7 @@ static int ms_prepare(vkimg_t *im) {
     VkDynamicState states[] = {VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_SCISSOR};
     VkPipelineDynamicStateCreateInfo dyn = {VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,NULL,0,2,states};
     VkPipelineRenderingCreateInfo rendering = {.sType=VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
-        .colorAttachmentCount=!depth,.pColorAttachmentFormats=&im->fmt,.depthAttachmentFormat=depth ? im->fmt : VK_FORMAT_UNDEFINED};
+        .colorAttachmentCount=!depth,.pColorAttachmentFormats=&format,.depthAttachmentFormat=depth ? format : VK_FORMAT_UNDEFINED};
     VkGraphicsPipelineCreateInfo pipe = {.sType=VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,.pNext=&rendering,.stageCount=2,.pStages=stages,
         .pVertexInputState=&vin,.pInputAssemblyState=&ia,.pViewportState=&vp,.pRasterizationState=&rs,.pMultisampleState=&ms,
         .pDepthStencilState=&ds,.pColorBlendState=&blend,.pDynamicState=&dyn,.layout=ms_layout};
@@ -63,6 +55,23 @@ static int ms_prepare(vkimg_t *im) {
     vkDestroyShaderModule(V.dev,frag,NULL);
     vkDestroyShaderModule(V.dev,vert,NULL);
     return result == VK_SUCCESS;
+}
+
+int vk_gsr2_prepare_ms_hud(void) {
+    return V.has_dynrender && ms_prepare_pipeline(VK_FORMAT_B10G11R11_UFLOAT_PACK32, 0) &&
+           ms_prepare_pipeline(VK_FORMAT_D32_SFLOAT, 1);
+}
+
+static int ms_prepare(vkimg_t *im) {
+    int depth = im->aspect == VK_IMAGE_ASPECT_DEPTH_BIT;
+    if (!V.has_dynrender || im->samples != 4 ||
+        im->fmt != (depth ? VK_FORMAT_D32_SFLOAT : VK_FORMAT_B10G11R11_UFLOAT_PACK32)) return 0;
+    if (!im->full) {
+        VkImageViewCreateInfo ci = {.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image=im->img,
+            .viewType=VK_IMAGE_VIEW_TYPE_2D, .format=im->fmt, .subresourceRange={im->aspect,0,1,0,1}};
+        if (vkCreateImageView(V.dev, &ci, NULL, &im->full)) return 0;
+    }
+    return ms_prepare_pipeline(im->fmt, depth);
 }
 
 static void ms_scale(VkCommandBuffer cb, vkimg_t *src, vkimg_t *dst) {

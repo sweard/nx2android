@@ -7,14 +7,14 @@
 # hash of the game_profile.h it was built with (nx2a-data.json profile_h, which porter port writes) this checkout's, or this checkout's without defines added since (ADDED_DEFINES) that are at their off value. A port made on Windows before game.py wrote the header as bytes hashed the same header with CRLF newlines (still UTF-8), and that form is accepted too. A derived profile (a version the profile does not register, with
 # its automatic alias headroom) or --alias-headroom compiled another DM_GAME_MEM_ALIAS into libdmhost.so, and the repository's would give the game a smaller alias region. Nor does a change in sdk_patches.py for other SDK builds: the cuts and observation gates it and the game's patches.py give the build IDs of
 # the port's modules are checked against those mods/<module>.cuts.tsv and .obs.tsv list. A changed shader translator or data pack is not carried over either: a port again does that.
-import hashlib, json, os, re, shlex, subprocess, sys, tempfile, zipfile
+import base64, hashlib, json, os, re, shlex, subprocess, sys, tempfile, zipfile
 from pathlib import Path
 
 from porter import datapack, paths, toolchain
 from porter.adb import AdbError
 from porter.driver import installed_apk
 from porter.paths import DM
-from porter.upstream import BuildError, say
+from porter.upstream import BuildError, gsr2_package, say
 
 
 def module_tables(cuts_tsv, obs_tsv):
@@ -170,6 +170,20 @@ def checkpoint_build(adb, package, src, requested):
     return True
 
 
+def device_gsr2_build(adb, files, title):
+    build = gsr2_package.main_build(adb.read_text(f'{files}/mods/main.fixups.tsv'))
+    if not gsr2_package.required(title, build):
+        return ''
+    bundle = shlex.quote(f'{files}/shaders.dmsv')
+    size = adb.shell(f'stat -c %s {bundle}', check=False).strip()
+    if not size.isdecimal():
+        return ''
+    def read_at(offset, length):
+        data = adb.shell(f'tail -c +{offset + 1} {bundle} | head -c {length} | base64')
+        return base64.b64decode(data)
+    return gsr2_package.verified_index(title, build, int(size), read_at)
+
+
 def update(adb, package, jobs=os.cpu_count() or 8, *, field_checkpoint=None):
     """package's libdmhost.so built again from this checkout and installed. → {'package', 'title_id', 'debug', 'host', 'field_checkpoint'}"""
     files = datapack.files_folder(package)
@@ -194,10 +208,12 @@ def update(adb, package, jobs=os.cpu_count() or 8, *, field_checkpoint=None):
     if not ndk: raise BuildError('no Android NDK found: python -m porter tools --download')
     with tempfile.TemporaryDirectory(prefix='nx2a_host_') as t:
         src, out = Path(t) / 'installed.apk', Path(t) / 'host.apk'
+        build = device_gsr2_build(adb, files, title_id)
+        say(f'GSR2: {build or "no matching game build and shader bundle"}')
         adb.run('pull', installed_apk(adb, package), src, timeout=600)
         enabled = checkpoint_build(adb, package, src, field_checkpoint)
         say(f'{package}: building the host of {title_id} ({"debug" if debug else "release"} build)')
-        r = subprocess.run([sys.executable, str(DM / 'android/build.py'), '--game', title_id, '--ndk', str(ndk), '--out', t, '--lib', '--jobs', str(jobs)] + ([] if debug else ['--release']) + (['--field-checkpoint'] if enabled else []),
+        r = subprocess.run([sys.executable, str(DM / 'android/build.py'), '--game', title_id, '--ndk', str(ndk), '--out', t, '--gsr2-build', build, '--lib', '--jobs', str(jobs)] + ([] if debug else ['--release']) + (['--field-checkpoint'] if enabled else []),
                            capture_output=True, text=True, errors='replace', env=clean_env())
         so = Path(t) / 'libdmhost.so'
         if r.returncode or not so.is_file(): raise BuildError(f'{package}: the host did not build: ' + ((r.stderr.strip() or r.stdout.strip()).splitlines() or ['no output'])[-1])

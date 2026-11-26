@@ -13,7 +13,7 @@ static struct {
 static void digimon_observe_draw(void) {
     if (!S.sh[1]) return;
     uint64_t key = S.sh[1]->key;
-    if (key != UINT64_C(0xbc0e07cbf9a242a2) && key != UINT64_C(0x3f8b698d6b68accc) && key != UINT64_C(0x7176753c5dda5742))
+    if (key != DIGIMON_DECAL_FS && key != DIGIMON_LINEAR_DEPTH_FS && key != DIGIMON_FOG_FS)
         return;
     if (digimon.frame != g_tex_frame) {
         digimon.frame = g_tex_frame;
@@ -21,13 +21,13 @@ static void digimon_observe_draw(void) {
         digimon.depth_serial = 0;
         digimon.matrix_ok = digimon.fog_ok = 0;
     }
-    if (key == UINT64_C(0x7176753c5dda5742)) {
+    if (key == DIGIMON_FOG_FS) {
         digimon.fog_ok = gsr2_uniform(1, 1, 0x10, digimon.position, 4) && gsr2_uniform(1, 1, 0x20, digimon.right, 4) &&
                           gsr2_uniform(1, 1, 0x40, digimon.front, 4) && gsr2_uniform(1, 1, 0x50, digimon.jitter, 2);
         return;
     }
     vk_temporal_texture depth = {0};
-    int decal = key == UINT64_C(0xbc0e07cbf9a242a2);
+    int decal = key == DIGIMON_DECAL_FS;
     if (!temporal_handle(S.tex[1][decal ? 1 : 0], &depth) || !gsr2_plain_2d(&depth)) return;
     if (decal) {
         // The following depth-linearization draw uses a half-resolution viewport.

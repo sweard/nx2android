@@ -18,7 +18,7 @@ static int temporal_digimon(uint64_t fragment_key, vk_temporal_frame *frame) {
         .color = 1, .depth = 0, .motion = -1, .output = 0,
         .jitter = {1, 0x50}, .current_view_projection = {-1, 0}, .previous_view_projection = {-1, 0},
     };
-    if (fragment_key == UINT64_C(0x7176753c5dda5742)) {
+    if (fragment_key == DIGIMON_FOG_FS) {
         frame->pass = VK_TEMPORAL_SCENE_INPUTS;
         temporal_read_bindings(&digimon_fog, frame);
         return 1;

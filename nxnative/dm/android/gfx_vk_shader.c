@@ -58,6 +58,12 @@ static const bent *find(uint64_t key) {
     return NULL;
 }
 int vk_shader_stage(uint64_t key) { bundle_auto(); const bent *e = g_bundle ? find(key) : NULL; return e ? (int)e->stage : -1; }   // the NVN stage the bundle has this shader as
+// The reconstruction adapter requires code for every pass it replaces.
+int vk_gsr2_shader_stage(uint64_t key) {
+    bundle_auto();
+    const bent *e = g_bundle ? find(key) : NULL;
+    return e && e->spv_len ? (int)e->stage : -1;
+}
 // A shader's SPIR-V as the host's own copy (patched at module creation, then kept for the variants: vkshader_t spv), copied out of the mapping or decompressed from its zstd
 // frame. Called outside g_sh_mu: the replay thread looks its shaders up under that lock while the prewarm threads make theirs. Decompression contexts (94 KB each) are kept
 // for the next shader, one per thread decompressing at once. NULL, logged, when the module is not SPIR-V of its entry's length

@@ -216,11 +216,10 @@ static int swap_make(void) {
     int ww = ANativeWindow_getWidth(w), wh = ANativeWindow_getHeight(w);
 #if DM_HAS_GSR2_ADAPTER
     static int rejected_height;
-    int height = !dm_external_active() && ww >= wh && dm_gsr2_input_mode() != GSR2_OFF &&
-                 vk_gsr2_has_profile() ? dm_gsr2_output_height() : 0;
+    int height = !dm_external_active() && ww >= wh && dm_gsr2_input_mode() != GSR2_OFF ? dm_gsr2_output_height() : 0;
 #if DM_GAME_PROGRAM_ID == GSR2_FE3H_ID
     // Keep the docked 16:9 picture at 1080p even when reconstruction is off.
-    if (!height && ww >= wh && !dm_external_active() && dm_opmode() == 1) height = 1080;
+    if (!height && vk_gsr2_available() && ww >= wh && !dm_external_active() && dm_opmode() == 1) height = 1080;
 #endif
     if (ww != (int)gs_window_extent.width || wh != (int)gs_window_extent.height || gs_swap_requested != height) {
         if (g_swap) swap_destroy();
@@ -591,13 +590,14 @@ static void ov_menu_panel(const ov_canvas *cv, int st, int position, int checkpo
         if (it < 0) continue;
         if (row == sel && (it != OVM_RESUME || !checkpoint)) cv_rrect(target, r[0], r[1] + rh * 0.08f, r[0] + rw, r[1] + rh * 0.92f, rh * 0.14f, C_HI);
         if (it == OVM_TAB) {   // the tabs: a segmented bar, the open one filled
-            float th = rh * 0.62f, tw = rw / OVM_TABS;
+            int tabs = ov_menu_tabs();
+            float th = rh * 0.62f, tw = rw / tabs;
             cv_rrect(target, r[0], cy - th / 2, r[0] + rw, cy + th / 2, th / 2, C_OFF);
             cv_rrect(target, r[0] + tab * tw, cy - th / 2, r[0] + (tab + 1) * tw, cy + th / 2, th / 2, C_ACCENT);
             int ts = is;
-            for (int k = 0; k < OVM_TABS; k++)
+            for (int k = 0; k < tabs; k++)
                 while (ts > 1 && cv_text_w(OVM_TAB_NAMES[k], ts) > tw - sh) ts--;
-            for (int k = 0; k < OVM_TABS; k++) cv_text(target, r[0] + k * tw + (tw - cv_text_w(OVM_TAB_NAMES[k], ts)) / 2, cy, OVM_TAB_NAMES[k], ts, k == tab ? C_WHITE : C_DIM);
+            for (int k = 0; k < tabs; k++) cv_text(target, r[0] + k * tw + (tw - cv_text_w(OVM_TAB_NAMES[k], ts)) / 2, cy, OVM_TAB_NAMES[k], ts, k == tab ? C_WHITE : C_DIM);
             cv_rrect(target, r[0], r[1] + rh - 1, r[0] + rw, r[1] + rh, 0.5f, C_LINE);
             continue;
         }
@@ -799,7 +799,12 @@ static uint64_t mono_ns(void);
 enum { CHECKPOINT_PHASE_NS = 125000000 };
 // The phone window uses the same menu raster as Vulkan, independently of the external swapchain.
 JNIEXPORT jint JNICALL Java_org_nx2a_ExternalActivity_externalMenuState(JNIEnv *env, jclass cls) { (void)env; (void)cls; return dm_menu_state(); }
-JNIEXPORT jint JNICALL Java_org_nx2a_ExternalActivity_externalMenuScroll(JNIEnv *env, jclass cls) { (void)env; (void)cls; return dm_menu_scroll_position(); }
+// Keep the external raster cache coherent if the first replay submission completes while the menu is open.
+enum { OVM_RASTER_GSR2 = 1 << 24 };
+static int ov_raster_position(void) {
+    return dm_menu_scroll_position() | (ov_menu_tabs() > OVM_GSR2_TAB ? OVM_RASTER_GSR2 : 0);
+}
+JNIEXPORT jint JNICALL Java_org_nx2a_ExternalActivity_externalMenuScroll(JNIEnv *env, jclass cls) { (void)env; (void)cls; return ov_raster_position(); }
 JNIEXPORT jintArray JNICALL Java_org_nx2a_ExternalActivity_externalMenuPixels(JNIEnv *env, jclass cls, jint W, jint H, jint st, jint position) {
     (void)cls;
     if (W <= 0 || H <= 0 || W > 8192 || H > 8192 || st < 0) return NULL;
@@ -812,7 +817,7 @@ JNIEXPORT jintArray JNICALL Java_org_nx2a_ExternalActivity_externalMenuPixels(JN
     if (st & 0x10000) ov_text_panel(&cv);
     else if (st & OVE_ST) ov_edit_panel(&cv, st, (float)W, (float)H);
     else if (st & OVS_ST) ov_save_panel(&cv, st);
-    else ov_menu_panel(&cv, st, position, 0);
+    else ov_menu_panel(&cv, st, position & ~OVM_RASTER_GSR2, 0);
     size_t count = (size_t)w * h; jint *argb = malloc((count + 2) * sizeof *argb);
     if (!argb) { free(pixels); return NULL; }
     argb[0] = (jint)w; argb[1] = (jint)h;
@@ -1231,7 +1236,7 @@ static int overlay_ready(VkCommandBuffer cb, uint32_t k, int menu) {   // k: thi
         vkUpdateDescriptorSets(V.dev, 1, &wr, 0, NULL);
         g_ov.uploaded = 0; g_ov.panel = -1;
     }
-    int position = dm_menu_scroll_position(); uint64_t panel_key = ov_menu_raster_key(menu, position);
+    int raster_position = ov_raster_position(), position = raster_position & ~OVM_RASTER_GSR2; uint64_t panel_key = ov_menu_raster_key(menu, raster_position);
     int phase = checkpoint_saving(menu) ? (int)(mono_ns() / CHECKPOINT_PHASE_NS % 8) : 0;
     int panel_changed = panel_key != g_ov.panel || phase != g_ov.checkpoint_phase;
     uint32_t y0 = 0, rows = g_ov.h + g_ov.sh + g_ov.ph + g_ov.gh;   // the rows to upload

@@ -157,11 +157,14 @@ int dm_opmode(void); void dm_set_opmode(int m);   // hle_oe.c: 0 handheld, 1 doc
 static _Atomic int g_fps_opts = FPSO_DEFAULT, g_fps_ver;
 // An explicit player choice overrides the development environment setting.
 static _Atomic int g_gsr2_input = -1, g_gsr2_percent = 100, g_gsr2_output = 1080;
-int dm_gsr2_input_mode(void) {
+static int gsr2_preference(void) {
     int mode = atomic_load(&g_gsr2_input);
     if (mode >= 0) return mode;
     const char *value = getenv("DM_VK_GSR2");
     return value && atoi(value) == 2 ? GSR2_AUTO : GSR2_OFF;
+}
+int dm_gsr2_input_mode(void) {
+    return DM_HAS_GSR2_ADAPTER && vk_gsr2_available() ? gsr2_preference() : GSR2_OFF;
 }
 int dm_gsr2_custom_percent(void) {
     return dm_gsr2_input_mode() == GSR2_CUSTOM ? atomic_load(&g_gsr2_percent) : 0;
@@ -247,7 +250,7 @@ static void settings_load(const char *checkpoint) {
         if (mode < 0 && legacy_on >= 0)
             mode = !legacy_on ? GSR2_OFF : legacy_height ? GSR2_CUSTOM : GSR2_AUTO;
         // The old menu could save a height while env.txt supplied the switch.
-        if (mode < 0 && legacy_height && dm_gsr2_input_mode() == GSR2_AUTO) mode = GSR2_CUSTOM;
+        if (mode < 0 && legacy_height && gsr2_preference() == GSR2_AUTO) mode = GSR2_CUSTOM;
         if (mode == GSR2_CUSTOM && !DM_HAS_GSR2_INPUT_CONTROL) mode = GSR2_AUTO;
         if (mode >= 0) menu_gsr2_set(mode);
     }
@@ -261,7 +264,7 @@ static void settings_save(void) {
     fps_opt_write(f);
     if (atomic_load(&g_set_labels) >= 0) fprintf(f, "labels=%d\n", atomic_load(&g_set_labels));   // (only once the player chose: until then env.txt decides)
     if (DM_HAS_GSR2_ADAPTER) {
-        if (atomic_load(&g_gsr2_input) >= 0) fprintf(f, "gsr2_input=%d\n", dm_gsr2_input_mode());
+        if (atomic_load(&g_gsr2_input) >= 0) fprintf(f, "gsr2_input=%d\n", gsr2_preference());
         fprintf(f, "gsr2_percent=%d\ngsr2_output=%d\n", atomic_load(&g_gsr2_percent), dm_gsr2_output_height());
     }
     fprintf(f, "framegen=%d\nframegen_target=%d\n", atomic_load(&g_set_framegen), atomic_load(&g_set_fg_target));
@@ -849,7 +852,7 @@ static void menu_gsr2_percent(int value) {
         dm_overlay_redraw();
     }
 }
-static void menu_tab(int t) { t = (t % OVM_TABS + OVM_TABS) % OVM_TABS; if (atomic_exchange(&g_menu_tab, t) != t) { atomic_store(&g_menu_scroll, 0); dm_haptics_android_tap(); } dm_overlay_redraw(); }
+static void menu_tab(int t) { int tabs = ov_menu_tabs(); t = (t % tabs + tabs) % tabs; if (atomic_exchange(&g_menu_tab, t) != t) { atomic_store(&g_menu_scroll, 0); dm_haptics_android_tap(); } dm_overlay_redraw(); }
 static void menu_set_fg_choice(int choice) {
     if (choice < 0) return;
     int target = choice ? 0 : 60;

@@ -10,7 +10,7 @@ from pathlib import Path
 from porter import config, datapack, dumps, fpslocker, install, paths, profiles, product_cache, romfs_pack, toolchain
 from porter.adb import NO_ADB, Adb, AdbError
 from porter.paths import DM, NXNATIVE
-from porter.upstream import BuildError, PROG, android_profile, game, nacp, nsp, profile_guess, say, trinity, uepak
+from porter.upstream import BuildError, PROG, android_profile, game, gsr2_package, nacp, nsp, profile_guess, say, trinity, uepak
 
 PY = sys.executable
 # The overlay's font (Port.ui_font)
@@ -1000,7 +1000,9 @@ class Port:
     def host(self):
         PROG.stage('host', step=f'NDK {self.tools["ndk"].name}')
         out = self.aw / ('host-debug' if self.o.debug else 'host')
-        nsp.run([PY, DM / 'android/build.py', '--game', self.g.id, '--ndk', self.tools['ndk'], '--out', out, '--lib', '--jobs', str(self.o.jobs)] + ([] if self.o.debug else ['--release'])
+        build = gsr2_package.verify(self.g.id, nsp.build_id(self.game / 'ExeFS/main'), self.dmsv)
+        say(f'GSR2: {build or "no matching game build and shader bundle"}')
+        nsp.run([PY, DM / 'android/build.py', '--game', self.g.id, '--ndk', self.tools['ndk'], '--out', out, '--gsr2-build', build, '--lib', '--jobs', str(self.o.jobs)] + ([] if self.o.debug else ['--release'])
                 + (['--field-checkpoint'] if self.o.field_checkpoint else []) + (['--adrenotools'] if self.o.vulkan_driver or self.o.native_keyboard or self.o.external_display else []), self.logs / 'android_host.log', env=self.env)
         self.so = out / 'libdmhost.so'
         if not self.so.is_file(): raise BuildError(f'build.py made no {self.so}')

@@ -26,7 +26,8 @@ class FpsCounterOptions(unittest.TestCase):
 #include <stdlib.h>
 #include <string.h>
 #include "overlay_layout.h"
-static int gsr2_mode;
+static int gsr2_mode, available;
+int vk_gsr2_available(void) { return available; }
 int dm_gsr2_input_mode(void) { return gsr2_mode; }
 static _Atomic int g_fps_opts = FPSO_DEFAULT, g_fps_ver;
 int dm_menu_lossless_import_available(void) { return 1; }
@@ -41,6 +42,9 @@ static int parse(const char *line) { return fps_opt_parse(line); }
 int main(int argc, char **argv) {
     assert(argc == 2);   // a scratch file in the test's own folder (tmpfile() on MinGW with msvcrt makes it in the drive's root)
     // four tabs, five visible body rows; the Counter tab: the five rows (FPS, SOC, BAT, driver, graph); the Style tab: the four choices then a blank
+    assert(ov_menu_tabs() == 4 && ov_menu_item(4, 1) == -1);
+    available = 1; // Off still offers the tab on a verified device.
+    assert(ov_menu_tabs() == OVM_TABS);
     assert(OVM_TABS == (DM_HAS_GSR2_ADAPTER ? 5 : 4) && OVM_VISIBLE == 5 && OVM_VIEW_ROWS == 7);
     assert(ov_menu_item(0, 0) == OVM_TAB && ov_menu_item(3, OVM_ROWS - 1) == OVM_RESUME);
     assert(ov_menu_item(1, 1) == OVM_FPS && ov_menu_item(0, 7) == OVM_AUDIO && ov_menu_item(0, 4) == OVM_ZONE && ov_menu_item(1, 2) == OVM_SR && ov_menu_item(1, 3) == OVM_SHARP);

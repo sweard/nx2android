@@ -1,4 +1,4 @@
-// The same title gate controls the Vulkan adapter and its pause-menu page.
+// Titles whose hosts include a Vulkan reconstruction adapter. Runtime availability also checks the pack and driver.
 #pragma once
 #include "../games/gsr2_builds.h"
 #if defined(DM_GAME_PROGRAM_ID) && (DM_GAME_PROGRAM_ID == GSR2_FE3H_ID || DM_GAME_PROGRAM_ID == GSR2_DIGIMON_ID || DM_GAME_PROGRAM_ID == GSR2_OT2_ID || DM_GAME_PROGRAM_ID == GSR2_DQ12_ID || DM_GAME_PROGRAM_ID == GSR2_DQ7_ID || DM_GAME_PROGRAM_ID == GSR2_OT0_ID || DM_GAME_PROGRAM_ID == GSR2_FF_HK_ID)
@@ -18,6 +18,7 @@ static inline int gsr2_percent_valid(int p) {
     return p >= GSR2_MIN_PERCENT && p <= GSR2_MAX_PERCENT && p % GSR2_STEP == 0;
 }
 static inline int gsr2_output_valid(int h) { return h == 720 || h == 1080 || h == 1440; }
+int vk_gsr2_available(void);
 int dm_gsr2_input_mode(void);
 int dm_gsr2_output_height(void);
 

@@ -24,7 +24,7 @@
 // ---- Vulkan entry points (loaded from libvulkan.so) ----
 #define VK_FNS(X) \
     X(vkCreateInstance) X(vkEnumeratePhysicalDevices) X(vkGetPhysicalDeviceProperties) X(vkGetPhysicalDeviceProperties2) X(vkGetPhysicalDeviceFeatures2) \
-    X(vkGetPhysicalDeviceMemoryProperties) X(vkGetPhysicalDeviceQueueFamilyProperties) X(vkGetPhysicalDeviceFormatProperties) X(vkCreateDevice) X(vkGetDeviceProcAddr) \
+    X(vkGetPhysicalDeviceMemoryProperties) X(vkGetPhysicalDeviceQueueFamilyProperties) X(vkGetPhysicalDeviceFormatProperties) X(vkGetPhysicalDeviceImageFormatProperties) X(vkCreateDevice) X(vkGetDeviceProcAddr) \
     X(vkEnumerateDeviceExtensionProperties) X(vkGetPhysicalDeviceSurfaceCapabilitiesKHR) X(vkGetPhysicalDeviceSurfaceFormatsKHR) X(vkGetPhysicalDeviceSurfacePresentModesKHR) \
     X(vkCreateAndroidSurfaceKHR) X(vkDestroySurfaceKHR) X(vkGetPhysicalDeviceSurfaceSupportKHR)
 #define VK_DEV_FNS(X) \
@@ -75,7 +75,6 @@ uint32_t *spv_ubo_component(const uint32_t *w, uint32_t nw, uint32_t *onw, uint3
 uint32_t *spv_gs_split(const uint32_t *w, uint32_t nw, int mode, uint32_t *onw, char *why, size_t nwhy);
 uint32_t vk_mem_type(uint32_t bits, VkMemoryPropertyFlags want, VkMemoryPropertyFlags avoid);
 const char *dm_app_driver_choice(void);
-int vk_gsr2_has_profile(void);
 uint64_t vk_gsr2_last_extent(void);  // last validated scene/output widths and heights, packed as four 16-bit values
 void vk_driver_frame_shown(void);
 void vk_init(void);   // once, from mtl_init or the first use
@@ -160,6 +159,7 @@ struct vkimg {
 };
 #if DM_HAS_GSR2_ADAPTER
 vkimg_t *vk_gsr2_surface(VkCommandBuffer cb, vkimg_t *owner, uint32_t w, uint32_t h);
+int vk_gsr2_prepare_ms_hud(void);
 void vk_gsr2_surface_release(vkimg_t *s);
 void vk_gsr2_surface_blit(VkCommandBuffer cb, vkimg_t *src, vkimg_t *dst);
 #endif

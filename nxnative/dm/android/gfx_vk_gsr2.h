@@ -11,6 +11,10 @@ typedef struct {
     uint32_t reversed_depth, tail_padding;
 } vk_gsr2_params;
 
+// Probe the selected driver on the replay thread, independently of the player setting.
+int vk_gsr2_prepare(int multisample_hud);
+int vk_gsr2_shader_stage(uint64_t key);
+
 // Records into private images. The returned image is in GENERAL, valid through this
 // submission. A later dispatch may overwrite it. NULL requests the guest's own path.
 VkImage vk_gsr2_record(VkCommandBuffer cb, VkImageView color, VkImageView depth, const vk_gsr2_params *params,

@@ -241,6 +241,7 @@ enum { OVM_OVERLAY, OVM_OPACITY, OVM_EDIT, OVM_RUMBLE, OVM_FPS, OVM_MODE, OVM_EX
             // OVM_PAD: a controller's face buttons by their position or by their label (front_android.c pad_labels)
 #define OVM_GSR2_TAB 4
 #define OVM_TABS (4 + DM_HAS_GSR2_ADAPTER)
+static inline int ov_menu_tabs(void) { return 4 + (DM_HAS_GSR2_ADAPTER && vk_gsr2_available()); }
 #define OVM_PER_TAB 10
 static const int OVM_TAB_ITEMS[OVM_TABS][OVM_PER_TAB] = {
     {OVM_OVERLAY, OVM_OPACITY, OVM_EDIT, OVM_ZONE, OVM_RUMBLE, OVM_PAD, OVM_AUDIO, -1, -1, -1},
@@ -281,6 +282,7 @@ int dm_menu_driver_available(void);
 int dm_menu_audio_available(void);
 int dm_menu_lossless_import_available(void);
 static inline int ov_menu_item(int tab, int row) {
+    if (tab == OVM_GSR2_TAB && tab >= ov_menu_tabs()) return -1;
     int item = row == 0 ? OVM_TAB : row == OVM_ROWS - 1 ? OVM_RESUME : row > 0 && row < OVM_ROWS - 1 ? OVM_TAB_ITEMS[tab >= 0 && tab < OVM_TABS ? tab : 0][row - 1] : -1;
 #if DM_HAS_GSR2_ADAPTER
     if (item == OVM_GSR2_SIZE && dm_gsr2_input_mode() != GSR2_CUSTOM) return -1;
@@ -377,7 +379,7 @@ static inline int ov_menu_scroll_drag(int tab, int start, float delta_rows) {
     int value = start + (int)lroundf(delta_rows * OVM_SCROLL_UNITS), limit = ov_menu_scroll_limit(tab) * OVM_SCROLL_UNITS;
     return value < 0 ? 0 : value > limit ? limit : value;
 }
-static inline int ov_menu_tab_at(float x, const float p[4]) { float r[4]; ov_menu_view_rowrect(p, 0, r); int t = (int)((x - r[0]) / (r[2] / OVM_TABS)); return t < 0 ? 0 : t >= OVM_TABS ? OVM_TABS - 1 : t; }
+static inline int ov_menu_tab_at(float x, const float p[4]) { float r[4]; ov_menu_view_rowrect(p, 0, r); int tabs = ov_menu_tabs(), t = (int)((x - r[0]) / (r[2] / tabs)); return t < 0 ? 0 : t >= tabs ? tabs - 1 : t; }
 static inline int ov_menu_fg_choice(int item) { return item == OVM_FG_TARGET; }
 static inline float ov_menu_fg_choice_width(const float row[4]) { return row[2] * 0.30f; }
 static inline int ov_menu_fg_choice_at(float x, const float panel[4], float index) {

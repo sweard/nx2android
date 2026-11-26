@@ -43,6 +43,7 @@ static int bundle_stage(uint64_t key) {
     if (key == UINT64_C(0x911dc1299b288cef)) return 0;
     if (key == UINT64_C(0x3a91240d8b0e0725)) return 1;
     if (key == UINT64_C(0xa0641c211a8f53b8)) return missing_fragment ? -1 : 1;
+    if (key == DIGIMON_DECAL_FS || key == DIGIMON_FOG_FS || key == DIGIMON_LINEAR_DEPTH_FS) return 1;
     return 5;
 }
 
@@ -51,9 +52,9 @@ int main(void) {
     assert(!gsr2_profile_for_build(GSR2_DIGIMON_ID, "another-build"));
     assert(!gsr2_profile_for_build(UINT64_C(0x0100A3501946E000), GSR2_DIGIMON_BUILD));
     gs_profile = gsr2_profile_for_build(GSR2_DIGIMON_ID, GSR2_DIGIMON_BUILD);
-    assert(gs_profile && gsr2_bundle_matches(gs_profile, bundle_stage));
+    assert(gs_profile && gsr2_bundle_matches(GSR2_DIGIMON_ID, bundle_stage));
     missing_fragment = 1;
-    assert(!gsr2_bundle_matches(gs_profile, bundle_stage));
+    assert(!gsr2_bundle_matches(GSR2_DIGIMON_ID, bundle_stage));
     const gsr2_compute_pass *pass = gsr2_compute_for_key(gs_profile, UINT64_C(0x80310bcd69270f72));
     assert(pass && pass->stage == VK_TEMPORAL_UPSCALE_OUTPUT && pass->sample == 129 && pass->image == 2);
     assert(pass->tile_w == 16 && pass->tile_h == 16 && !gsr2_compute_for_key(gs_profile, 0));
@@ -114,7 +115,7 @@ int main(void) {
     assert(!vk_temporal_current_draw(&frame) && !frame.depth.texture.serial && !frame.fragment_key);
     assert(!gsr2_profile_for_build(GSR2_FE3H_ID, GSR2_OT2_BUILD));
     gs_profile = gsr2_profile_for_build(GSR2_FE3H_ID, GSR2_FE3H_BUILD);
-    assert(gs_profile && !gsr2_bundle_matches(gs_profile, bundle_stage));
+    assert(gs_profile && !gsr2_bundle_matches(GSR2_FE3H_ID, bundle_stage));
     assert(gsr2_composite_for_keys(gs_profile, UINT64_C(0x7a14dbc4a0902f17), UINT64_C(0xd173c968bf96d599))->sample == 2);
     S.tex[1][2] = 2;
     shader.key = UINT64_C(0x29e98c0cf34da3f1);
@@ -122,7 +123,7 @@ int main(void) {
     assert(!frame.motion.texture.serial && !frame.previous_view_projection.bytes);
     gs_profile = gsr2_profile_for_build(GSR2_OT2_ID, GSR2_OT2_BUILD);
     assert(gs_profile && !gs_profile->compute_count);
-    assert(!gsr2_bundle_matches(gs_profile, bundle_stage)); // the Digimon fixture contains no OT2 depth shader
+    assert(!gsr2_bundle_matches(GSR2_OT2_ID, bundle_stage)); // the Digimon fixture contains no OT2 depth shader
     assert(gsr2_composite_for_keys(gs_profile, UINT64_C(0xd6b8d37f4c6d67ab), UINT64_C(0x94edc6d52c88a68a))->scales_scene);
     shader.key = OT2_DEPTH_FS;
     S.tex[1][128] = 2;
@@ -136,7 +137,7 @@ int main(void) {
         gs_profile = gsr2_profile_for_build(ue_titles[i].id, ue_titles[i].build);
         assert(gs_profile == &ue_titles[i].profile);
         assert(!gsr2_profile_for_build(ue_titles[i].id, GSR2_OT2_BUILD));
-        assert(!gsr2_bundle_matches(gs_profile, bundle_stage));
+        assert(!gsr2_bundle_matches(ue_titles[i].id, bundle_stage));
         shader.key = gs_profile->ue->depth_fragment;
         S.tex[1][gs_profile->ue->depth_slot] = 2;
         assert(vk_temporal_current_draw(&frame) && frame.depth.texture.serial == 2);

@@ -5,7 +5,6 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
-extern int vk_gsr2_has_profile(void);
 static int read_field(uintptr_t addr, void *out, size_t size) {
     struct iovec local = {out, size}, remote = {(void *)addr, size};
     return process_vm_readv(getpid(), &local, 1, &remote, 1, 0) == (ssize_t)size;
@@ -93,7 +92,7 @@ static void set_resolution(int percent) {
 
 void dm_gsr2_resolution_tick(void) {
     int percent = dm_gsr2_custom_percent();
-    if (percent && (!dm_opmode() || !vk_gsr2_has_profile())) percent = 0;
+    if (percent && !dm_opmode()) percent = 0;
     set_resolution(percent);
 }
 #endif
