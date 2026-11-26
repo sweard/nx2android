@@ -1,0 +1,30 @@
+.claude/skills/nx2android-checkpoint-triage/SKILL.md
+  s_c84cb0b533a36d::t_4be4de5ea6282e 1-2,4-6,9-15
+  s_c84cb0b533a36d::t_f79845f8690900 3,7-8
+.claude/skills/nx2android-checkpoint-triage/SKILL.en.md
+  s_c84cb0b533a36d::t_f79845f8690900 1-10
+docs/CHECKPOINT_ONBOARDING.md
+  s_c84cb0b533a36d::t_a5ccb9dc1fbaca 3-4
+  s_c84cb0b533a36d::t_92d87d7c557b8f 1-2,5-54
+docs/CHECKPOINT_ONBOARDING.en.md
+  s_c84cb0b533a36d::t_a5ccb9dc1fbaca 1-54
+docs/DEVELOPMENT_GUIDE.md
+  s_c84cb0b533a36d::t_386e33c585f4aa 376
+  s_c84cb0b533a36d::t_a5ccb9dc1fbaca 375
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cc043413c88b7535b4355af9163eba7d6618287b",
+  "prompts": {},
+  "sessions": {
+    "s_c84cb0b533a36d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2169c-e769-7d70-b468-862ddbcd5ee3",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
