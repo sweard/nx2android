@@ -1,12 +1,9 @@
 // The same title gate controls the Vulkan adapter and its pause-menu page.
 #pragma once
-#include "../games/temporal/builds.h"
-#if defined(DM_GAME_PROGRAM_ID) && DM_GAME_PROGRAM_ID == GSR2_DIGIMON_ID
+#include "../games/gsr2_builds.h"
+#if defined(DM_GAME_PROGRAM_ID) && (DM_GAME_PROGRAM_ID == GSR2_DIGIMON_ID || DM_GAME_PROGRAM_ID == GSR2_OT2_ID || DM_GAME_PROGRAM_ID == GSR2_DQ12_ID || DM_GAME_PROGRAM_ID == GSR2_DQ7_ID || DM_GAME_PROGRAM_ID == GSR2_OT0_ID || DM_GAME_PROGRAM_ID == GSR2_FF_HK_ID)
 #define DM_HAS_GSR2_ADAPTER 1
 #define DM_HAS_GSR2_INPUT_CONTROL 1
-#elif defined(DM_GAME_PROGRAM_ID) && (DM_GAME_PROGRAM_ID == GSR2_OT2_ID || DM_GAME_PROGRAM_ID == GSR2_DQ12_ID || DM_GAME_PROGRAM_ID == GSR2_DQ7_ID || DM_GAME_PROGRAM_ID == GSR2_OT0_ID || DM_GAME_PROGRAM_ID == GSR2_FF_HK_ID)
-#define DM_HAS_GSR2_ADAPTER 1
-#define DM_HAS_GSR2_INPUT_CONTROL 0
 #else
 #define DM_HAS_GSR2_ADAPTER 0
 #define DM_HAS_GSR2_INPUT_CONTROL 0

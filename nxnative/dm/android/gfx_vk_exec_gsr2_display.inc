@@ -3,6 +3,37 @@
 #if DM_HAS_GSR2_ADAPTER
 static vkimg_t *gs_color, *gs_depth;
 static int gs_window_draw;
+static uint32_t gs_active_w, gs_active_h;
+
+// UE postprocessing uses either the exact view or a texture rounded to four/eight pixels.
+static int gs_ue_axis(float active, uint32_t allocation) {
+    if (!(active >= 1 && active <= allocation) || floorf(active) != active) return 0;
+    uint32_t n = (uint32_t)active;
+    return allocation == n || allocation == ((n + 3u) & ~3u) || allocation == ((n + 7u) & ~7u);
+}
+
+static uint32_t gs_scaled_axis(uint32_t display, uint32_t active, uint32_t allocation) {
+    return (display * (uint64_t)allocation + active / 2) / active;
+}
+
+// Crop-based guest samplers can filter over the first padding texel. Stretch the
+// last visible column/row/corner into three disjoint destinations in one blit.
+static void gs_extend_edges(VkCommandBuffer cb, vkimg_t *im, uint32_t w, uint32_t h) {
+    if (w == im->w && h == im->h) return;
+    VkImageSubresourceLayers sub = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    VkImageBlit edges[3];
+    uint32_t count = 0;
+    for (unsigned mask = 1; mask <= 3; mask++) {
+        int right = mask & 1, bottom = mask & 2;
+        if ((right && w == im->w) || (bottom && h == im->h)) continue;
+        edges[count++] = (VkImageBlit){.srcSubresource = sub, .dstSubresource = sub,
+            .srcOffsets = {{right ? w-1 : 0, bottom ? h-1 : 0, 0}, {w, h, 1}},
+            .dstOffsets = {{right ? w : 0, bottom ? h : 0, 0}, {right ? im->w : w, bottom ? im->h : h, 1}}};
+    }
+    vk_img_barrier_all(cb);
+    vkCmdBlitImage(cb, im->img, VK_IMAGE_LAYOUT_GENERAL, im->img, VK_IMAGE_LAYOUT_GENERAL, count, edges, VK_FILTER_NEAREST);
+    vk_img_barrier_all(cb);
+}
 
 static const gsr2_composite_pass *gs_composite_stage(void) {
     return S.sh[0] && S.sh[1] ? gsr2_composite_for_keys(gs_profile, S.sh[0]->key, S.sh[1]->key) : NULL;
@@ -45,13 +76,22 @@ static void gs_begin_display_pass(void) {
     if (!source && color->gs_stamp != g_tex_frame + 1) return;
     vkimg_t *ref = (source ? source : color)->gs_scaled;
     if (!ref || ref->samples != (source ? 1u : color->samples)) return;
-    // A UE scene texture can include padding outside the normalized active UV range.
-    uint32_t out_h = source && gs_profile->ue ? ref->w * 9 / 16 : ref->h;
-    vkimg_t *out = vk_gsr2_surface(vk_cmd(), color, ref->w, out_h);
-    vkimg_t *z = depth ? vk_gsr2_surface(vk_cmd(), depth, ref->w, out_h) : NULL;
+    uint32_t out_w = ref->w, out_h = ref->h, active_w = out_w, active_h = out_h;
+    if (source && gs_profile->ue) {
+        if (S.vp[0][0] || S.vp[0][1] || !gs_ue_axis(S.vp[0][2], color->w) || !gs_ue_axis(S.vp[0][3], color->h)) return;
+        active_h = dm_gsr2_output_height();
+        active_w = active_h * 16 / 9;
+        out_w = gs_scaled_axis(active_w, (uint32_t)S.vp[0][2], color->w);
+        out_h = gs_scaled_axis(active_h, (uint32_t)S.vp[0][3], color->h);
+        if ((active_w != out_w || active_h != out_h) && color->samples != 1) return;
+    }
+    vkimg_t *out = vk_gsr2_surface(vk_cmd(), color, out_w, out_h);
+    vkimg_t *z = depth ? vk_gsr2_surface(vk_cmd(), depth, out_w, out_h) : NULL;
     if (!out || (depth && !z)) return;
     gs_color = color;
     gs_depth = depth;
+    gs_active_w = active_w;
+    gs_active_h = active_h;
     gs_attach(0, &P_ca[0], color, out);
     if (color->samples > 1) g_bc_stale = 1;
     if (depth) gs_attach(8, &P_da, depth, z);
@@ -75,6 +115,7 @@ static void gs_end_display_pass(void) {
         return;
     }
     if (gs_color->samples > 1) g_bc_stale = 1;
+    if (P_ca[0].storeOp == VK_ATTACHMENT_STORE_OP_STORE) gs_extend_edges(vk_cmd(), gs_color->gs_scaled, gs_active_w, gs_active_h);
     gs_finish_attachment(gs_color, P_ca[0].storeOp);
     gs_finish_attachment(gs_depth, P_da.storeOp);
     if (!(g_tex_frame % 120))

@@ -622,7 +622,11 @@ static void ov_menu_panel(const ov_canvas *cv, int st, int position, int checkpo
             cv_disc(target, t[0] + f * t[2], t[1], kr, C_WHITE);
             char v[48]; int vs = is;
             if (it == OVM_GSR2_SIZE) {
+#if defined(DM_GAME_PROGRAM_ID) && DM_GAME_PROGRAM_ID == GSR2_DIGIMON_ID
                 snprintf(v, sizeof v, "%d%%  %dx%d", percent, 1280 * percent / 100, 720 * percent / 100);
+#else
+                snprintf(v, sizeof v, "%d%%", percent);
+#endif
                 while (vs > 1 && cv_text_w(v, vs) > x1 - t[0] - t[2] - kr - gap * 0.25f) vs--;
             } else snprintf(v, sizeof v, "%d%%", op);
             cv_text(target, x1 - cv_text_w(v, vs), cy, v, vs, C_WHITE);

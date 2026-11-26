@@ -56,12 +56,12 @@ static void ue_observe_draw(void) {
     const gsr2_composite_pass *pass = gs_composite_stage();
     if (pass != gs_profile->composite || ue_scene.captured != g_tex_frame || !ue_scene.depth || ue_scene.recorded == g_tex_frame ||
         S.rt_n != 1 || !S.rt_has_col[0] || S.vp[0][0] || S.vp[0][1] ||
-        S.rt_col[0].d.width != S.vp[0][2] || S.rt_col[0].d.height != S.vp[0][3]) return;
+        !gs_ue_axis(S.vp[0][2], S.rt_col[0].d.width) || !gs_ue_axis(S.vp[0][3], S.rt_col[0].d.height)) return;
     vk_temporal_texture source = {0};
     if (!temporal_handle(vk_tex_slot_handle(S.tex[1], S.img[1], pass->sample), &source) ||
         !gsr2_plain_2d(&source) || source.texture.d.format != r->color_format ||
-        source.texture.d.width != ue_scene.params.render[0] || source.texture.d.height < ue_scene.params.render[1] ||
-        source.texture.d.height - ue_scene.params.render[1] > 3) return;
+        !gs_ue_axis(ue_scene.params.render[0], source.texture.d.width) ||
+        !gs_ue_axis(ue_scene.params.render[1], source.texture.d.height)) return;
     vk_end_pass();
     vkimg_t *im = NULL;
     gsr2_frame_input frame = {.depth = ue_scene.depth, .params = ue_scene.params};
@@ -71,10 +71,10 @@ static void ue_observe_draw(void) {
     VkCommandBuffer cb = vk_cmd();
     if (!gsr2_record_frame(cb, &frame)) return;
     if (g_gsr2_mode == 2) {
-        uint32_t h = ue_scene.params.render[1];
-        uint32_t padded_h = (gs_scene.result_h * (uint64_t)im->h + h/2) / h;
-        vkimg_t *scaled = vk_gsr2_surface(cb, im, gs_scene.result_w, padded_h);
-        if (!scaled || !gsr2_blit_height(cb, scaled, gs_scene.result_h)) return;
+        uint32_t padded_w = gs_scaled_axis(gs_scene.result_w, ue_scene.params.render[0], im->w);
+        uint32_t padded_h = gs_scaled_axis(gs_scene.result_h, ue_scene.params.render[1], im->h);
+        vkimg_t *scaled = vk_gsr2_surface(cb, im, padded_w, padded_h);
+        if (!scaled || !gsr2_blit_region(cb, scaled, gs_scene.result_w, gs_scene.result_h)) return;
         im->gs_stamp = g_tex_frame + 1;
     }
     ue_scene.recorded = g_tex_frame;

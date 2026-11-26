@@ -16,8 +16,10 @@ static const gsr2_composite_pass dq12_composite = {
 static const gsr2_ue_pass dq7_depth = {
     UINT64_C(0x8a736496ae2f8d86), UINT64_C(0x8f282a993df1102a), 131, 0, 520, 488, 268, 154, 0,
 };
-static const gsr2_composite_pass dq7_composite = {
-    UINT64_C(0x7661e42e3d037bf6), UINT64_C(0xa68cf74109f98bf5), 128, 1, 1,
+static const gsr2_composite_pass dq7_composite[] = {
+    {UINT64_C(0x7661e42e3d037bf6), UINT64_C(0xa68cf74109f98bf5), 128, 1, 1},
+    // Below native resolution a second pass writes the scene to the HUD target.
+    {UINT64_C(0x8a736496ae2f8d86), UINT64_C(0x903f8b260157dcc2), 128, 1, 1},
 };
 static const gsr2_ue_pass ot0_depth = {
     UINT64_C(0xd3d1c829e246ecf1), UINT64_C(0xf0fceb15c1b90176), 128, 0, 544, 496, 240, 37, 0,
@@ -35,7 +37,7 @@ static const struct {
     {GSR2_DQ12_ID, "ddb633241838c09038ff06706f68aecc",
      {.read_draw=temporal_ue, .observe_draw=ue_observe_draw, .composite=&dq12_composite, .composite_count=1, .ue=&dq12_depth}},
     {GSR2_DQ7_ID, "2af81ff85004a975d22f43414e582aac",
-     {.read_draw=temporal_ue, .observe_draw=ue_observe_draw, .composite=&dq7_composite, .composite_count=1, .ue=&dq7_depth}},
+     {.read_draw=temporal_ue, .observe_draw=ue_observe_draw, .composite=dq7_composite, .composite_count=2, .ue=&dq7_depth}},
     {GSR2_OT0_ID, "c7c4e3fe091eb9a0adc4df5cbe0c9da9",
      {.read_draw=temporal_ue, .observe_draw=ue_observe_draw, .composite=&ot0_composite, .composite_count=1, .ue=&ot0_depth}},
 };

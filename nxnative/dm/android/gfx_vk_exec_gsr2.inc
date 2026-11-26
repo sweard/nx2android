@@ -133,33 +133,29 @@ static vkimg_t *gsr2_target(const vk_temporal_dispatch *d, const p_dispatch *gro
     return dst;
 }
 
-static int gsr2_blit_height(VkCommandBuffer cb, vkimg_t *dst, uint32_t active_h) {
+static int gsr2_blit_region(VkCommandBuffer cb, vkimg_t *dst, uint32_t active_w, uint32_t active_h) {
     VkFormatProperties src_format, dst_format;
     vkGetPhysicalDeviceFormatProperties(V.pd, VK_FORMAT_R16G16B16A16_SFLOAT, &src_format);
     vkGetPhysicalDeviceFormatProperties(V.pd, dst->fmt, &dst_format);
     if (!(src_format.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT) ||
         !(dst_format.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT)) return 0;
-    int scaled = dst->w != gs_scene.result_w || active_h != gs_scene.result_h;
+    int scaled = active_w != gs_scene.result_w || active_h != gs_scene.result_h;
     if (scaled && !(src_format.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)) return 0;
     VkImageSubresourceLayers layer = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
     VkImageBlit copy = {.srcSubresource = layer, .dstSubresource = layer,
                         .srcOffsets = {{0, 0, 0}, {(int)gs_scene.result_w, (int)gs_scene.result_h, 1}},
-                        .dstOffsets = {{0, 0, 0}, {dst->w, active_h, 1}}};
+                        .dstOffsets = {{0, 0, 0}, {active_w, active_h, 1}}};
     vk_img_barrier_all(cb);
     vkCmdBlitImage(cb, gs_scene.result, VK_IMAGE_LAYOUT_GENERAL, dst->img, VK_IMAGE_LAYOUT_GENERAL, 1, &copy, scaled ? VK_FILTER_LINEAR : VK_FILTER_NEAREST);
-    if (active_h < dst->h) {
-        // Clamp the guard rows to the last visible row for the guest composite sampler.
-        copy.srcOffsets[0].y = gs_scene.result_h - 1;
-        copy.dstOffsets[0].y = active_h;
-        copy.dstOffsets[1].y = dst->h;
-        vkCmdBlitImage(cb, gs_scene.result, VK_IMAGE_LAYOUT_GENERAL, dst->img, VK_IMAGE_LAYOUT_GENERAL, 1, &copy, VK_FILTER_NEAREST);
-    }
+#if DM_HAS_GSR2_ADAPTER
+    gs_extend_edges(cb, dst, active_w, active_h);
+#endif
     vk_img_barrier_all(cb);
     return 1;
 }
 
 static int gsr2_blit(VkCommandBuffer cb, vkimg_t *dst) {
-    return gsr2_blit_height(cb, dst, dst->h);
+    return gsr2_blit_region(cb, dst, dst->w, dst->h);
 }
 
 static int gsr2_replace_dispatch(VkCommandBuffer cb, const p_dispatch *groups) {

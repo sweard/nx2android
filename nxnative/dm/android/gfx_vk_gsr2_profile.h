@@ -46,9 +46,9 @@ typedef struct {
     const gsr2_ue_pass *ue;
 } gsr2_profile;
 
-#include "../games/temporal/digimon_122.inc"
-#include "../games/temporal/ot2_111.inc"
-#include "../games/temporal/ue_titles.inc"
+#include "../games/gsr2_digimon_122.inc"
+#include "../games/gsr2_ot2_111.inc"
+#include "../games/gsr2_ue_titles.inc"
 
 static inline const gsr2_profile *gsr2_profile_for_build(uint64_t title, const char *build) {
     for (size_t i = 0; build && i < sizeof ue_titles / sizeof *ue_titles; ++i)

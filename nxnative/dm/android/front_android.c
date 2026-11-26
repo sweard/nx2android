@@ -159,8 +159,8 @@ int dm_gsr2_input_mode(void) {
     const char *value = getenv("DM_VK_GSR2");
     return value && atoi(value) == 2 ? GSR2_AUTO : GSR2_OFF;
 }
-int dm_gsr2_render_height(void) {
-    return dm_gsr2_input_mode() == GSR2_CUSTOM ? 720 * atomic_load(&g_gsr2_percent) / 100 : 0;
+int dm_gsr2_custom_percent(void) {
+    return dm_gsr2_input_mode() == GSR2_CUSTOM ? atomic_load(&g_gsr2_percent) : 0;
 }
 int dm_gsr2_output_height(void) { return atomic_load(&g_gsr2_output); }
 static void menu_gsr2_set(int mode) {
