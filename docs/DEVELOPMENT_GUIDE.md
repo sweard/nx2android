@@ -372,6 +372,8 @@ For a single-screen NVN/Vulkan game, build with `python -m porter port <folder> 
 
 For an installed port with matching modules and a registered profile, `python -m porter host --package <package>` preserves its current checkpoint capability. Pass `--field-checkpoint` to enable it on an APK that already has the checkpoint UI, or `--no-field-checkpoint` to disable it. Host updates replace the native library in the installed APK and retain its activity. An older APK without the UI needs a new APK from `porter port`. These flags do not change the data pack format.
 
+For log collection, failure diagnosis, and verification on a new game, see the runtime checkpoint onboarding guide. [English](CHECKPOINT_ONBOARDING.en.md) · [简体中文](CHECKPOINT_ONBOARDING.md)
+
 
 JNI passes ordinary UTF-8 byte arrays, which preserve supplementary characters. The guest's minimum and maximum lengths are UTF-16 units, and native output truncation preserves complete UTF-8 code points. The guest passes its request-local minimum length to a host pthread and joins it. That worker attaches to the VM, looks up and calls the Java method, and detaches on its own pthread stack. The bridge caches method presence or absence for the activity class. When the optional method is absent, the guest uses the overlay keyboard after the worker exits.
 
