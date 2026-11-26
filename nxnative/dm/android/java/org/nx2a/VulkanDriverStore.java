@@ -19,7 +19,7 @@ import java.util.regex.Pattern;
 /** Imported libraries have immutable names so a new import cannot replace a mapped file.
  * The activity publishes the returned basename and selection together in private preferences. */
 final class VulkanDriverStore {
-    private static final int MAX_BYTES = 256 * 1024 * 1024;
+    static final int MAX_BYTES = 256 * 1024 * 1024;
     private static final Pattern VERSION = Pattern.compile("(?i)(?:^|[^a-z0-9])(v[0-9]+(?:\\.[0-9]+)*(?:-r[0-9]+)?)(?=$|[^a-z0-9])");
     private final File directory;
 

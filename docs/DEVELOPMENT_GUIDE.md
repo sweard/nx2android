@@ -68,6 +68,8 @@ How the export folders are laid out: [ARCHITECTURE.md](ARCHITECTURE.md#saves).
 
 `porter driver` changes the Vulkan driver of a port already on the device, without the game's files: the app's APK is rebuilt with the library and installed over it (the saves stay), and its `env.txt` names it. The app needs the adrenotools libraries. Current Java-activity ports include them, even with the system driver as default. On a port with an in-game selection, choose **Game → Vulkan driver → Package default** to follow `env.txt`.
 
+In **Game → Vulkan driver → Import .so / ZIP**, a driver ZIP supplies the list label from the root `meta.json` field `name` and the arm64 library from the root entry named by `libraryName`. A standalone `.so` prompts for a label. The selected driver takes effect on the next cold start.
+
 ```
 python -m porter driver "D:\Drivers\libvulkan_freedreno.so" --package org.nx2a.supermario3dworld
 python -m porter driver --system --package org.nx2a.supermario3dworld

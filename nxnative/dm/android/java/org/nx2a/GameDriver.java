@@ -19,6 +19,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -90,7 +91,7 @@ final class GameDriver {
                         note(edit.commit() ? tr("Driver selected. Fully close and reopen the game to apply.", "已选择驱动。完全退出并重新打开游戏后生效。") : tr("Could not save driver selection.", "无法保存驱动选择。"));
                     }).setNegativeButton(tr("Cancel", "取消"), null);
             if (new File(activity.getApplicationInfo().nativeLibraryDir, "libadrenotools.so").isFile())
-                dialog.setNeutralButton(tr("Import .so", "导入 .so"), (d, w) -> pick());
+                dialog.setNeutralButton(tr("Import .so / ZIP", "导入 .so / ZIP"), (d, w) -> pick());
             dialog.show();
         });
     }
@@ -108,8 +109,13 @@ final class GameDriver {
         else {
             busy = true;
             worker.execute(() -> {
-                String version = VulkanDriverStore.suggestedVersion(label(uri));
-                activity.runOnUiThread(() -> nameImport(uri, version));
+                String filename = label(uri);
+                if (filename.toLowerCase(Locale.ROOT).endsWith(".zip")) {
+                    copy(uri, null);
+                } else {
+                    String version = VulkanDriverStore.suggestedVersion(filename);
+                    activity.runOnUiThread(() -> nameImport(uri, version));
+                }
             });
         }
         return true;
@@ -138,18 +144,30 @@ final class GameDriver {
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             String name = input.getText().toString().trim();
             if (name.isEmpty()) { input.setError(tr("Enter a version or name.", "请输入版本或名称。")); return; }
-            for (String existing : store().drivers(prefs().getAll()).values()) {
-                if (existing.equalsIgnoreCase(name)) { input.setError(tr("This name is already in use.", "此名称已被使用。")); return; }
-            }
+            if (nameTaken(name)) { input.setError(tr("This name is already in use.", "此名称已被使用。")); return; }
             dialog.dismiss();
             worker.execute(() -> copy(uri, name));
         });
     }
 
+    private boolean nameTaken(String name) {
+        for (String existing : store().drivers(prefs().getAll()).values())
+            if (existing.equalsIgnoreCase(name)) return true;
+        return false;
+    }
+
     private void copy(Uri uri, String name) {
         File file = null;
         try (InputStream stream = activity.getContentResolver().openInputStream(uri)) {
-            file = store().copy(stream);
+            if (stream == null) throw new VulkanDriverStore.ImportException("Unreadable document", "无法读取此文件。");
+            if (name == null) {
+                VulkanDriverArchive driver = VulkanDriverArchive.unpack(stream, activity.getCacheDir(), store());
+                file = driver.library;
+                name = driver.name;
+            } else {
+                file = store().copy(stream);
+            }
+            if (nameTaken(name)) throw new VulkanDriverStore.ImportException("This name is already in use.", "此名称已被使用。");
             if (!prefs().edit().putString(file.getName(), name).putString("selected", file.getName())
                     .putInt("mode", IMPORTED).commit()) throw new VulkanDriverStore.ImportException("Could not save selection", "无法保存驱动选择。");
             file = null;
@@ -158,8 +176,8 @@ final class GameDriver {
             android.util.Log.w("nx2a-driver", "Driver import failed", e);
             String detail = e instanceof VulkanDriverStore.ImportException
                     ? tr(e.getMessage(), ((VulkanDriverStore.ImportException)e).chinese)
-                    : tr(e.getMessage() == null ? "Select a valid arm64 .so file." : e.getMessage(),
-                            "请选择可读取的 arm64 共享库（.so）文件。");
+                    : tr(e.getMessage() == null ? "Select a valid arm64 .so or driver ZIP." : e.getMessage(),
+                            "请选择可读取的 arm64 共享库（.so）或驱动 ZIP。");
             note(tr("Driver import failed. ", "驱动导入失败。") + detail);
         } finally {
             if (file != null) file.delete();
