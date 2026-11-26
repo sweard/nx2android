@@ -1,0 +1,21 @@
+nxnative/dm/android/gfx_vk_present.c
+  s_919a1f3e0286bf::t_8c3417dd7d80ae 1156-1163,1183,1185,1649,1673-1674
+tests/test_vk_present_timing.py
+  s_919a1f3e0286bf::t_8c3417dd7d80ae 183-187,231,283-284,296,298
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "293fcaf7ffd21063174d10038e1100adc16c903b",
+  "prompts": {},
+  "sessions": {
+    "s_919a1f3e0286bf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a2169c-e769-7d70-b468-862ddbcd5ee3",
+        "model": "unknown"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
