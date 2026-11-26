@@ -1,0 +1,57 @@
+nxnative/dm/android/front_android.c
+  s_c84cb0b533a36d::t_9aa955123ce93a 1012
+tests/test_driver.py
+  s_c84cb0b533a36d::t_473f0d062cd53e 274-277,281-286
+nxnative/dm/android/build.py
+  s_c84cb0b533a36d::t_9aa955123ce93a 107-110
+docs/ARCHITECTURE.md
+  s_919a1f3e0286bf::t_dd37a3c43b88b6 560
+docs/CHECKPOINT_ONBOARDING.md
+  s_919a1f3e0286bf::t_dd37a3c43b88b6 9
+docs/CHECKPOINT_ONBOARDING.en.md
+  s_919a1f3e0286bf::t_dd37a3c43b88b6 9
+docs/DEVELOPMENT_GUIDE.md
+  s_919a1f3e0286bf::t_dd37a3c43b88b6 371
+tests/test_menu_scroll.py
+  s_c84cb0b533a36d::t_473f0d062cd53e 93-106,271-279
+nxnative/dm/android/tools/android_profile.py
+  s_c84cb0b533a36d::t_c1bc19922466c0 57-67
+porter/host.py
+  s_c84cb0b533a36d::t_c1bc19922466c0 17,173,210-211,214-215
+porter/pipeline.py
+  s_c84cb0b533a36d::t_c1bc19922466c0 74,1003-1004,1006-1008,1010
+nxnative/dm/android/checkpoint/runtime.c
+  s_c84cb0b533a36d::t_9aa955123ce93a 28,166,223,247-269,271,276
+nxnative/dm/games/checkpoint_builds.tsv
+  s_c84cb0b533a36d::t_c1bc19922466c0 1-7
+nxnative/dm/android/gfx_vk_present.c
+  s_c84cb0b533a36d::t_9aa955123ce93a 591,606-608,626,628
+porter/cli.py
+  s_c84cb0b533a36d::t_c1bc19922466c0 26-27
+tests/test_porter.py
+  s_c84cb0b533a36d::t_473f0d062cd53e 371-372
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d114747c4bd66c53683b7ef1fce4435f3504fbfd",
+  "prompts": {},
+  "sessions": {
+    "s_919a1f3e0286bf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a2169c-e769-7d70-b468-862ddbcd5ee3",
+        "model": "unknown"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    },
+    "s_c84cb0b533a36d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2169c-e769-7d70-b468-862ddbcd5ee3",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
