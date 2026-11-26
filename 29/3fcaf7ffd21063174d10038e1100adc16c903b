@@ -2,6 +2,8 @@ nxnative/dm/android/gfx_vk_present.c
   s_919a1f3e0286bf::t_8c3417dd7d80ae 1156-1163,1183,1185,1649,1673-1674
 tests/test_vk_present_timing.py
   s_919a1f3e0286bf::t_8c3417dd7d80ae 183-187,231,283-284,296,298
+docs/ARCHITECTURE.md
+  s_c84cb0b533a36d::t_04be5e1a473b70 464
 ---
 {
   "schema_version": "authorship/3.0.0",
@@ -14,6 +16,14 @@ tests/test_vk_present_timing.py
         "tool": "claude",
         "id": "01a2169c-e769-7d70-b468-862ddbcd5ee3",
         "model": "unknown"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    },
+    "s_c84cb0b533a36d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2169c-e769-7d70-b468-862ddbcd5ee3",
+        "model": "gpt-6.2-astra"
       },
       "human_author": "fangjian <fangjian@wondertechlabs.com>"
     }
