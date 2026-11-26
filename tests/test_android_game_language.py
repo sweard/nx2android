@@ -19,16 +19,16 @@ class AndroidGameLanguage(unittest.TestCase):
         with tempfile.TemporaryDirectory() as work:
             pack = Path(work) / 'data'
             for language, supported, expected in (
-                ('system', ['en-US', 'zh-Hans'], ['DM_LANG=system', 'DM_LANG_SUPPORTED=en-US zh-Hans']),
-                ('system', [], ['DM_LANG=system']),
-                ('ja', ['en-US', 'ja'], ['DM_LANG=ja']),
+                ('system', ['en-US', 'zh-Hans'], ['DM_LANG=system', 'DM_DISPLAY_VERSION=1.0', 'DM_LANG_SUPPORTED=en-US zh-Hans']),
+                ('system', [], ['DM_LANG=system', 'DM_DISPLAY_VERSION=1.0']),
+                ('ja', ['en-US', 'ja'], ['DM_LANG=ja', 'DM_DISPLAY_VERSION=1.0']),
             ):
                 with self.subTest(language=language, supported=supported):
                     manifest = datapack.build(pack, profile=profile, version='v0', display='1.0', patched=None,
                                               romfs=None, shaders=None, language=language, languages=supported)
                     self.assertEqual(manifest['language'], language)
                     rows = (pack / 'env.txt').read_text(encoding='utf-8').splitlines()
-                    self.assertEqual([row for row in rows if row.startswith('DM_LANG')], expected)
+                    self.assertEqual([row for row in rows if row.startswith(('DM_LANG', 'DM_DISPLAY_VERSION='))], expected)
 
     @unittest.skipUnless(CC, 'a host C compiler is required')
     def test_locale_mapping(self):

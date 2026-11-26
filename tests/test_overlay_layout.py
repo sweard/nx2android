@@ -97,11 +97,11 @@ int main(void) {
     assert(ov_drag_pos(1100, 600, 1013, 50) == 506.5f);
     assert(ov_drag_pos(1100, 505, 1013, 50) == 508);
 
-    assert(ov_menu_item(0, 5) == OVM_PAD);
-    for (int row = 7; row < OVM_ROWS - 1; ++row) assert(ov_menu_item(0, row) < 0);
-    assert(ov_menu_item(0, 6) == -1);
+    assert(ov_menu_item(0, 4) == OVM_ZONE && ov_menu_item(0, 5) == OVM_RUMBLE && ov_menu_item(0, 6) == OVM_PAD);
+    for (int row = 8; row < OVM_ROWS - 1; ++row) assert(ov_menu_item(0, row) < 0);
+    assert(ov_menu_item(0, 7) == -1);
     audio_available = 1;
-    assert(ov_menu_item(0, 6) == OVM_AUDIO);
+    assert(ov_menu_item(0, 7) == OVM_AUDIO);
     assert(ov_menu_item(1, OVM_ROWS - 5) == OVM_FRAMEGEN && ov_menu_item(1, OVM_ROWS - 4) == OVM_FG_TARGET);
     assert(ov_menu_item(1, OVM_ROWS - 3) == -1);
     assert(ov_menu_item(1, OVM_ROWS - 2) == -1);
@@ -122,11 +122,13 @@ int main(void) {
     for (unsigned s = 0; s < sizeof screens / sizeof screens[0]; s++) {
         float W = screens[s][0], H = screens[s][1], step = H / OVE_GRID_ROWS, p[4];
         ov_menu_rect(W, H, p);
-        for (int row = 0; row < OVM_ROWS; row++) {
-            float r[4]; ov_menu_rowrect(p, row, r);
+        for (int row = 0; row < OVM_VIEW_ROWS; row++) {
+            float r[4]; ov_menu_view_rowrect(p, row, r);
             assert(ov_menu_row_at(r[0] + r[2] / 2, r[1] + r[3] / 2, W, H) == row);
+        }
+        for (int row = 1; row < OVM_ROWS - 1; row++) {
             if (ov_menu_fg_choice(ov_menu_item(1, row))) {
-                ov_menu_view_rowrect(p, row, r);
+                float r[4]; ov_menu_view_rowrect(p, row, r);
                 float end = r[0] + r[2] - r[3] * 0.15f, width = ov_menu_fg_choice_width(r);
                 assert(ov_menu_fg_choice_at(end - 1.5f * width, p, row) == 0);
                 assert(ov_menu_fg_choice_at(end - 0.5f * width, p, row) == 1);

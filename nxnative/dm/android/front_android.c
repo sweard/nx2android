@@ -138,6 +138,7 @@ static _Atomic int g_set_opacity = 60;   // the gamepad's opacity, percent (OV_O
 static _Atomic int g_set_sr;   // Super resolution: the game's picture upscaled into a larger window by the present pass (gfx_vk_present.c sr_ready)
 static _Atomic int g_set_sharp;   // its Sharpness, percent by 25 (the menu's slider, settings.txt sharpness=)
 static _Atomic int g_set_grid;   // the layout editor's Snap to grid
+static _Atomic int g_set_zone;   // the sticks' touch area: 0 their circles, 1 half the screen each (overlay_layout.h dm_overlay_stick_zone)
 // the menu button in play (issue #397): env.txt's DM_MENU_BUTTON=0 (porter port --no-menu-button) leaves it out, as a control the player hid (dm_overlay_hidden):
 // not drawn and not touchable, on the gamepad and over the pause menu, so its corner of the screen is the game's. Back (the system's back gesture or key) and a
 // controller's Home/Menu key open the menu (handle_event); the layout editor shows it darkened. The external screen's gamepad keeps it (externalOverlay)
@@ -197,7 +198,7 @@ static void settings_load(const char *checkpoint) {
     int seen_overlay = 0;
     if (checkpoint && !f) return;
     if (checkpoint) {
-        atomic_store(&g_set_sr, 0); atomic_store(&g_set_sharp, 0);
+        atomic_store(&g_set_sr, 0); atomic_store(&g_set_sharp, 0); atomic_store(&g_set_zone, 0);
         atomic_store(&g_set_overlay, 1); atomic_store(&g_set_rumble, 1); atomic_store(&g_set_fps, 0);
         atomic_store(&g_set_framegen, 0); atomic_store(&g_set_fg_target, 60);
         atomic_store(&g_set_opacity, 60); atomic_store(&g_set_grid, 0); atomic_store(&g_set_labels, -1);
@@ -223,6 +224,7 @@ static void settings_load(const char *checkpoint) {
         }
         else if (sscanf(line, "opacity=%d", &v) == 1) atomic_store(&g_set_opacity, v < OV_OPACITY_MIN ? OV_OPACITY_MIN : v > OV_OPACITY_MAX ? OV_OPACITY_MAX : v);
         else if (sscanf(line, "grid=%d", &v) == 1) atomic_store(&g_set_grid, v != 0);
+        else if (sscanf(line, "stick_zone=%d", &v) == 1) atomic_store(&g_set_zone, v != 0);
         else if (sscanf(line, "labels=%d", &v) == 1) atomic_store(&g_set_labels, v != 0);
         else if (!strncmp(line, "ui=", 3)) {   // ui=<layout>,<control>,<x>,<y>,<size>[,<hidden>]: x, y in 1/10000 of the window (-1 the layout's place), size in 1/1000
             char lay[16], name[32]; int x, y, z, hid = 0, l, i;
@@ -254,8 +256,8 @@ static void settings_load(const char *checkpoint) {
 static void settings_save(void) {
     char p[600], tmp[610]; snprintf(p, sizeof p, "%s/settings.txt", g_root); snprintf(tmp, sizeof tmp, "%s.new", p);
     FILE *f = fopen(tmp, "w"); if (!f) { LOG("[RED] cannot write %s", tmp); return; }
-    fprintf(f, "overlay=%d\nrumble=%d\ndocked=%d\nfps=%d\nsr=%d\nsharpness=%d\nopacity=%d\ngrid=%d\n", atomic_load(&g_set_overlay), atomic_load(&g_set_rumble), dm_opmode() != 0,
-            atomic_load(&g_set_fps), atomic_load(&g_set_sr), atomic_load(&g_set_sharp), atomic_load(&g_set_opacity), atomic_load(&g_set_grid));
+    fprintf(f, "overlay=%d\nrumble=%d\ndocked=%d\nfps=%d\nsr=%d\nsharpness=%d\nopacity=%d\ngrid=%d\nstick_zone=%d\n", atomic_load(&g_set_overlay), atomic_load(&g_set_rumble), dm_opmode() != 0,
+            atomic_load(&g_set_fps), atomic_load(&g_set_sr), atomic_load(&g_set_sharp), atomic_load(&g_set_opacity), atomic_load(&g_set_grid), atomic_load(&g_set_zone));
     fps_opt_write(f);
     if (atomic_load(&g_set_labels) >= 0) fprintf(f, "labels=%d\n", atomic_load(&g_set_labels));   // (only once the player chose: until then env.txt decides)
     if (DM_HAS_GSR2_ADAPTER) {
@@ -589,6 +591,14 @@ float dm_overlay_scale(void) {
     return s;
 }
 void dm_overlay_knob(int stick, float *dx, float *dy) { *dx = atomic_load(&g_knob[stick][0]) / 10000.0f; *dy = atomic_load(&g_knob[stick][1]) / 10000.0f; }
+static _Atomic int g_stick_at[2][2];   // Stick area half screen: a held stick's centre, x + 1, y + 1 in 1/10000 of the window's width and height (0 = at its place)
+int dm_overlay_stick_zone(void) { return atomic_load(&g_set_zone); }
+int dm_overlay_stick_at(int stick, float W, float H, float b[4]) {
+    int x = atomic_load(&g_stick_at[stick & 1][0]), y = atomic_load(&g_stick_at[stick & 1][1]);
+    if (!x || !y) return 0;
+    b[0] = (x - 1) / 10000.0f * W; b[1] = (y - 1) / 10000.0f * H; return 1;
+}
+static void stick_at_clear(void) { for (int s = 0; s < 2; s++) for (int a = 0; a < 2; a++) atomic_store(&g_stick_at[s][a], 0); }
 // Geometry and state come from the same tables and saved settings as native hit-testing.
 JNIEXPORT jfloatArray JNICALL Java_org_nx2a_ExternalActivity_externalOverlay(JNIEnv *env, jclass cls, jint width, jint height) {
     (void)cls;
@@ -600,7 +610,7 @@ JNIEXPORT jfloatArray JNICALL Java_org_nx2a_ExternalActivity_externalOverlay(JNI
     for (int i = 0; i < OV_N; i++) {
         const ov_ctl *c = &OV_LAYOUTS[layout][i]; float b[4], kx = 0, ky = 0;
         ov_box(c, (float)width, (float)height, b);
-        if (c->kind == OV_STICK_L || c->kind == OV_STICK_R) dm_overlay_knob(c->kind == OV_STICK_R, &kx, &ky);
+        if (c->kind == OV_STICK_L || c->kind == OV_STICK_R) { dm_overlay_knob(c->kind == OV_STICK_R, &kx, &ky); dm_overlay_stick_at(c->kind == OV_STICK_R, (float)width, (float)height, b); }
         uint64_t held = 0;
         if (c->kind == OV_DPAD) { for (int d = 0; d < 4; d++) if (dm_overlay_pressed(i, OV_DPAD_BITS[d])) held |= 1u << d; }
         else if (dm_overlay_pressed(i, 0)) held = 1;
@@ -609,7 +619,7 @@ JNIEXPORT jfloatArray JNICALL Java_org_nx2a_ExternalActivity_externalOverlay(JNI
         v[0] = ov_off(c) && c->kind != OV_MENU ? -1 : c->kind; v[1] = b[0]; v[2] = b[1]; v[3] = b[2]; v[4] = b[3]; v[5] = (jfloat)held; v[6] = kx; v[7] = ky; v[8] = ov_cscale(c);
     }
     values[4 + OV_N * 9] = dm_overlay_visible();
-    values[5 + OV_N * 9] = OVM_ROWS;   // the menu's rows (ExternalActivity's drawMenu and drawEditor: the panel's height and fit)
+    values[5 + OV_N * 9] = OVM_VIEW_ROWS;   // the menu's rows (ExternalActivity's drawMenu and drawEditor: the panel's height and fit)
     jfloatArray out = (*env)->NewFloatArray(env, (jsize)(6 + OV_N * 9));
     if (out) (*env)->SetFloatArrayRegion(env, out, 0, (jsize)(6 + OV_N * 9), values);
     return out;
@@ -770,7 +780,7 @@ int dm_menu_state(void) {
     int lossless = vk_lsfg_available(), tab = atomic_load(&g_menu_tab);
     return atomic_load(&g_set_overlay) | atomic_load(&g_set_rumble) << 1 | (dm_opmode() != 0) << 2 | atomic_load(&g_set_fps) << 3 | (atomic_load(&g_menu_hi) + 1) << 4 |
            (tab == OVM_GSR2_TAB ? ov_gsr2_page_state(dm_gsr2_input_mode(), atomic_load(&g_gsr2_percent), dm_gsr2_output_height()) :
-            ov_menu_page_state(tab, atomic_load(&g_sv_st)) | (tab == 1 ? atomic_load(&g_set_sr) | (atomic_load(&g_set_sharp) / 25) << 1 : atomic_load(&g_set_opacity) - OV_OPACITY_MIN) << 9) | ((tab >= 2 ? atomic_load(&g_fps_ver) : atomic_load(&g_sv_n)) & 1) << 23 |
+            ov_menu_page_state(tab, atomic_load(&g_sv_st)) | (tab == 1 ? atomic_load(&g_set_sr) | (atomic_load(&g_set_sharp) / 25) << 1 : atomic_load(&g_set_opacity) - OV_OPACITY_MIN) << 9) | ((tab == 0 ? atomic_load(&g_set_zone) : tab == 1 ? atomic_load(&g_sv_n) : atomic_load(&g_fps_ver)) & 1) << 23 |
            atomic_load(&g_menu_checkpoint_focus) << OVM_CHECKPOINT_FOCUS_BIT | dm_checkpoint_state() << OVM_CHECKPOINT_SHIFT | pad_labels() << 28 |
            (lossless && atomic_load(&g_set_framegen)) << OVM_FRAMEGEN_BIT | lossless << OVM_FG_AVAILABLE_BIT |
            (dm_framegen_target() == 0) << OVM_FG_UNCAPPED_BIT;
@@ -805,6 +815,7 @@ static void menu_open(int hi) {
     dm_input_set(0, 0, 0, 0, 0); dm_touch_set(NULL, 0); atomic_store(&g_touch_btn, 0);   // nothing stays pressed in the game
     for (int i = 0; i < 16; i++) atomic_store(&g_press_t[i], 0);
     for (int s = 0; s < 2; s++) { atomic_store(&g_stick_t[s], 0); for (int a = 0; a < 2; a++) atomic_store(&g_knob[s][a], 0); }
+    stick_at_clear();
     if (g_pad_used) { pthread_mutex_lock(&g_slot_mu); for (int p = 0; p < DM_PLAYERS; p++) { g_btn[p] = 0; memset(g_ax[p], 0, sizeof g_ax[p]); pad_publish(p); } pthread_mutex_unlock(&g_slot_mu); }
     for (int i = 0; i < 32; i++) g_ptr_ctl[i] = 0;
     dm_haptics_suspend(4, 1);   // (bits 1 and 2 are the iOS front end's reasons)
@@ -819,7 +830,8 @@ static void menu_close(void) {
     if (!atomic_exchange(&g_menu, 0)) return;
     g_menu_ptr = -1; atomic_store(&g_menu_t, 0);
     hold_sync(); dm_haptics_suspend(4, 0); dm_overlay_redraw();
-    LOG("[menu] closed: the game goes on (gamepad %s, opacity %d%%, rumble %s, face buttons by %s, frame rate %s %#x, super resolution %s (%d%% sharp), %s)", atomic_load(&g_set_overlay) ? "on" : "off", atomic_load(&g_set_opacity),
+    LOG("[menu] closed: the game goes on (gamepad %s, opacity %d%%, sticks %s, rumble %s, face buttons by %s, frame rate %s %#x, super resolution %s (%d%% sharp), %s)", atomic_load(&g_set_overlay) ? "on" : "off", atomic_load(&g_set_opacity),
+        atomic_load(&g_set_zone) ? "half screen" : "circle",
         atomic_load(&g_set_rumble) ? "on" : "off", pad_labels() ? "label" : "position", atomic_load(&g_set_fps) ? "shown" : "hidden", atomic_load(&g_fps_opts), atomic_load(&g_set_sr) ? "on" : "off",
         atomic_load(&g_set_sharp), dm_opmode() ? "docked" : "handheld");
 }
@@ -896,6 +908,7 @@ static void menu_do(int item) {
     else if (item == OVM_SHARP) return;   // (the slider is dragged, or stepped with left and right, as the opacity's)
     else if (item == OVM_MODE) { dm_set_opmode(dm_opmode() ? 0 : 1); settings_save(); }   // the game takes it when it goes on
     else if (item == OVM_PAD) { atomic_store(&g_set_labels, !pad_labels()); settings_save(); }   // at once (pad_labels)
+    else if (item == OVM_ZONE) { atomic_store(&g_set_zone, !atomic_load(&g_set_zone)); settings_save(); }
     else if (item == OVM_TAB) { menu_tab(atomic_load(&g_menu_tab) + 1); return; }
     else if (item == OVM_EDIT) { dm_haptics_android_tap(); ed_open(); return; }
     else if (item == OVM_OPACITY) return;   // (the slider is dragged, or stepped with left and right)
@@ -923,7 +936,7 @@ static void menu_touch(AInputEvent *e, float W, float H) {   // a press on a row
         if (g_menu_ptr >= 0) return;
         g_menu_ptr = id; g_menu_row = row;
         g_menu_down_y = y; g_menu_down_scroll = atomic_load(&g_menu_scroll); g_menu_scrolled = 0;
-        g_menu_can_scroll = row > 0 && row < OVM_ROWS - 1 && item != OVM_OPACITY && item != OVM_GSR2_SIZE && item != OVM_SHARP;
+        g_menu_can_scroll = row > 0 && row < OVM_ROWS - 1 && item != OVM_OPACITY && item != OVM_SHARP && item != OVM_GSR2_SIZE && ov_menu_scroll_limit(tab) > 0;
         g_menu_choice = ov_menu_fg_choice(item) ? ov_menu_fg_choice_at(x, p, slot) : -1;
         if (row == OVM_ROWS - 1) g_menu_choice = item;
         atomic_store(&g_menu_checkpoint_focus, item == OVM_CHECKPOINT);
@@ -935,9 +948,11 @@ static void menu_touch(AInputEvent *e, float W, float H) {   // a press on a row
     } else if (act == AMOTION_EVENT_ACTION_MOVE && g_menu_ptr >= 0 && g_menu_row >= 0) {   // the slider follows the finger; another row's highlight follows it off the row and back
         for (size_t k = 0; k < AMotionEvent_getPointerCount(e); k++) if ((AMotionEvent_getPointerId(e, k) & 31) == g_menu_ptr) {
             float kx = AMotionEvent_getX(e, k), ky = AMotionEvent_getY(e, k);
-            if (ov_menu_item(tab, g_menu_row) == OVM_OPACITY) { menu_opacity(ov_menu_track_value(kx, p, ov_menu_scroll_slot(tab, offset, g_menu_row))); continue; }
-            if (ov_menu_item(tab, g_menu_row) == OVM_GSR2_SIZE) { menu_gsr2_percent(ov_gsr2_track_value(kx, p, ov_menu_scroll_slot(tab, offset, g_menu_row))); continue; }
-            if (ov_menu_item(tab, g_menu_row) == OVM_SHARP) { menu_sharp(ov_menu_track_pct(kx, p, ov_menu_scroll_slot(tab, offset, g_menu_row))); continue; }
+            int down_item = ov_menu_item(tab, g_menu_row);
+            float down_slot = ov_menu_scroll_slot(tab, offset, g_menu_row);
+            if (down_item == OVM_OPACITY) { menu_opacity(ov_menu_track_value(kx, p, down_slot)); continue; }
+            if (down_item == OVM_SHARP) { menu_sharp(ov_menu_track_pct(kx, p, down_slot)); continue; }
+            if (down_item == OVM_GSR2_SIZE) { menu_gsr2_percent(ov_gsr2_track_value(kx, p, down_slot)); continue; }
             if (g_menu_can_scroll && (g_menu_scrolled || fabsf(ky - g_menu_down_y) > vr[3] * 0.18f)) {
                 if (!g_menu_scrolled) g_menu_down_y -= copysignf(vr[3] * 0.18f, g_menu_down_y - ky);   // no jump when the gesture first clears touch slop
                 int value = ov_menu_scroll_drag(tab, g_menu_down_scroll, (g_menu_down_y - ky) / vr[3]);
@@ -1002,7 +1017,7 @@ static void menu_key(uint64_t bit) {   // a controller key pressed while the men
 // up to five saves (left and right, L and R page), Back. A save chosen asks first; the import then waits for the next start (the save is not touched while the
 // game runs) and the app ends, as the panel says. A controller: up and down choose, A does, B goes back; a finger taps a row, or outside the panel to go back ----
 #define SP_MAX 64
-#define SP_PER 5
+#define SP_PER (OVM_VIEW_ROWS - 2)
 static pthread_mutex_t g_sp_mu = PTHREAD_MUTEX_INITIALIZER;   // the picker's list and the export's note
 static struct { int n, page, confirm, closing, ptr, row; dm_save_entry e[SP_MAX], pick; } g_sp = {.ptr = -1};
 static char g_sv_note[96];
@@ -1021,14 +1036,14 @@ static void sp_changed(void) { atomic_fetch_add(&g_sp_ver, 1); dm_overlay_redraw
 static int sp_on_page(void) { int k = g_sp.n - g_sp.page * SP_PER; return k < 0 ? 0 : k > SP_PER ? SP_PER : k; }   // the caller holds g_sp_mu
 static int sp_selectable(int row) {   // the rows a controller and a finger can choose
     pthread_mutex_lock(&g_sp_mu);
-    int ok = g_sp.closing ? 0 : g_sp.confirm ? row == OVM_ROWS - 2 || row == OVM_ROWS - 1 : (row >= 1 && row <= sp_on_page()) || row == OVM_ROWS - 1;
+    int ok = g_sp.closing ? 0 : g_sp.confirm ? row == OVM_VIEW_ROWS - 2 || row == OVM_VIEW_ROWS - 1 : (row >= 1 && row <= sp_on_page()) || row == OVM_VIEW_ROWS - 1;
     pthread_mutex_unlock(&g_sp_mu); return ok;
 }
 static void sp_open(void) {
     pthread_mutex_lock(&g_sp_mu);
     int n = g_sp.n = dm_saves_list(g_sp.e, SP_MAX); g_sp.page = g_sp.confirm = g_sp.closing = 0; g_sp.ptr = -1;
     pthread_mutex_unlock(&g_sp_mu);
-    atomic_store(&g_sp_hi, n ? 1 : OVM_ROWS - 1); atomic_store(&g_sp_on, 1); sp_changed();
+    atomic_store(&g_sp_hi, n ? 1 : OVM_VIEW_ROWS - 1); atomic_store(&g_sp_on, 1); sp_changed();
     LOG("[saves] picker opened: %d saves in %s", n, dm_saves_dir());
 }
 static void sp_back(void) {   // the confirmation → the list → the menu (nothing once the import is under way)
@@ -1044,9 +1059,9 @@ static void *sp_end(void *a) {   // the panel's note shows for a moment, then th
 static void sp_do(int row) {
     if (!sp_selectable(row)) return;
     dm_haptics_android_tap();
-    if (row == OVM_ROWS - 1) { sp_back(); return; }
+    if (row == OVM_VIEW_ROWS - 1) { sp_back(); return; }
     pthread_mutex_lock(&g_sp_mu);
-    if (!g_sp.confirm) { g_sp.pick = g_sp.e[g_sp.page * SP_PER + row - 1]; g_sp.confirm = 1; pthread_mutex_unlock(&g_sp_mu); atomic_store(&g_sp_hi, OVM_ROWS - 2); sp_changed(); return; }
+    if (!g_sp.confirm) { g_sp.pick = g_sp.e[g_sp.page * SP_PER + row - 1]; g_sp.confirm = 1; pthread_mutex_unlock(&g_sp_mu); atomic_store(&g_sp_hi, OVM_VIEW_ROWS - 2); sp_changed(); return; }
     char name[64]; snprintf(name, sizeof name, "%s", g_sp.pick.name);
     pthread_mutex_unlock(&g_sp_mu);
     if (dm_saves_request_import(name)) return;
@@ -1059,13 +1074,13 @@ static void sp_page(int d) {
     if (ok) g_sp.page = p;
     int k = sp_on_page(); pthread_mutex_unlock(&g_sp_mu);
     if (!ok) return;
-    int hi = atomic_load(&g_sp_hi); if (hi >= 1 && hi < OVM_ROWS - 1 && hi > k) atomic_store(&g_sp_hi, k);
+    int hi = atomic_load(&g_sp_hi); if (hi >= 1 && hi < OVM_VIEW_ROWS - 1 && hi > k) atomic_store(&g_sp_hi, k);
     dm_haptics_android_tap(); sp_changed();
 }
 static void sp_key(uint64_t bit) {
     int hi = atomic_load(&g_sp_hi);
     if (bit == DM_BTN_UP || bit == DM_BTN_DOWN) {
-        for (int k = 0; k < OVM_ROWS; k++) { hi = hi < 0 ? (bit == DM_BTN_UP ? OVM_ROWS - 1 : 0) : (hi + (bit == DM_BTN_UP ? OVM_ROWS - 1 : 1)) % OVM_ROWS; if (sp_selectable(hi)) break; }
+        for (int k = 0; k < OVM_VIEW_ROWS; k++) { hi = hi < 0 ? (bit == DM_BTN_UP ? OVM_VIEW_ROWS - 1 : 0) : (hi + (bit == DM_BTN_UP ? OVM_VIEW_ROWS - 1 : 1)) % OVM_VIEW_ROWS; if (sp_selectable(hi)) break; }
         if (sp_selectable(hi)) { atomic_store(&g_sp_hi, hi); sp_changed(); }
     } else if (bit == DM_BTN_LEFT || bit == DM_BTN_L || bit == DM_BTN_ZL) sp_page(-1);
     else if (bit == DM_BTN_RIGHT || bit == DM_BTN_R || bit == DM_BTN_ZR) sp_page(1);
@@ -1095,9 +1110,9 @@ static void sp_size(char *out, int cap, const dm_save_entry *s) {
     }
 }
 #define SP_ROW(i, st, ...) do { rows[i].style = st; snprintf(rows[i].left, sizeof rows[i].left, __VA_ARGS__); } while (0)
-int dm_save_rows(ov_srow rows[OVM_ROWS]) {   // (gfx_vk_present.c ov_save_panel)
+int dm_save_rows(ov_srow rows[OVM_VIEW_ROWS]) {   // (gfx_vk_present.c ov_save_panel)
     if (!atomic_load(&g_sp_on)) return 0;
-    memset(rows, 0, sizeof(ov_srow) * OVM_ROWS);
+    memset(rows, 0, sizeof(ov_srow) * OVM_VIEW_ROWS);
     pthread_mutex_lock(&g_sp_mu);
     if (g_sp.closing) {
         SP_ROW(0, OVS_TITLE, "%s", TR("Importing the save", "正在导入存档")); SP_ROW(1, OVS_ITEM, "%s", g_sp.pick.name); sp_size(rows[1].right, sizeof rows[1].right, &g_sp.pick);
@@ -1107,7 +1122,7 @@ int dm_save_rows(ov_srow rows[OVM_ROWS]) {   // (gfx_vk_present.c ov_save_panel)
         SP_ROW(0, OVS_TITLE, "%s", TR("Import this save?", "确定导入此存档？")); SP_ROW(1, OVS_ITEM, "%s", g_sp.pick.name); sp_size(rows[1].right, sizeof rows[1].right, &g_sp.pick);
         SP_ROW(2, OVS_NOTE, "%s", TR("Your current save is exported first,", "会先导出当前存档，"));
         SP_ROW(3, OVS_NOTE, "%s", TR("then the game closes: open it again.", "随后关闭游戏，请重新打开。"));
-        SP_ROW(OVM_ROWS - 2, OVS_BUTTON, "%s", TR("Import and close", "导入并关闭")); SP_ROW(OVM_ROWS - 1, OVS_BACK, "%s", TR("Cancel", "取消"));
+        SP_ROW(OVM_VIEW_ROWS - 2, OVS_BUTTON, "%s", TR("Import and close", "导入并关闭")); SP_ROW(OVM_VIEW_ROWS - 1, OVS_BACK, "%s", TR("Cancel", "取消"));
     } else {
         int pages = (g_sp.n + SP_PER - 1) / SP_PER, k = sp_on_page();
         SP_ROW(0, OVS_TITLE, "%s", TR("Import a save", "导入存档"));
@@ -1119,7 +1134,7 @@ int dm_save_rows(ov_srow rows[OVM_ROWS]) {   // (gfx_vk_present.c ov_save_panel)
             SP_ROW(2, OVS_NOTE, "%s", TR("(a console's, as its save tools copy it) in", "放入以下目录："));
             SP_ROW(3, OVS_NOTE, "%s", d ? d : dm_saves_dir());
         }
-        SP_ROW(OVM_ROWS - 1, OVS_BACK, "%s", TR("Back", "返回"));
+        SP_ROW(OVM_VIEW_ROWS - 1, OVS_BACK, "%s", TR("Back", "返回"));
     }
     pthread_mutex_unlock(&g_sp_mu);
     return 1;
@@ -1338,6 +1353,20 @@ int front_text_input(const char *title, const char *sub, const char *guide, cons
 }
 
 __attribute__((weak)) void dm_picture_rect(float r[4]);   // gfx_vk_present.c
+// Stick area half screen (issue #589): a touch that went down on no control is the stick of its half of the window, while the gamepad shows (not with it
+// hidden or a touch-only game's DM_TOUCH start: those touches stay the game's), the player has not hidden that stick, and no other finger holds it (a second
+// finger on the same half stays the game's touch screen). With the gamepad in the band under the picture (ov_band), the picture keeps its touches
+static int zone_stick(int id, float x, float y, float W, float H) {
+    if (!atomic_load(&g_set_zone) || dm_overlay_visible() != 1 || atomic_load(&g_edit)) return -1;
+    float y0, bh; if (ov_band(W, H, &y0, &bh) && y < y0) return -1;
+    int kind = x < W / 2 ? OV_STICK_L : OV_STICK_R;
+    for (int i = 0; i < OV_N; i++) {
+        if (OV_CTLS[i].kind != kind || ov_off(&OV_CTLS[i])) continue;
+        for (int j = 0; j < 32; j++) if (j != id && g_ptr_ctl[j] == i + 1) return -1;
+        return i;
+    }
+    return -1;
+}
 static void touch_event(AInputEvent *e) {
     ANativeWindow *w = phone_window(); float W = w ? (float)ANativeWindow_getWidth(w) : 1, H = w ? (float)ANativeWindow_getHeight(w) : 1;
     if (atomic_load(&g_tx_on)) { tx_touch(e, W, H); return; }   // the text entry's keys
@@ -1346,13 +1375,16 @@ static void touch_event(AInputEvent *e) {
     size_t pc = AMotionEvent_getPointerCount(e);
     if (act == AMOTION_EVENT_ACTION_DOWN || act == AMOTION_EVENT_ACTION_POINTER_DOWN) {
         int i = act == AMOTION_EVENT_ACTION_DOWN ? 0 : ai, id = AMotionEvent_getPointerId(e, (size_t)i) & 31;
+        // the first finger down: no other is, so every pointer's control is stale (a lift the text entry took, tx_touch), which zone_stick would read as a held stick
+        if (act == AMOTION_EVENT_ACTION_DOWN) for (int k = 0; k < 32; k++) g_ptr_ctl[k] = 0;
         int c = ctl_at(AMotionEvent_getX(e, (size_t)i), AMotionEvent_getY(e, (size_t)i), W, H);
+        if (c < 0) c = zone_stick(id, AMotionEvent_getX(e, (size_t)i), AMotionEvent_getY(e, (size_t)i), W, H);
         g_ptr_ctl[id] = c + 1;
         g_ptr_origin[id][0] = AMotionEvent_getX(e, (size_t)i); g_ptr_origin[id][1] = AMotionEvent_getY(e, (size_t)i);
         if (c >= 0 && OV_CTLS[c].kind == OV_MENU) { atomic_store(&g_menu_t, mono_ns()); dm_haptics_android_tap(); menu_grab(id, &OV_CTLS[c], AMotionEvent_getX(e, (size_t)i), AMotionEvent_getY(e, (size_t)i), W, H); }
         if (!atomic_exchange(&g_overlay, 1) && !atomic_load(&g_pads)) dm_haptics_android_device(-1);   // keep vibration on a used controller that is still attached
     }
-    uint64_t btn = 0; int32_t lx = 0, ly = 0, rx = 0, ry = 0; float kn[2][2] = {{0, 0}, {0, 0}}; int open = 0, held[2] = {0, 0};
+    uint64_t btn = 0; int32_t lx = 0, ly = 0, rx = 0, ry = 0; float kn[2][2] = {{0, 0}, {0, 0}}, at[2][2] = {{-1, -1}, {-1, -1}}; int open = 0, held[2] = {0, 0};
     dm_touch t[16]; int n = 0;
     float pic[4] = {0, 0, 1, 1}; if (dm_picture_rect) dm_picture_rect(pic); if (pic[2] <= 0 || pic[3] <= 0) pic[2] = pic[3] = 1;   // gfx_vk_present.c: the picture inside the window
     for (size_t i = 0; i < pc; i++) {
@@ -1383,6 +1415,7 @@ static void touch_event(AInputEvent *e) {
             float ox = fminf(fmaxf(g_ptr_origin[id][0], b[2]), W - b[2]);
             float oy = fminf(fmaxf(g_ptr_origin[id][1], b[2]), H - b[2]);
             ov_touch_stick(x - ox, y - oy, b[2], k->kind == OV_STICK_R, &dx, &dy);
+            if (atomic_load(&g_set_zone)) { at[k->kind == OV_STICK_R][0] = ox / W; at[k->kind == OV_STICK_R][1] = oy / H; }   // the stick drawn where the finger went down
             kn[k->kind == OV_STICK_R][0] = dx; kn[k->kind == OV_STICK_R][1] = dy; held[k->kind == OV_STICK_R] = 1;   // the knob shows the output
             int32_t sx = (int32_t)(dx * DM_STICK_MAX), sy = (int32_t)(-dy * DM_STICK_MAX);
             if (k->kind == OV_STICK_L) { lx = sx; ly = sy; } else { rx = sx; ry = sy; }
@@ -1393,6 +1426,7 @@ static void touch_event(AInputEvent *e) {
     for (int b = 0; b < 16; b++) { if (down >> b & 1) atomic_store(&g_press_t[b], now); else if (up >> b & 1) atomic_store(&g_press_t[b], 0); }
     if (down) dm_haptics_android_tap();   // a tick for each button (or d-pad direction) the finger reaches
     for (int s = 0; s < 2; s++) for (int a = 0; a < 2; a++) atomic_store(&g_knob[s][a], (int)(kn[s][a] * 10000));
+    for (int s = 0; s < 2; s++) for (int a = 0; a < 2; a++) atomic_store(&g_stick_at[s][a], at[s][0] < 0 ? 0 : 1 + (int)lroundf(at[s][a] * 10000));
     for (int s = 0; s < 2; s++) if (!held[s]) atomic_store(&g_stick_t[s], 0); else if (!atomic_load(&g_stick_t[s])) atomic_store(&g_stick_t[s], now);
     dm_input_set(btn, lx, ly, rx, ry);
     dm_touch_set(t, n);
