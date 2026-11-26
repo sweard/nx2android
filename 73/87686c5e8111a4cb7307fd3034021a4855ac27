@@ -1,0 +1,42 @@
+nxnative/dm/android/gfx_vk_dq.c
+  s_919a1f3e0286bf::t_93cd925e84b120 30-44,50-76,82-103,111,114,222-225,227,233,374,381-394
+nxnative/dm/settings.tsv
+  s_919a1f3e0286bf::t_93cd925e84b120 52,263,309
+nxnative/dm/android/front_android.c
+  s_c84cb0b533a36d::t_690348af33707e 375
+  s_919a1f3e0286bf::t_93cd925e84b120 323-341
+tests/game_mode_jni_fixture.c
+  s_919a1f3e0286bf::t_93cd925e84b120 27
+tests/test_vk_dq.py
+  s_919a1f3e0286bf::t_93cd925e84b120 1-147
+nxnative/dm/android/gfx_vk_exec_walker.inc
+  s_c84cb0b533a36d::t_690348af33707e 191-197
+nxnative/dm/android/gfx_vk_exec_pipelines.inc
+  s_919a1f3e0286bf::t_93cd925e84b120 96-103,106
+nxnative/dm/android/gfx_vk_present.c
+  s_919a1f3e0286bf::t_93cd925e84b120 2064
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7387686c5e8111a4cb7307fd3034021a4855ac27",
+  "prompts": {},
+  "sessions": {
+    "s_919a1f3e0286bf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a2169c-e769-7d70-b468-862ddbcd5ee3",
+        "model": "unknown"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    },
+    "s_c84cb0b533a36d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2169c-e769-7d70-b468-862ddbcd5ee3",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
