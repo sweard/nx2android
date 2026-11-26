@@ -1,0 +1,57 @@
+nxnative/dm/android/gsr2_profile.h
+  s_db1760f56a9c1f::t_69daf828c0a492 19
+  s_926c68cc5bacfb::t_347b075ae3b8d6 18,20-22
+nxnative/dm/gfx/nvn/hle_nvn.c
+  s_db1760f56a9c1f::t_69daf828c0a492 145-147
+nxnative/dm/android/gfx_vk_exec.c
+  s_926c68cc5bacfb::t_347b075ae3b8d6 63
+  s_db1760f56a9c1f::t_69daf828c0a492 59-62,64-66
+tests/test_gsr2_input_override.py
+  s_db1760f56a9c1f::t_2fd8a3dc79d16a 80-82,85,89-98,100-118
+  s_926c68cc5bacfb::t_b38233409ef016 59-79,83-84,86-88,99,119-127
+nxnative/dm/games/010055D009F78000/README.md
+  s_926c68cc5bacfb::t_347b075ae3b8d6 48
+nxnative/dm/android/gfx_null.c
+  s_db1760f56a9c1f::t_69daf828c0a492 52
+nxnative/dm/android/gsr2_fe3h_resolution.inc
+  s_db1760f56a9c1f::t_f8a83ed1005c6f 1-6,14,16-20,22-23,25,32,36-48,54-59,79-80,83-84
+  s_926c68cc5bacfb::t_347b075ae3b8d6 7,9,21,26-31,33,49-53,60-78,82
+  s_926c68cc5bacfb::t_5ee93aa0afae82 8,24,35
+  s_926c68cc5bacfb::t_252c8b655a2726 10-13,15,34,81
+nxnative/dm/android/gfx_vk_exec_descriptors.inc
+  s_db1760f56a9c1f::t_a7244360879042 512,598,600
+nxnative/dm/android/gfx_vk_gsr2_fe3h.inc
+  s_db1760f56a9c1f::t_940413a7a4741f 4,77-83,91-93,104
+nxnative/dm/android/gfx_vk_present.c
+  s_926c68cc5bacfb::t_401f149cde7f60 651-652
+nxnative/dm/android/gsr2_resolution.c
+  s_926c68cc5bacfb::t_c553848cc4a698 89-90
+nxnative/dm/games/gsr2_fe3h_120.inc
+  s_db1760f56a9c1f::t_d7cc1cf215667b 23
+nxnative/dm/games/gsr2_shaders.inc
+  s_db1760f56a9c1f::t_5fbad1307b5659 21-22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f33af0f949c38818bc8c0a9f48604b4805c157e9",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    },
+    "s_db1760f56a9c1f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "unknown"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
