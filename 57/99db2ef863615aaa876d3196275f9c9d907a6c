@@ -1,0 +1,62 @@
+tests/test_vk_temporal.py
+  s_926c68cc5bacfb::t_6588867577b855 11-66
+  s_926c68cc5bacfb::t_06e14dfe7c9a8b 6,67-101
+nxnative/dm/android/gfx_vk_exec_gsr2.inc
+  s_926c68cc5bacfb::t_6bccf7d641ad82 136,142,147,150-152,158
+nxnative/dm/android/gsr2_profile.h
+  s_926c68cc5bacfb::t_367912896bef3e 3
+  s_db1760f56a9c1f::t_cdb696e7b32ca9 4
+nxnative/dm/android/gfx_vk_exec_gsr2_display.inc
+  s_926c68cc5bacfb::t_30bc4d0b0f8ba7 6-36,79-89,93-94,118
+tests/test_gsr2_input_override.py
+  s_926c68cc5bacfb::t_db8a89a2389f16 1-58
+nxnative/dm/android/gfx_vk_gsr2_profile.h
+  s_926c68cc5bacfb::t_367912896bef3e 49-51
+nxnative/dm/android/gsr2_resolution.c
+  s_926c68cc5bacfb::t_224b7059b2749d 1,8,19-28,64-65,91-98
+  s_db1760f56a9c1f::t_429278d19af75c 99
+nxnative/dm/android/front_android.c
+  s_926c68cc5bacfb::t_224b7059b2749d 162-163
+nxnative/dm/android/gsr2_ue_resolution.inc
+  s_926c68cc5bacfb::t_367912896bef3e 6
+  s_db1760f56a9c1f::t_cdb696e7b32ca9 33-36
+  s_db1760f56a9c1f::t_424e33c1b16b14 1-5,7-32,37-79
+docs/ARCHITECTURE.md
+  s_db1760f56a9c1f::t_88f54962345b41 221,231,246,270
+  s_926c68cc5bacfb::t_06a0a5911b6b94 250-261
+  s_926c68cc5bacfb::t_367912896bef3e 219,237
+nxnative/dm/android/gfx_vk_present.c
+  s_db1760f56a9c1f::t_cdb696e7b32ca9 625,627-629
+nxnative/dm/android/gfx_vk_gsr2_ue.inc
+  s_926c68cc5bacfb::t_6bccf7d641ad82 59,63-64,74-77
+nxnative/dm/android/gfx_vk_gsr2_ot2.inc
+  s_926c68cc5bacfb::t_cd275e10b466d9 10-24,31,33-34,42-43,50,54,65
+nxnative/dm/games/gsr2_ue_input.inc
+  s_db1760f56a9c1f::t_e28c027df5bcdc 1-35
+nxnative/dm/games/gsr2_ue_titles.inc
+  s_db1760f56a9c1f::t_f5d71f40dfde62 19-22,40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5799db2ef863615aaa876d3196275f9c9d907a6c",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    },
+    "s_db1760f56a9c1f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "unknown"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
