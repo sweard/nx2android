@@ -54,21 +54,28 @@ uintptr_t dm_checkpoint_main_stack(void) {
 static pthread_mutex_t tls_mu = PTHREAD_MUTEX_INITIALIZER;
 static uint64_t tls_live[tls_slots / 64], tls_claimed[tls_slots / 64];
 
-// Between TLS and the Horizon alias partition. A slot contains an SDK
-// ThreadType and its page-aligned backing stack. Only allocated pages go on
-// disk. A larger or extra helper uses malloc as usual and fails snapshot
-// preflight if its stack still refers to host memory.
+// SDK helper threads and guest-visible service buffers live between TLS and
+// the Horizon alias partition. An allocation starts on a slot boundary. Its
+// head stores the full page count; covered slots have no separate entry.
 enum { helper_offset = 144 << 20, helper_stride = 1 << 20, helper_slots = 64, helper_page = 16384 };
 static uint16_t helper_pages[helper_slots];
 static pthread_mutex_t helper_mu = PTHREAD_MUTEX_INITIALIZER;
 
+static unsigned helper_span(unsigned pages) {
+    const unsigned per_slot = helper_stride / helper_page;
+    return (pages + per_slot - 1) / per_slot;
+}
+
 int dm_checkpoint_service_alloc(size_t size, void **out) {
-    if (!checkpoint_layout || !size || size > helper_stride) return 0;
+    if (!checkpoint_layout || !size || size > helper_stride * helper_slots) return 0;
     unsigned pages = (unsigned)((size + helper_page - 1) / helper_page);
     int rc = 0;
     pthread_mutex_lock(&helper_mu);
-    for (unsigned i = 0; i < helper_slots; ++i) {
-        if (helper_pages[i]) continue;
+    unsigned required = helper_span(pages);
+    for (unsigned i = 0; i + required <= helper_slots;) {
+        unsigned j = i;
+        while (j < i + required && !helper_pages[j]) ++j;
+        if (j < i + required) { i = j + helper_span(helper_pages[j]); continue; }
         void *p = g_as + helper_offset + i * helper_stride;
         if (mprotect(p, pages * helper_page, PROT_READ | PROT_WRITE)) { rc = -errno; break; }
         memset(p, 0, pages * helper_page);
@@ -95,8 +102,10 @@ int dm_checkpoint_service_free(void *p) {
 static int in_helper(uint64_t base, uint64_t addr, uint64_t size, const uint16_t *pages) {
     uint64_t off = addr - (base + helper_offset);
     if (off >= helper_slots * helper_stride) return 0;
-    uint64_t bytes = pages[off / helper_stride] * helper_page;
-    uint64_t within = off % helper_stride;
+    unsigned i = off / helper_stride;
+    while (i && !pages[i]) --i;
+    uint64_t bytes = pages[i] * helper_page;
+    uint64_t within = off - i * helper_stride;
     return within < bytes && size <= bytes - within;
 }
 
@@ -377,8 +386,11 @@ static int memory_image(int fd, int loading, dm_checkpoint_shared_map known) {
             pthread_mutex_unlock(&helper_mu);
         }
         if ((rc = checkpoint_io(&s, helpers, sizeof helpers))) goto out;
+        unsigned next_free = 0;
         for (unsigned i = 0; i < helper_slots; ++i) {
-            if (helpers[i] > helper_stride / helper_page) { rc = -EINVAL; goto out; }
+            if (!helpers[i]) continue;
+            if (i < next_free || helper_span(helpers[i]) > helper_slots - i) { rc = -EINVAL; goto out; }
+            next_free = i + helper_span(helpers[i]);
             helper_bytes += helpers[i] * helper_page;
         }
     }

@@ -18,6 +18,10 @@ int dm_checkpoint_renderer(int fd, int restore, dm_checkpoint_wait_cpu *helper) 
         r.head = atomic_load(&g_cq_head); r.tail = atomic_load(&g_cq_tail);
         memcpy(r.lengths, g_cq_n, sizeof r.lengths); memcpy(r.pcm, g_cq, sizeof r.pcm);
         r.phase = rs_pos; memcpy(r.history, rs_buf, sizeof r.history);
+        if (r.owned && !dm_checkpoint_memory_committed(r.owned, 1)) {
+            LOG("[snapshot] renderer work buffer %p outside checkpoint memory", (void *)r.owned);
+            return -ENOTSUP;
+        }
         if (!r.entry.handle) return -ENOTSUP;
     }
     checkpoint_stream io = {.fd = fd, .loading = restore};

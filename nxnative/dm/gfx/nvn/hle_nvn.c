@@ -14,6 +14,7 @@
 #endif
 #if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
 #include "../../android/checkpoint_memory.h"
+#include "../../android/checkpoint_descriptor_pools.h"
 #include "../../android/checkpoint_io.h"
 #endif
 #include "../../host/dm_pacing.h"   // the frame-pacing policy
@@ -268,6 +269,29 @@ enum { NDPOOL = 16 };
 static struct dpool_base { const void *pool; int base; } g_tpb[NDPOOL], g_spb[NDPOOL];
 static int g_ntpb, g_nspb, g_tnext, g_snext;
 static pthread_mutex_t g_dpool_mu = PTHREAD_MUTEX_INITIALIZER;
+#if defined(__ANDROID__) && defined(DM_MANUAL_CHECKPOINT)
+void dm_checkpoint_descriptor_pools(checkpoint_descriptor_pools pools[2], int restore) {
+    _Static_assert(NDPOOL == CHECKPOINT_DESCRIPTOR_POOLS, "checkpoint descriptor pool capacity");
+    for (int k = 0; k < 2; ++k) {
+        struct dpool_base *table = k ? g_spb : g_tpb;
+        int *count = k ? &g_nspb : &g_ntpb, *next = k ? &g_snext : &g_tnext;
+        checkpoint_descriptor_pools *p = &pools[k];
+        if (restore) {
+            *count = p->count;
+            *next = p->next;
+            for (int i = 0; i < *count; ++i)
+                table[i] = (struct dpool_base){(void *)(uintptr_t)p->entry[i].address, p->entry[i].base};
+        } else {
+            p->count = *count;
+            p->next = *next;
+            for (int i = 0; i < *count; ++i) {
+                p->entry[i].address = (uintptr_t)table[i].pool;
+                p->entry[i].base = table[i].base;
+            }
+        }
+    }
+}
+#endif
 static int dpool_add(struct dpool_base *t, int *nt, int *next, const void *pool, int n, const char *kind) {   // → the pool's base (assigned at its first Initialize)
     pthread_mutex_lock(&g_dpool_mu);
     int i = 0; while (i < *nt && t[i].pool != pool) i++;
