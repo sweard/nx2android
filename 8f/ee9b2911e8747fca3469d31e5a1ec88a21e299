@@ -1,0 +1,66 @@
+nxnative/dm/android/overlay_layout.h
+  s_c84cb0b533a36d::t_9dd7a131d67ca6 237,241,249-250,279,360
+nxnative/dm/android/tools/shader_vk.py
+  s_c84cb0b533a36d::t_9dd7a131d67ca6 574
+porter/host.py
+  s_c84cb0b533a36d::t_9dd7a131d67ca6 10,204
+  s_919a1f3e0286bf::t_95621bd3c18242 17,197-199
+tests/test_shader_cache.py
+  s_c84cb0b533a36d::t_9dd7a131d67ca6 160,164,166
+porter/pipeline.py
+  s_c84cb0b533a36d::t_9dd7a131d67ca6 13,946,1007
+nxnative/dm/android/gfx_vk_present.c
+  s_c84cb0b533a36d::t_2bcebb625a3aa4 488,513,546,550,552,585,593,600,603,620,722,735,1147,1689,1777,1878,1903
+nxnative/dm/games/010055D009F78000/README.md
+  s_c84cb0b533a36d::t_9dd7a131d67ca6 45
+nxnative/dm/android/gfx_vk_exec_passes.inc
+  s_c84cb0b533a36d::t_2bcebb625a3aa4 422,712
+nxnative/dm/android/gfx_vk_exec_pipelines.inc
+  s_c84cb0b533a36d::t_2bcebb625a3aa4 18
+tests/test_shader_export_checks.py
+  s_c84cb0b533a36d::t_9dd7a131d67ca6 87
+nxnative/dm/android/front_android.c
+  s_c84cb0b533a36d::t_2bcebb625a3aa4 765,789,828,905
+nxnative/dm/android/gfx_vk_exec_descriptors.inc
+  s_c84cb0b533a36d::t_2bcebb625a3aa4 530
+nxnative/dm/android/apk/apkdriver.py
+  s_919a1f3e0286bf::t_770c666b962b9e 45-49
+nxnative/dm/android/apk/mkapk.py
+  s_919a1f3e0286bf::t_770c666b962b9e 167-169
+tests/test_fps_counter_options.py
+  s_c84cb0b533a36d::t_9dd7a131d67ca6 42,98-102
+nxnative/dm/android/gfx_vk_tex.c
+  s_c84cb0b533a36d::t_2bcebb625a3aa4 399-400
+tests/test_menu_scroll.py
+  s_c84cb0b533a36d::t_9dd7a131d67ca6 151,161
+nxnative/dm/android/gfx_vk.h
+  s_c84cb0b533a36d::t_2bcebb625a3aa4 26
+docs/CHECKPOINT_ONBOARDING.en.md
+  s_919a1f3e0286bf::t_8f63450c38c2b2 10,44
+docs/CHECKPOINT_ONBOARDING.md
+  s_919a1f3e0286bf::t_3bcb6a128b209a 10,44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8fee9b2911e8747fca3469d31e5a1ec88a21e299",
+  "prompts": {},
+  "sessions": {
+    "s_919a1f3e0286bf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a2169c-e769-7d70-b468-862ddbcd5ee3",
+        "model": "unknown"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    },
+    "s_c84cb0b533a36d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2169c-e769-7d70-b468-862ddbcd5ee3",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
