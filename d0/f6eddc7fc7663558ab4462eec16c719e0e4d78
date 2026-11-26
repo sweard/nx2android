@@ -1,0 +1,28 @@
+nxnative/dm/android/gfx_vk_present.c
+  s_c9179c937da87d::t_07836bbb9df98c 857
+  s_c9179c937da87d::t_d72806ba196f81 256,727-757,761-762,768,772,775,782,784-793,843-848,862
+nxnative/dm/android/front_android.c
+  s_c9179c937da87d::t_773b3dc6f364b3 148,678-681
+nxnative/dm/android/java/org/nx2a/GameFiles.java
+  s_c9179c937da87d::t_a65568a31520ed 24,31-34,42,56,73,80,82,85
+tests/test_fps_counter_options.py
+  s_c9179c937da87d::t_e7ea11d65f6d7a 109
+tests/test_game_files.py
+  s_c9179c937da87d::t_b7b7148a6fa77b 62-63,67-69,71,84-85,94-98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d0f6eddc7fc7663558ab4462eec16c719e0e4d78",
+  "prompts": {},
+  "sessions": {
+    "s_c9179c937da87d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a21684-c513-7330-b092-110151a8f8a2",
+        "model": "unknown"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
