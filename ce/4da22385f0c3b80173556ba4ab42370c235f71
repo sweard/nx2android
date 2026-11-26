@@ -1,0 +1,23 @@
+docs/ARCHITECTURE.md
+  s_919a1f3e0286bf::t_8c3417dd7d80ae 479
+nxnative/dm/android/gfx_vk_present.c
+  s_919a1f3e0286bf::t_8c3417dd7d80ae 1216-1223,1243,1245,1710,1734-1735
+tests/test_vk_present_timing.py
+  s_919a1f3e0286bf::t_8c3417dd7d80ae 177-181,225,277-278,290,292
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ce4da22385f0c3b80173556ba4ab42370c235f71",
+  "prompts": {},
+  "sessions": {
+    "s_919a1f3e0286bf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a2169c-e769-7d70-b468-862ddbcd5ee3",
+        "model": "unknown"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
