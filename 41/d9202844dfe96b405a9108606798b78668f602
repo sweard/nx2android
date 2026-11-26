@@ -1,0 +1,101 @@
+nxnative/dm/android/gfx_null.c
+  s_db1760f56a9c1f::t_3b870ae1ab93fb 52
+nxnative/dm/android/gfx_vk_gsr2.c
+  s_db1760f56a9c1f::t_993a4f23aa4c96 98
+  s_db1760f56a9c1f::t_3b870ae1ab93fb 74-80,83-93,214
+nxnative/dm/android/gfx_vk_gsr2_profile.h
+  s_db1760f56a9c1f::t_56ac6d71d83db9 52-55,69-82
+  s_db1760f56a9c1f::t_39ffe5298ee01c 49
+nxnative/dm/android/gfx_vk_temporal_profiles.h
+  s_db1760f56a9c1f::t_56ac6d71d83db9 21
+nxnative/dm/android/gfx_vk_gsr2.h
+  s_db1760f56a9c1f::t_3b870ae1ab93fb 14-15,17
+  s_db1760f56a9c1f::t_5dfc41e635e6df 16
+nxnative/dm/android/front_android.c
+  s_db1760f56a9c1f::t_993a4f23aa4c96 160,166-168,253,267
+  s_db1760f56a9c1f::t_3b870ae1ab93fb 855
+nxnative/dm/android/overlay_layout.h
+  s_db1760f56a9c1f::t_3b870ae1ab93fb 244,285,382
+porter/upstream.py
+  s_926c68cc5bacfb::t_ad932645774c64 13
+tests/vk_temporal_harness.c
+  s_db1760f56a9c1f::t_3b870ae1ab93fb 46,55,57,118,126,140
+nxnative/dm/games/gsr2_ue_titles.inc
+  s_db1760f56a9c1f::t_56ac6d71d83db9 3,6,8,11,14,17,20,22,25,28,35,37,39,41
+nxnative/dm/android/gsr2_resolution.c
+  s_db1760f56a9c1f::t_993a4f23aa4c96 95
+nxnative/dm/games/gsr2_builds.h
+  s_db1760f56a9c1f::t_56ac6d71d83db9 5,11,13,15
+nxnative/dm/games/gsr2_digimon_122.inc
+  s_db1760f56a9c1f::t_56ac6d71d83db9 3-4,7-8
+  s_db1760f56a9c1f::t_39ffe5298ee01c 13
+nxnative/dm/android/gsr2_profile.h
+  s_db1760f56a9c1f::t_3b870ae1ab93fb 21
+  s_db1760f56a9c1f::t_993a4f23aa4c96 1
+nxnative/dm/android/gfx_vk_present.c
+  s_db1760f56a9c1f::t_3b870ae1ab93fb 593-594,598,600,802-807,820,1239
+  s_db1760f56a9c1f::t_993a4f23aa4c96 219,222
+nxnative/dm/android/gfx_vk_exec.c
+  s_db1760f56a9c1f::t_3b870ae1ab93fb 24-25,33-36,38-45,47-49,51-52,54-56
+  s_db1760f56a9c1f::t_39ffe5298ee01c 50
+  s_db1760f56a9c1f::t_5dfc41e635e6df 46
+nxnative/dm/android/tools/gsr2_package.py
+  s_db1760f56a9c1f::t_5dfc41e635e6df 50,55
+  s_926c68cc5bacfb::t_ad932645774c64 30-31,33-41,43-49,51-54,56-63,65-71
+  s_926c68cc5bacfb::t_407cccbaa243cc 1-29,32,42,64
+tests/test_fps_counter_options.py
+  s_db1760f56a9c1f::t_3b870ae1ab93fb 29-30,45-47
+nxnative/dm/android/build.py
+  s_926c68cc5bacfb::t_ad932645774c64 27-29,31-39,65-69
+nxnative/dm/android/gfx_vk_gsr2_digimon.inc
+  s_db1760f56a9c1f::t_56ac6d71d83db9 16,24,30
+nxnative/dm/android/gfx_vk_gsr2_ms.inc
+  s_db1760f56a9c1f::t_3b870ae1ab93fb 11,50,60-75
+  s_926c68cc5bacfb::t_6d3871be758d17 76
+docs/ARCHITECTURE.md
+  s_db1760f56a9c1f::t_39ffe5298ee01c 231-233
+  s_db1760f56a9c1f::t_993a4f23aa4c96 229-230
+nxnative/dm/android/gfx_vk_shader.c
+  s_db1760f56a9c1f::t_5dfc41e635e6df 61-66
+nxnative/dm/games/gsr2_shaders.inc
+  s_db1760f56a9c1f::t_56ac6d71d83db9 1-6,10-37
+  s_db1760f56a9c1f::t_39ffe5298ee01c 7-9
+porter/pipeline.py
+  s_926c68cc5bacfb::t_ad932645774c64 13,1003-1005
+tests/test_gsr2_availability.py
+  s_926c68cc5bacfb::t_85653908ab3407 1-50,53-58,60-87
+  s_db1760f56a9c1f::t_39ffe5298ee01c 51-52
+  s_db1760f56a9c1f::t_5dfc41e635e6df 59
+porter/host.py
+  s_926c68cc5bacfb::t_ad932645774c64 10,17,173-186,211-212,216
+nxnative/dm/android/gfx_vk.h
+  s_db1760f56a9c1f::t_3b870ae1ab93fb 27,162
+nxnative/dm/games/gsr2_fe3h_120.inc
+  s_db1760f56a9c1f::t_56ac6d71d83db9 10-12,21-22
+nxnative/dm/games/gsr2_ot2_111.inc
+  s_db1760f56a9c1f::t_56ac6d71d83db9 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "41d9202844dfe96b405a9108606798b78668f602",
+  "prompts": {},
+  "sessions": {
+    "s_926c68cc5bacfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    },
+    "s_db1760f56a9c1f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a1ceb7-87f5-7560-a5d0-89477834d84c",
+        "model": "unknown"
+      },
+      "human_author": "fangjian <fangjian@wondertechlabs.com>"
+    }
+  }
+}
