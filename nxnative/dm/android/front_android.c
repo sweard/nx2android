@@ -789,6 +789,10 @@ int dm_ui_zh(void) {
     atomic_store(&sys, cur);
     return cur;
 }
+JNIEXPORT jboolean JNICALL Java_org_nx2a_GameUi_isChinese(JNIEnv *env, jclass cls) {
+    (void)env; (void)cls;
+    return dm_ui_zh() ? JNI_TRUE : JNI_FALSE;
+}
 // gfx_vk_present.c draws the counter: not while the menu holds the game, except under the pause menu's Counter and Style tabs, where it shows what they change
 int dm_overlay_fps(void) { return atomic_load(&g_menu) ? (atomic_load(&g_menu_tab) == 2 || atomic_load(&g_menu_tab) == 3) && !atomic_load(&g_edit) && !atomic_load(&g_sp_on) && !atomic_load(&g_tx_on) : atomic_load(&g_set_fps); }
 int dm_overlay_sr(void) { return atomic_load(&g_set_sr); }   // gfx_vk_present.c: the present pass upscales with SGSR 1.0 when the picture grows

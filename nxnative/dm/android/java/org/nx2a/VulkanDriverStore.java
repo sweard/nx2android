@@ -78,8 +78,17 @@ final class VulkanDriverStore {
         return file != null && file.isFile() && file.canRead() && !pending(file).exists();
     }
 
+    static final class ImportException extends IOException {
+        final String chinese;
+
+        ImportException(String english, String chinese) {
+            super(english);
+            this.chinese = chinese;
+        }
+    }
+
     File copy(InputStream stream) throws IOException {
-        if (stream == null) throw new IOException("Unreadable document");
+        if (stream == null) throw new ImportException("Unreadable document", "无法读取此文件。");
         DataInputStream in = new DataInputStream(stream);
         byte[] header = new byte[64];
         in.readFully(header);
@@ -87,9 +96,9 @@ final class VulkanDriverStore {
         if (header[0] != 0x7f || header[1] != 'E' || header[2] != 'L' || header[3] != 'F'
                 || header[4] != 2 || header[5] != 1 || header[6] != 1 || elf.getShort(16) != 3
                 || elf.getShort(18) != 183 || elf.getInt(20) != 1 || elf.getShort(52) != 64)
-            throw new IOException("Select an Android arm64 shared library (.so).");
+            throw new ImportException("Select an Android arm64 shared library (.so).", "请选择 Android arm64 共享库（.so）文件。");
         File file = new File(directory, "libgpu-" + UUID.randomUUID() + ".so");
-        if (!file.createNewFile()) throw new IOException("Cannot create driver file");
+        if (!file.createNewFile()) throw new ImportException("Cannot create driver file", "无法创建驱动文件。");
         boolean ready = false;
         try {
             try (FileOutputStream out = new FileOutputStream(file)) {
@@ -97,15 +106,15 @@ final class VulkanDriverStore {
                 byte[] buffer = new byte[65536];
                 int count, total = header.length;
                 while ((count = in.read(buffer)) != -1) {
-                    if (Thread.currentThread().isInterrupted()) throw new IOException("Import cancelled");
-                    if (count > MAX_BYTES - total) throw new IOException("Driver exceeds the 256 MiB limit.");
+                    if (Thread.currentThread().isInterrupted()) throw new ImportException("Import cancelled", "导入已取消。");
+                    if (count > MAX_BYTES - total) throw new ImportException("Driver exceeds the 256 MiB limit.", "驱动文件超过 256 MiB 大小限制。");
                     out.write(buffer, 0, count);
                     total += count;
                 }
                 out.getFD().sync();
             }
             checkSegments(file, elf);
-            if (!file.setReadOnly()) throw new IOException("Could not protect driver file");
+            if (!file.setReadOnly()) throw new ImportException("Could not protect driver file", "无法将驱动文件设为只读。");
             ready = true;
             return file;
         } finally {
@@ -119,7 +128,7 @@ final class VulkanDriverStore {
         long offset = elf.getLong(32), size = file.length();
         int count = elf.getShort(56) & 0xffff;
         if (count == 0 || elf.getShort(54) != 56 || offset < 64 || offset > size - 56L * count)
-            throw new IOException("Invalid ELF program headers.");
+            throw new ImportException("Invalid ELF program headers.", "ELF 程序头无效。");
         boolean code = false, dynamic = false;
         byte[] entry = new byte[56];
         ByteBuffer ph = ByteBuffer.wrap(entry).order(ByteOrder.LITTLE_ENDIAN);
@@ -129,11 +138,11 @@ final class VulkanDriverStore {
                 in.readFully(entry);
                 long start = ph.getLong(8), bytes = ph.getLong(32);
                 if (bytes < 0 || (bytes > 0 && (start < 0 || start > size - bytes)))
-                    throw new IOException("Truncated driver file.");
+                    throw new ImportException("Truncated driver file.", "驱动文件不完整。");
                 if (ph.getInt(0) == 1 && (ph.getInt(4) & 1) != 0 && bytes > 0) code = true;
                 if (ph.getInt(0) == 2 && bytes >= 16) dynamic = true;
             }
         }
-        if (!code || !dynamic) throw new IOException("Missing shared library segments.");
+        if (!code || !dynamic) throw new ImportException("Missing shared library segments.", "缺少必要的共享库程序段。");
     }
 }

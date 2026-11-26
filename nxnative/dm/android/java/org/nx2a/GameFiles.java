@@ -1,5 +1,7 @@
 package org.nx2a;
 
+import static org.nx2a.GameUi.tr;
+
 import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
@@ -34,7 +36,7 @@ final class GameFiles {
             intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.setType("*/*");
             try { busy = true; activity.startActivityForResult(intent, LOSSLESS_REQUEST); }
-            catch (RuntimeException e) { busy = false; note("No document picker is available."); }
+            catch (RuntimeException e) { busy = false; note(tr("No document picker is available.", "无法打开系统文件选择器。")); }
         });
     }
 
@@ -48,7 +50,7 @@ final class GameFiles {
 
     private void importLossless(Uri uri) {
         File tmp = null;
-        String message = "Unable to import Lossless.dll.";
+        String message = tr("Unable to import Lossless.dll.", "无法导入 Lossless.dll。");
         try {
             File dir = activity.getExternalFilesDir(null);
             if (dir == null) throw new IOException("no game files folder");
@@ -65,19 +67,19 @@ final class GameFiles {
                 out.getFD().sync();
             }
             if (!validLossless(Files.readAllBytes(tmp.toPath()))) {
-                message = "This file is not a supported Lossless.dll.";
+                message = tr("This file is not a supported Lossless.dll.", "此文件不是受支持的 Lossless.dll。");
                 throw new IOException("unsupported shader resources");
             }
             if (Thread.currentThread().isInterrupted()) throw new IOException("cancelled");
             // Same-directory rename publishes a complete file and preserves the previous DLL on failure.
             Os.rename(tmp.getAbsolutePath(), new File(dir, "Lossless.dll").getAbsolutePath());
             losslessImported();
-            message = "Lossless.dll imported.";
+            message = tr("Lossless.dll imported.", "已导入 Lossless.dll。");
         } catch (SecurityException e) {
-            message = "Cannot read this document. Select it again in the system picker.";
+            message = tr("Cannot read this document. Select it again in the system picker.", "无法读取此文件。请在系统文件选择器中重新选择。");
             android.util.Log.w("nx2a-files", "Lossless.dll document access failed", e);
         } catch (LinkageError e) {
-            message = "Lossless.dll validation is unavailable. Update the APK.";
+            message = tr("Lossless.dll validation is unavailable. Update the APK.", "无法验证 Lossless.dll。请更新 APK。");
             android.util.Log.w("nx2a-files", "Lossless.dll native bridge unavailable", e);
         } catch (Exception e) {
             android.util.Log.w("nx2a-files", "Lossless.dll import failed", e);

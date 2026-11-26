@@ -1,5 +1,7 @@
 package org.nx2a;
 
+import static org.nx2a.GameUi.tr;
+
 import android.app.AlertDialog;
 import android.view.Gravity;
 import android.view.View;
@@ -73,9 +75,9 @@ final class GameCheckpoint {
             if (!overwrite) return;
             activity.runOnUiThread(() -> {
                 if (activity.isFinishing() || activity.isDestroyed()) return;
-                String message = result == 0 ? "Game save updated. The previous save is under Import save (before-overwrite)."
-                        : result == 1 ? "This confirmation expired. No files were overwritten."
-                        : "Backup or overwrite failed. Your existing game saves are safe.";
+                String message = result == 0 ? tr("Game save updated. The previous save is under Import save (before-overwrite).", "游戏存档已更新。可以在“导入存档”中找到覆盖前的备份（before-overwrite）。")
+                        : result == 1 ? tr("This confirmation expired. No files were overwritten.", "此次确认已过期，存档文件未被覆盖。")
+                        : tr("Backup or overwrite failed. Your existing game saves are safe.", "备份或覆盖失败，原有游戏存档已保留。");
                 Toast.makeText(activity, message, Toast.LENGTH_LONG).show();
             });
         }, "game-save-conflict").start();
@@ -83,19 +85,21 @@ final class GameCheckpoint {
 
     private void offerSaveAfterConflict(long ticket) {
         if (saveConflict != null || saveOnFocus || savingCheckpoint) return;
-        String message = "The game couldn’t save because the same file changed in normal play. "
-                + "Save checkpoint replaces your previous checkpoint. Wait for “Checkpoint saved” before quitting.";
+        String message = tr("The game couldn’t save because the same file changed in normal play. "
+                + "Save checkpoint replaces your previous checkpoint. Wait for “Checkpoint saved” before quitting.",
+                "游戏无法保存，因为同一文件已在正常游玩时发生变化。保存检查点会替换上一个检查点。请等到出现“检查点已保存”后再退出。");
         AlertDialog.Builder builder = new AlertDialog.Builder(activity)
-                .setTitle("Game save conflict")
-                .setPositiveButton("Save checkpoint", (dialog, which) -> {
+                .setTitle(tr("Game save conflict", "游戏存档冲突"))
+                .setPositiveButton(tr("Save checkpoint", "保存检查点"), (dialog, which) -> {
                     resolveConflict(ticket, false);
                     saveOnFocus = true;
                 })
-                .setNegativeButton("Keep playing", (dialog, which) -> resolveConflict(ticket, false))
+                .setNegativeButton(tr("Keep playing", "继续游戏"), (dialog, which) -> resolveConflict(ticket, false))
                 .setOnCancelListener(dialog -> resolveConflict(ticket, false));
         if (ticket != 0) {
-            message += "\n\nOverwrite backs up your normal save first. Replacing a shared file can affect more than one slot.";
-            builder.setNeutralButton("Overwrite conflicting files", (dialog, which) -> resolveConflict(ticket, true));
+            message += "\n\n" + tr("Overwrite backs up your normal save first. Replacing a shared file can affect more than one slot.",
+                    "覆盖前会先备份正常游玩时的存档。替换共用文件可能影响多个存档位。");
+            builder.setNeutralButton(tr("Overwrite conflicting files", "覆盖冲突文件"), (dialog, which) -> resolveConflict(ticket, true));
         }
         saveConflict = builder.setMessage(message).setOnDismissListener(dialog -> {
             if (dialog == saveConflict) saveConflict = null;
@@ -129,12 +133,12 @@ final class GameCheckpoint {
                 return;
             }
             if (state == WRITE_FAILED) {
-                Toast.makeText(activity, "Game save failed. Your existing saves are safe.", Toast.LENGTH_LONG).show();
+                Toast.makeText(activity, tr("Game save failed. Your existing saves are safe.", "游戏存档保存失败，原有存档已保留。"), Toast.LENGTH_LONG).show();
                 return;
             }
             if (state == SAVING) {
                 savingCheckpoint = true;
-                showCheckpointProgress("Saving checkpoint…", true);
+                showCheckpointProgress(tr("Saving checkpoint…", "正在保存检查点…"), true);
                 return;
             }
             if (state == RESTORED && savingCheckpoint) return;
@@ -142,12 +146,12 @@ final class GameCheckpoint {
             hideCheckpointProgress();
             if (state == RESTORED) return;
             if (state == RESTORE_FAILED) {
-                new AlertDialog.Builder(activity).setTitle("Couldn’t restore checkpoint")
-                        .setMessage("Reopen the game and choose Start normally or try restoring the checkpoint again.")
-                        .setCancelable(false).setPositiveButton("Close game", (dialog, which) -> activity.finish()).show();
+                new AlertDialog.Builder(activity).setTitle(tr("Couldn’t restore checkpoint", "无法恢复检查点"))
+                        .setMessage(tr("Reopen the game and choose Start normally or try restoring the checkpoint again.", "请重新打开游戏，选择“正常启动”或再次尝试恢复检查点。"))
+                        .setCancelable(false).setPositiveButton(tr("Close game", "关闭游戏"), (dialog, which) -> activity.finish()).show();
             } else if (state == SAVED || state == SAVE_FAILED || state == NO_SAVE) {
-                String message = state == SAVED ? "Checkpoint saved"
-                        : state == NO_SAVE ? "No in-game save yet" : "Couldn’t save checkpoint";
+                String message = state == SAVED ? tr("Checkpoint saved", "检查点已保存")
+                        : state == NO_SAVE ? tr("No in-game save yet", "尚无游戏内存档") : tr("Couldn’t save checkpoint", "无法保存检查点");
                 Toast.makeText(activity, message, Toast.LENGTH_SHORT).show();
             }
         });
@@ -155,23 +159,23 @@ final class GameCheckpoint {
 
     void offerRuntimeCheckpoint() {
         activity.getWindow().getDecorView().post(() -> new AlertDialog.Builder(activity)
-                .setTitle("Restore checkpoint?")
-                .setMessage("Restoring resumes this moment. New in-game saves carry over to normal play. Start normally deletes this checkpoint.")
-                .setPositiveButton("Restore checkpoint", (dialog, which) -> {
-                    showCheckpointProgress("Restoring checkpoint…", false);
+                .setTitle(tr("Restore checkpoint?", "恢复检查点？"))
+                .setMessage(tr("Restoring resumes this moment. New in-game saves carry over to normal play. Start normally deletes this checkpoint.", "恢复后将从此处继续。在游戏内新保存的进度也可在正常启动后读取。选择“正常启动”会删除此检查点。"))
+                .setPositiveButton(tr("Restore checkpoint", "恢复检查点"), (dialog, which) -> {
+                    showCheckpointProgress(tr("Restoring checkpoint…", "正在恢复检查点…"), false);
                     activity.chooseCheckpoint(RESTORE);
                 })
-                .setNegativeButton("Start normally", (dialog, which) -> activity.chooseCheckpoint(DISCARD))
+                .setNegativeButton(tr("Start normally", "正常启动"), (dialog, which) -> activity.chooseCheckpoint(DISCARD))
                 .setOnCancelListener(dialog -> activity.chooseCheckpoint(SKIP))
                 .show());
     }
 
     void offerCheckpoint() {
         activity.runOnUiThread(() -> new AlertDialog.Builder(activity)
-                .setTitle("Game checkpoint")
-                .setMessage("Restore the settings saved with your checkpoint. Use Continue in the game to load your last in-game save.")
-                .setPositiveButton("Restore checkpoint", (dialog, which) -> activity.chooseCheckpoint(RESTORE))
-                .setNegativeButton("Start normally", (dialog, which) -> activity.chooseCheckpoint(SKIP))
+                .setTitle(tr("Game checkpoint", "游戏检查点"))
+                .setMessage(tr("Restore the settings saved with your checkpoint. Use Continue in the game to load your last in-game save.", "恢复检查点中保存的设置，然后在游戏中选择“继续”以读取上次的游戏内存档。"))
+                .setPositiveButton(tr("Restore checkpoint", "恢复检查点"), (dialog, which) -> activity.chooseCheckpoint(RESTORE))
+                .setNegativeButton(tr("Start normally", "正常启动"), (dialog, which) -> activity.chooseCheckpoint(SKIP))
                 .setOnCancelListener(dialog -> activity.chooseCheckpoint(SKIP))
                 .show());
     }
