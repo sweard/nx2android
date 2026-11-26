@@ -1,7 +1,7 @@
 // Same-present KTGL scene depth and inverse projection, captured before the UI.
 #if defined(DM_GAME_PROGRAM_ID) && DM_GAME_PROGRAM_ID == GSR2_FE3H_ID
 static struct {
-    uint64_t captured, recorded;
+    uint64_t captured, recorded, mapped_frame, mapped_serial;
     VkImageView depth;
     float inverse[16], previous[16];
     vk_gsr2_params params;
@@ -74,6 +74,13 @@ static void fe3h_observe_draw(void) {
         return;
     }
     const gsr2_composite_pass *pass = gs_composite_stage();
+    if (pass && pass->fragment != FE3H_UPSCALE_FS && S.rt_n == 1 && S.rt_has_col[0] &&
+        S.rt_col[0].d.format == NVN_FORMAT_RGBA8_SRGB && S.rt_col[0].d.height == fe3h.params.render[1] &&
+        S.rt_col[0].d.width == fe3h.params.render[0]) {
+        // The reduced bank tone maps to an sRGB texture before the game's window blit.
+        fe3h.mapped_frame = g_tex_frame;
+        fe3h.mapped_serial = S.rt_col[0].serial;
+    }
     if (!pass || fe3h.captured != g_tex_frame || !fe3h.depth ||
         fe3h.recorded == g_tex_frame || S.rt_n != 1 || !S.rt_has_col[0] ||
         S.rt_col[0].d.height != (uint32_t)dm_gsr2_output_height() ||
@@ -81,7 +88,9 @@ static void fe3h_observe_draw(void) {
         S.vp[0][0] || S.vp[0][1] || S.vp[0][2] != S.rt_col[0].d.width || S.vp[0][3] != S.rt_col[0].d.height) return;
     vk_temporal_texture source = {0};
     temporal_sample(pass->sample, &source);
-    if (!gsr2_plain_2d(&source) || source.texture.d.format != FE3H_SCENE_FORMAT ||
+    int window_blit = pass->fragment == FE3H_UPSCALE_FS;
+    if (window_blit && (fe3h.mapped_frame != g_tex_frame || fe3h.mapped_serial != source.texture.serial)) return;
+    if (!gsr2_plain_2d(&source) || source.texture.d.format != (window_blit ? NVN_FORMAT_RGBA8_SRGB : FE3H_SCENE_FORMAT) ||
         source.texture.d.width != fe3h.params.render[0] || source.texture.d.height != fe3h.params.render[1]) return;
     vk_end_pass();
     vkimg_t *image = NULL;
@@ -92,8 +101,7 @@ static void fe3h_observe_draw(void) {
     VkCommandBuffer cb = vk_cmd();
     if (!gsr2_record_frame(cb, &frame)) return;
     if (g_gsr2_mode == 2) {
-        // Sample the reconstructed HDR colors with the guest's own tone mapper.
-        // It writes an sRGB view of the window and keeps its depth/stencil for UI.
+        // The guest window pass samples the reconstruction before it draws the HUD.
         fe3h_scene_view = vk_gsr2_result_view();
         fe3h_scene_handle = vk_tex_slot_handle(S.tex[1], S.img[1], pass->sample);
     }

@@ -56,6 +56,14 @@ static const gsr2_profile *gsr2_current_profile(void) {
     return p;
 }
 
+#if DM_GAME_PROGRAM_ID == GSR2_FE3H_ID
+void vk_gsr2_init_ktgl(void) {
+    vk_init();
+    gs_profile = gsr2_current_profile();
+    if (gs_profile) dm_gsr2_init_ktgl_resolution();
+}
+#endif
+
 #include "gfx_vk_exec_state.inc"   // the NVN state shadow: what the game set, read by the walker and the draws
 #include "gfx_vk_exec_render_cond.inc"   // conditional rendering (profile render_cond)
 #include "gfx_vk_exec_passes.inc"   // render passes: attachments, aliases, LRZ touches, clears at pass start, pass splits

@@ -49,6 +49,7 @@ static post_op *g_post; static int g_npost, g_postcap;
 static uint64_t g_fence;
 static void post(post_op o) { if (g_npost == g_postcap) { g_postcap = g_postcap ? 2 * g_postcap : 64; g_post = realloc(g_post, g_postcap * sizeof *g_post); } g_post[g_npost++] = o; }
 
+void vk_gsr2_init_ktgl(void) {}
 int vk_gsr2_available(void) { return 0; }
 void mtl_init(void) {}
 void mtl_sub_begin(void) { g_npost = 0; }

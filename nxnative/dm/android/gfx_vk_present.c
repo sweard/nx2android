@@ -648,6 +648,8 @@ static void ov_menu_panel(const ov_canvas *cv, int st, int position, int checkpo
             if (it == OVM_GSR2_SIZE) {
 #if defined(DM_GAME_PROGRAM_ID) && DM_GAME_PROGRAM_ID == GSR2_DIGIMON_ID
                 snprintf(v, sizeof v, "%d%%  %dx%d", percent, 1280 * percent / 100, 720 * percent / 100);
+#elif defined(DM_GAME_PROGRAM_ID) && DM_GAME_PROGRAM_ID == GSR2_FE3H_ID
+                snprintf(v, sizeof v, dm_gsr2_ktgl_scale_ready(percent) ? "%d%%" : TR("Restart: %d%%", "重启生效 %d%%"), percent);
 #else
                 snprintf(v, sizeof v, "%d%%", percent);
 #endif

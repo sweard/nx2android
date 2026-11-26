@@ -20,6 +20,7 @@ static inline const fe3h_camera_pass *fe3h_camera_for_fragment(uint64_t key) {
 static const gsr2_composite_pass fe3h_composite[] = {
     {FE3H_COMPOSITE_VS, FE3H_TONEMAP_FS, 2, 1, 1},
     {FE3H_COMPOSITE_VS, FE3H_WINDOW_FS, 2, 1, 1},
+    {FE3H_UPSCALE_VS, FE3H_UPSCALE_FS, 0, 1, 1},
 };
 static const gsr2_profile fe3h_profile = {
     .read_draw = temporal_fe3h, .observe_draw = fe3h_observe_draw,

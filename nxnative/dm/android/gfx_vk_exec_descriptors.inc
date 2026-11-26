@@ -509,7 +509,7 @@ static VkDescriptorSet stage_set(int st, vkshader_t *s, uint32_t *dofs, VkDescri
 #if DM_HAS_GSR2_ADAPTER
     const gsr2_composite_pass *composite = st == 1 && gs_color ? gs_composite_stage() : NULL;
 #if DM_GAME_PROGRAM_ID == GSR2_FE3H_ID
-    int fe3h_scene = st == 1 && g_gsr2_mode == 2 && fe3h_scene_view && gs_composite_stage() != NULL;
+    const gsr2_composite_pass *fe3h_scene = st == 1 && g_gsr2_mode == 2 && fe3h_scene_view ? gs_composite_stage() : NULL;
     if (fe3h_scene) memo = 0;
 #endif
     if (composite) memo = 0;
@@ -595,9 +595,9 @@ static VkDescriptorSet stage_set(int st, vkshader_t *s, uint32_t *dofs, VkDescri
                 int num = tex_desc_for(st, b, h, &ii[nii + k], 0);
 #if DM_HAS_GSR2_ADAPTER
 #if DM_GAME_PROGRAM_ID == GSR2_FE3H_ID
-                if (fe3h_scene && !num && !k && b->kind == RK_TEX && b->reg == (int)fe3h_composite->sample && h == fe3h_scene_handle) {
+                if (fe3h_scene && !num && !k && b->kind == RK_TEX && b->reg == (int)fe3h_scene->sample && h == fe3h_scene_handle) {
                     ii[nii + k].imageView = fe3h_scene_view;
-                    if (!(g_tex_frame % 120)) VKLOG("SGSR2 tone map %016llx samples reconstructed HDR scene into %ux%u window", (unsigned long long)s->key, S.pass_w, S.pass_h);
+                    if (!(g_tex_frame % 120)) VKLOG("SGSR2 pass %016llx samples reconstructed scene into %ux%u window", (unsigned long long)s->key, S.pass_w, S.pass_h);
                 }
 #endif
                 if (composite && !num && b->kind == RK_TEX && b->reg == (int)composite->sample && !k) {

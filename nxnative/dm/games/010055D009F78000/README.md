@@ -45,6 +45,7 @@ Read the profile's porting log in the comment header of [`android.tsv`](android.
 ## Options
 
 - GSR2 Auto uses KTGL scene depth and camera motion to reconstruct the HDR scene before the game draws its HUD. The verified docked output is 1920×1080. At a 1920×1080 scene input this is native-resolution temporal reconstruction. Passes without matching scene resources use the game renderer.
+- Docked Custom uses the game's scene banks. At 1080p output, 100%, 75% and 50% render at 1920×1080, 1440×810 and 960×540. The reduced scene is reconstructed between the game's tone map and its window pass, before screen-space HUD draws. KTGL allocates these banks at startup. Restart after changing the scale to a size that was not allocated in the current session.
 - Use the device's own Vulkan driver: Turnip draws the game too but takes about three times the GPU time.
 - The port boots the game once on the device to capture the 9 shaders the game compiles when it starts, so connect the device (USB debugging on) even when you port without installing.
 

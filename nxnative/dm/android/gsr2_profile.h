@@ -6,11 +6,7 @@
 #else
 #define DM_HAS_GSR2_ADAPTER 0
 #endif
-#if defined(DM_GAME_PROGRAM_ID) && DM_GAME_PROGRAM_ID == GSR2_FE3H_ID
-#define DM_HAS_GSR2_INPUT_CONTROL 0
-#else
 #define DM_HAS_GSR2_INPUT_CONTROL DM_HAS_GSR2_ADAPTER
-#endif
 
 enum { GSR2_OFF, GSR2_AUTO, GSR2_CUSTOM };
 enum { GSR2_MIN_PERCENT = 50, GSR2_MAX_PERCENT = 100, GSR2_STEP = 5 };
@@ -19,6 +15,11 @@ static inline int gsr2_percent_valid(int p) {
 }
 static inline int gsr2_output_valid(int h) { return h == 720 || h == 1080 || h == 1440; }
 int vk_gsr2_available(void);
+#if defined(DM_GAME_PROGRAM_ID) && DM_GAME_PROGRAM_ID == GSR2_FE3H_ID
+void vk_gsr2_init_ktgl(void);
+void dm_gsr2_init_ktgl_resolution(void);
+int dm_gsr2_ktgl_scale_ready(int percent);
+#endif
 int dm_gsr2_input_mode(void);
 int dm_gsr2_output_height(void);
 

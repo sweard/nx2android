@@ -86,6 +86,8 @@ static void set_resolution(int percent) {
     if (saved.height != height) LOG("[gsr2] requested docked scene input %dp", height);
     saved.height = height;
 }
+#elif DM_GAME_PROGRAM_ID == GSR2_FE3H_ID
+#include "gsr2_fe3h_resolution.inc"
 #else
 #include "gsr2_ue_resolution.inc"
 #endif
